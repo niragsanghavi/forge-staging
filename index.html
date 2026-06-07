@@ -1,0 +1,1881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Forge</title>
+<link rel="stylesheet" href="src/style/main.css">
+</head>
+<body>
+
+<!-- ══ ONBOARDING ══ -->
+<div class="screen active" id="screen-onboard">
+  <div class="ob-logo">FORGE</div>
+  <div class="ob-tag">Forged by the group.</div>
+  <div class="ob-card">
+    <div class="ob-step active" id="ob-s1">
+      <div class="ob-title">Enter your group code</div>
+      <div class="ob-sub">Your organiser will have shared a 6-character code</div>
+      <input class="code-input" id="codeInput" maxlength="6" placeholder="······" autocomplete="off" oninput="this.value=this.value.toUpperCase()">
+      <div id="codeError" class="warn-box warn-red hidden">Group not found. Check your code.</div>
+      <button class="btn btn-gold" onclick="verifyCode()">Continue</button>
+      <div id="joinCancel" class="hidden" style="margin-top:12px;text-align:center"><span onclick="cancelJoin()" style="font-size:12px;color:var(--gold);cursor:pointer">← Back to my group</span></div>
+    </div>
+    <div class="ob-step" id="ob-s2">
+      <div class="ob-title">Who are you?</div>
+      <div class="ob-sub" id="ob-s2-group"></div>
+      <div style="margin:16px 0;padding-bottom:16px;border-bottom:1px solid var(--border)">
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--gold)">NEW PLAYER? REGISTER HERE:</div>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="newPlayerNameInput" placeholder="Enter your full name..." style="flex:1;padding:10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;margin-bottom:0">
+          <button class="btn btn-green" onclick="registerAndJoin()" style="margin:0;width:auto;padding:0 16px;font-size:13px">Join Group</button>
+        </div>
+      </div>
+      <div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--muted)">OR CHOOSE EXISTING MEMBER:</div>
+      <div class="pgrid" id="obgrid"></div>
+      <div style="margin-top:12px;font-size:11px;color:var(--muted);text-align:center">We'll remember you on this device</div>
+    </div>
+    <div class="ob-step" id="ob-s3">
+      <div class="ob-title">Set your PIN</div>
+      <div class="ob-sub" id="ob-s3-sub">Pick a 4-digit PIN to secure your account. You'll only need it on a new device.</div>
+      <input class="code-input" id="pinInput" type="tel" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+      <input class="code-input" id="pinConfirm" type="tel" inputmode="numeric" maxlength="4" placeholder="confirm" autocomplete="off" oninput="this.value=this.value.replace(/[^0-9]/g,'')" style="margin-top:8px">
+      <div id="pinError" class="warn-box warn-red hidden" style="margin-top:10px"></div>
+      <button class="btn btn-gold" style="margin-top:10px" onclick="submitNewPin()">Set PIN &amp; Continue</button>
+    </div>
+    <div class="ob-step" id="ob-s4">
+      <div class="ob-title">Enter your PIN</div>
+      <div class="ob-sub" id="ob-s4-sub">Welcome back. Enter your 4-digit PIN to continue.</div>
+      <input class="code-input" id="pinEntry" type="tel" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off" oninput="this.value=this.value.replace(/[^0-9]/g,'')" onkeydown="if(event.key==='Enter')submitPinEntry()">
+      <div id="pinEntryError" class="warn-box warn-red hidden" style="margin-top:10px"></div>
+      <button class="btn btn-gold" style="margin-top:10px" onclick="submitPinEntry()">Continue</button>
+      <div style="margin-top:14px;font-size:11px;color:var(--muted);text-align:center">Forgot your PIN? Message your group admin to reset it.</div>
+      <div style="margin-top:8px;text-align:center"><span onclick="backToPicker()" style="font-size:12px;color:var(--gold);cursor:pointer">← Not you? Pick a different name</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MAIN APP ══ -->
+<div class="screen" id="screen-app">
+  <nav class="nav">
+    <div style="display:flex;align-items:center;gap:10px">
+      <button id="backToSuperBtn" class="btn btn-surface btn-sm hidden" style="margin:0" onclick="backToSuper()">← Super</button>
+      <div class="nav-logo">FORGE</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark">🌙</button>
+      <div class="nav-user" onclick="promptSwitch()">
+        <div class="nav-av" id="navAv"></div>
+        <span class="nav-nm" id="navNm"></span>
+      </div>
+    </div>
+  </nav>
+  <div id="groupSwitcher" class="group-switcher" style="display:none"></div>
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('home')">Home</div>
+    <div class="tab" onclick="showTab('log')">Log</div>
+    <div class="tab" onclick="showTab('lb')">Board</div>
+    <div class="tab" onclick="showTab('feed')">Feed</div>
+    <div class="tab" onclick="showTab('global')">Global</div>
+    <div class="tab" onclick="showTab('admin')">Admin</div>
+  </div>
+
+  <!-- HOME -->
+  <div class="page active" id="page-home">
+    <div style="padding:8px 0 14px">
+      <div style="font-size:22px;font-weight:800" id="hGreet"></div>
+      <div style="font-size:13px;color:var(--muted);margin-top:3px" id="hDate"></div>
+    </div>
+    <div id="factCard"></div>
+    <div id="heroCard"></div>
+    <div id="nudgeCard"></div>
+    <div id="streakCardHighlight"></div>
+    <div id="roleBar"></div>
+    <div class="srow" id="hStats"></div>
+    <div id="twistBanner"></div>
+    <div class="shdr">Your Calendar</div>
+    <div class="card" style="padding:12px"><div class="cg" id="calGrid"></div></div>
+    <div class="shdr">Team Streak Days</div>
+    <div class="card" id="streakCard"></div>
+    <div class="shdr">Global Leaderboard</div>
+    <div class="card" id="globalConsentCard"></div>
+    <div class="shdr">Quick Log</div>
+    <button class="btn btn-gold" onclick="showTab('log')">Log Today's Workout</button>
+    <div class="shdr">Groups</div>
+    <button class="btn btn-surface" onclick="joinAnotherGroup()">+ Join another group</button>
+  </div>
+
+  <!-- LOG -->
+  <div class="page" id="page-log">
+    <div style="padding:8px 0 14px;font-size:20px;font-weight:800">Log Workout</div>
+    <div id="ls1">
+      <div class="card-title">Which day?</div>
+      <button class="btn btn-gold" onclick="pickDay('today')">Today</button>
+      <button class="btn btn-surface" onclick="showPicker()">Another day</button>
+      <div id="pickerWrap" class="hidden" style="margin-top:8px">
+        <input type="date" id="dpick" onchange="pickDayFromInput()">
+      </div>
+    </div>
+    <div id="ls2" class="hidden">
+      <div class="row" style="margin-bottom:16px">
+        <div>
+          <div style="font-size:18px;font-weight:700" id="lDateLbl"></div>
+          <div class="tmuted" id="lExisting" style="font-size:12px;margin-top:2px"></div>
+        </div>
+        <button class="btn btn-surface btn-sm" onclick="backToS1()">Change</button>
+      </div>
+      <div class="card-title">What did you do? <span style="color:var(--muted);text-transform:none;font-weight:400;font-size:11px">tap multiple</span></div>
+      <div class="chips" id="wChips"></div>
+      <input type="text" id="custInp" placeholder="Type something new..." onkeydown="if(event.key==='Enter')addCustom()">
+      <button class="btn btn-surface btn-sm" onclick="addCustom()" style="margin-bottom:16px">Add</button>
+      <div id="selPrev" class="hidden">
+        <div class="shdr" style="margin-top:0">Selected</div>
+        <div id="selList" style="font-size:14px;margin-bottom:16px;color:var(--text)"></div>
+      </div>
+      <button class="btn btn-green" id="subBtn" onclick="submitLog()" disabled>Log Workout</button>
+    </div>
+    <div id="ls3" class="hidden">
+      <div class="succ">
+        <div class="succ-icon">🔥</div>
+        <div class="succ-title" id="succTitle">Forged!</div>
+        <div class="succ-sub" id="succSub"></div>
+        <div id="comebackMsg" class="comeback-msg hidden"></div>
+        <div class="card" id="succStats" style="text-align:left;margin-bottom:20px"></div>
+        <button class="btn btn-gold" onclick="resetLog()">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEADERBOARD -->
+  <div class="page" id="page-lb">
+    <div style="padding:8px 0 14px;font-size:20px;font-weight:800">Leaderboard</div>
+    <div class="shdr">Team Standings</div>
+    <div id="teamStand"></div>
+    <div class="shdr">Individual Rankings</div>
+    <div class="card" id="indLb"></div>
+    <div class="shdr">Your Breakdown</div>
+    <div class="card" id="ptsBk"></div>
+  </div>
+
+  <!-- FEED -->
+  <div class="page" id="page-feed">
+    <div style="padding:8px 0 14px;font-size:20px;font-weight:800">Activity Feed</div>
+    <div class="card" id="feedList"></div>
+  </div>
+
+  <!-- GLOBAL -->
+  <div class="page" id="page-global">
+    <div style="padding:8px 0 4px;font-size:20px;font-weight:800">Global</div>
+    <div class="tmuted" style="margin-bottom:16px;font-size:12px">Across every Forge group</div>
+    <div class="shdr">Most Active Groups Today</div>
+    <div class="card" id="globalActive"><div class="tmuted">Open this tab to load…</div></div>
+    <div class="shdr">Top Groups — Avg Points / Player</div>
+    <div class="card" id="globalGroups"><div class="tmuted">Open this tab to load…</div></div>
+    <div class="shdr">Points Leaderboard — Top 5</div>
+    <div class="card" id="globalPoints"><div class="tmuted">Open this tab to load…</div></div>
+  </div>
+
+  <!-- ADMIN -->
+  <div class="page" id="page-admin">
+    <div style="padding:8px 0 4px;font-size:20px;font-weight:800">Admin</div>
+    <div class="tmuted" style="margin-bottom:16px;font-size:12px">Group admin controls</div>
+    <div class="card" id="roleGuideCard">
+      <div class="card-title">Role Guide</div>
+      <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <span class="rbadge rCaptain">Captain</span>
+          <span style="font-size:13px;font-weight:600">Monthly target — varies by group</span>
+        </div>
+        <div style="font-size:12px;color:var(--muted)">Hit → <span style="color:var(--green)">+10 pts</span> on last day &nbsp;|&nbsp; Miss → <span style="color:var(--red)">−10 pts</span></div>
+      </div>
+      <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <span class="rbadge rVC">Vice Captain</span>
+          <span style="font-size:13px;font-weight:600">Monthly target — varies by group</span>
+        </div>
+        <div style="font-size:12px;color:var(--muted)">Hit → <span style="color:var(--green)">+15 pts</span> on last day &nbsp;|&nbsp; Miss → <span style="color:var(--red)">−10 pts</span></div>
+      </div>
+      <div style="padding:10px 0">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <span class="rbadge rPlayer">Player</span>
+          <span style="font-size:13px;font-weight:600">No minimum target</span>
+        </div>
+        <div style="font-size:12px;color:var(--muted)">Earns base, streak, and team bonus points</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Team & Role Assignment</div>
+      <div class="tmuted" style="margin-bottom:12px">Update at the start of each month</div>
+      <div id="adminRoles"></div>
+      <button class="btn btn-gold" style="margin-top:12px" onclick="saveRoles()">Save All Changes</button>
+    </div>
+    <div class="card">
+      <div class="card-title">Monthly Twists</div>
+      <div class="tmuted" style="margin-bottom:12px">Toggle mechanics for this month.</div>
+      <div id="twistToggles"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Flagged Workouts <span id="flagCount" style="color:var(--red)"></span></div>
+      <div class="tmuted" style="margin-bottom:12px">Entries flagged by 2+ members.</div>
+      <div id="flagQueue"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Award 30-Day Bonus</div>
+      <div class="tmuted" style="margin-bottom:10px">+50 pts for completing all days this month</div>
+      <select id="aPlayer"><option value="">Select player</option></select>
+      <button class="btn btn-gold" onclick="award30()">Award +50 Pts</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SUPER ADMIN ══ -->
+<div class="screen" id="screen-super">
+  <nav class="nav">
+    <div class="nav-logo" style="font-size:14px">FORGE — SUPER ADMIN</div>
+    <button class="btn btn-surface btn-sm" onclick="exitSuper()" style="margin:0">Exit</button>
+  </nav>
+  <div style="padding:16px;max-width:500px;margin:0 auto">
+    <div class="shdr">Overview</div>
+    <div id="superDashboard"></div>
+    <div id="rolloverNudge" style="margin-top:12px"></div>
+    <div class="shdr" style="margin-top:20px">Engagement Trend</div>
+    <div id="trendCharts"></div>
+
+    <div class="shdr" style="margin-top:20px">All Groups</div>
+    <div id="superGroupList"></div>
+
+    <!-- Edit group settings (hidden until ⚙ Manage) -->
+    <div id="editGroupModal" class="hidden" style="margin-top:16px">
+      <div class="card" style="border:1px solid var(--gold)">
+        <div class="card-title" style="color:var(--gold)">Manage <span id="editGroupName"></span></div>
+        <div class="tmuted" style="margin-bottom:12px">Edits apply to the current active season only.</div>
+        <label>Days in month</label>
+        <input id="editDays" type="number" min="28" max="31">
+        <label>Captain workout target</label>
+        <input id="editCapTarget" type="number">
+        <label>Vice Captain workout target</label>
+        <input id="editVCTarget" type="number">
+        <label>Minimum workouts before penalty</label>
+        <input id="editMinWO" type="number">
+        <label>Number of teams (2 or 3)</label>
+        <input id="editNumTeams" type="number" min="2" max="3">
+        <label>Team streak threshold (% of team needed for bonus)</label>
+        <input id="editThreshold" type="number" min="30" max="100">
+        <label style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <input type="checkbox" id="editRoles" style="width:auto;margin:0">
+          <span>Enable Captains / Vice Captains</span>
+        </label>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="closeEditGroup()">Cancel</button>
+          <button class="btn btn-gold btn-sm" style="flex:1;margin:0" onclick="saveEditGroup()">Save Changes</button>
+        </div>
+        <div id="editGroupStatus" class="tmuted" style="text-align:center;margin-top:8px"></div>
+      </div>
+    </div>
+
+    <div style="margin-top:24px">
+      <div class="shdr">Data Export</div>
+      <div class="card" style="border:1px solid var(--purple)">
+        <div class="card-title" style="color:var(--purple)">Developer Tools</div>
+        <div class="tmuted" style="margin-bottom:12px">Download a full backup of all Forge data across every group and season.</div>
+        <button class="btn btn-purple" onclick="exportAllData()">📥 Export EVERYTHING (.json)</button>
+        <div id="exportStatus" class="tmuted" style="text-align:center;margin-top:8px"></div>
+      </div>
+    </div>
+
+    <div style="margin-top:24px">
+      <div class="shdr">Create New Group</div>
+      <div class="card">
+        <label>Group Name</label>
+        <input id="newGroupName" placeholder="e.g. Morning Warriors">
+        <label>Month (1-12)</label>
+        <input id="newGroupMonth" type="number" min="1" max="12" value="6">
+        <label>Year</label>
+        <input id="newGroupYear" type="number" value="2026">
+        <label>Days in month</label>
+        <input id="newGroupDays" type="number" value="30">
+        <label>Captain workout target</label>
+        <input id="newGroupCapTarget" type="number" value="16">
+        <label>Vice Captain workout target</label>
+        <input id="newGroupVCTarget" type="number" value="20">
+        <label>Minimum workouts before penalty</label>
+        <input id="newGroupMinWO" type="number" value="12">
+        <label>Number of teams (2 or 3)</label>
+        <input id="newGroupNumTeams" type="number" min="2" max="3" value="3">
+        <label>Team streak threshold (% of team needed for bonus)</label>
+        <input id="newGroupThreshold" type="number" min="30" max="100" value="60">
+        <label style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <input type="checkbox" id="newGroupRoles" checked style="width:auto;margin:0">
+          <span>Enable Captains / Vice Captains</span>
+        </label>
+        <button class="btn btn-gold" style="margin-top:10px" onclick="createGroup()">Create Group + Generate Code</button>
+        <div id="newGroupResult" class="hidden"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="src/config/firebase.js"></script>
+<script src="src/state/appState.js"></script>
+<script src="src/services/scoringEngine.js"></script>
+
+<script>
+// ── CONTENT ───────────────────────────────────────────────────────────────
+const DAILY_FACTS = [
+  "Your heart pumps 5 litres of blood per minute at rest. During exercise, that jumps to 20.",
+  "Muscle doesn't turn to fat when you stop training. They're completely different tissues.",
+  "A 20-minute walk can reduce anxiety as effectively as a mild tranquiliser.",
+  "Your bones are constantly rebuilding themselves. Weight training speeds this up.",
+  "The human body has over 600 muscles. You ignored most of them today.",
+  "Exercise increases BDNF — a protein that literally grows new brain cells.",
+  "Cold water after a workout reduces soreness by constricting blood vessels.",
+  "Your muscles store enough glycogen for roughly 90 minutes of intense exercise. After that, you bonk.",
+  "Laughter activates the same endorphin pathways as exercise. Unfortunately it doesn't count.",
+  "The average person walks 100,000 miles in their lifetime. That's 4 times around the Earth.",
+  "Sleep is when your muscles actually repair. The gym breaks them. Bed fixes them.",
+  "Sweat has no smell. The bacteria on your skin does. You're welcome.",
+  "Your grip strength is one of the strongest predictors of long-term health.",
+  "The world record for most push-ups in 24 hours is 10,507. Your target is more reasonable.",
+  "Rest days are not optional. Muscle grows during recovery, not during the workout.",
+  "Exercising in the morning increases your metabolism for up to 14 hours afterward.",
+  "Consistent moderate exercise can add up to 7 years to your life expectancy.",
+  "Dehydration of just 2% reduces athletic performance by up to 10%. Drink water.",
+  "Working out with a group makes you exercise harder and longer than going alone.",
+  "Your body burns more calories in the 24 hours after a workout than during it.",
+  "Muscles have memory. Taking a break doesn't reset everything.",
+  "Consistency beats intensity every single time. Showing up is the whole battle.",
+];
+
+const STREAK_MSGS = {
+  2:"Two in a row. Even your excuses are impressed.",
+  3:"Three days straight. Your bed is filing a complaint.",
+  4:"Four days. The couch has started a support group.",
+  5:"Five days straight. Your alarm is starting to respect you.",
+  6:"Six days. At this point your body thinks this is normal. It is.",
+  7:"A full week. Somewhere, a gym bro is shedding a single tear of pride.",
+  8:"Eight days. You're either very disciplined or very competitive. Both work.",
+  9:"Nine days. The excuses have packed their bags and left.",
+  10:"Ten days. You're basically a professional at this point.",
+  14:"Two weeks straight. Your past self wouldn't believe it.",
+  21:"Three weeks. Scientists say habits form at 21 days. Congratulations, you're a habit.",
+  30:"Thirty days. You absolute machine. This is the way.",
+};
+
+const COMEBACK_MSGS = [
+  "Oh look who decided to show up. The leaderboard was getting lonely.",
+  "Back from the dead. We were about to file a missing persons report.",
+  "The couch finally let you go. Respect its sacrifice.",
+  "Your streak is gone but your audacity is intact. We respect it.",
+  "We didn't miss you. The leaderboard did though.",
+  "The gym forgot your name. Time to reintroduce yourself.",
+  "Your team has questions. We suggest logging and asking for forgiveness later.",
+  "Rest days are healthy. Several in a row is a lifestyle choice. Welcome back.",
+];
+
+// HTML-escape any user-supplied string before it goes into innerHTML. Turns
+// < > & " ' into harmless entities so a malicious name/workout can never run
+// as markup. (Wired into the display sites in the next step.)
+function esc(s){
+  return String(s==null?'':s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function getDailyFact(){ return DAILY_FACTS[(new Date().getDate()-1)%DAILY_FACTS.length]; }
+function getStreakMsg(s){ const keys=Object.keys(STREAK_MSGS).map(Number).sort((a,b)=>b-a); for(const k of keys){if(s>=k)return STREAK_MSGS[k];} return null; }
+function getRandomComeback(){ return COMEBACK_MSGS[Math.floor(Math.random()*COMEBACK_MSGS.length)]; }
+
+// ── SESSION STORE (multi-group) ─────────────────────────────────────────────
+// Device-local multi-session: localStorage holds a LIST of {code, player, name}
+// plus the active group's code. No cross-device identity (deferred) — each
+// device joins each group independently.
+const MAX_GROUPS = 3;
+// One place to surface errors. Logs a tagged, searchable line to the browser
+// console (DevTools) so a failure leaves a trace instead of vanishing.
+function logErr(where, e){ console.error('[Forge] '+where, e); }
+function getSessions(){ try { return JSON.parse(localStorage.getItem('forge_sessions')||'[]'); } catch(e){ logErr('getSessions: bad localStorage', e); return []; } }
+function saveSessions(list){ localStorage.setItem('forge_sessions', JSON.stringify(list)); }
+function getActiveCode(){ return localStorage.getItem('forge_active'); }
+function setActiveCode(code){ localStorage.setItem('forge_active', code); }
+function upsertSession(code, player, name){
+  const list = getSessions();
+  const i = list.findIndex(s=>s.code===code);
+  const entry = { code, player, name: name || (i>=0 && list[i].name) || code };
+  if(i>=0) list[i] = entry; else list.push(entry);
+  saveSessions(list);
+  setActiveCode(code);
+}
+function removeSession(code){
+  const list = getSessions().filter(s=>s.code!==code);
+  saveSessions(list);
+  if(getActiveCode()===code){ if(list.length) setActiveCode(list[0].code); else localStorage.removeItem('forge_active'); }
+  return list;
+}
+// One-time migration from the old single-session key so existing users aren't logged out.
+function migrateLegacySession(){
+  const legacy = localStorage.getItem('forge_session');
+  if(legacy && getSessions().length===0){
+    try { const s = JSON.parse(legacy); if(s && s.code && s.player){ saveSessions([{code:s.code, player:s.player, name:s.code}]); setActiveCode(s.code); } } catch(e){ logErr('migrateLegacySession', e); }
+  }
+  localStorage.removeItem('forge_session');
+}
+
+// ── BOOT ──────────────────────────────────────────────────────────────────
+window.onload = () => {
+  // Establish the anonymous auth session FIRST, before any Firestore read.
+  // Everything downstream (loadGroup, loadSuperAdmin, verifyCode) issues
+  // Firestore queries, so they must not run until we have a UID.
+  ensureAuth().then(uid => {
+    window.currentUid = uid;   // available app-wide for Stage 2+ (PIN binding)
+    bootApp();
+  }).catch(err => {
+    // If auth fails, the app can't talk to Firestore. Show a clear message
+    // rather than a silent blank screen.
+    document.body.innerHTML = '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#888">Could not connect. Please refresh.<br><br><span style="font-size:12px">'+(err?.message||'')+'</span></div>';
+  });
+};
+
+function bootApp(){
+  if(location.search.includes('superadmin')){
+    const pin = prompt('Super admin PIN:');
+    if(pin === SUPER_PIN){ showScreen('super'); loadSuperAdmin(); return; }
+  }
+  migrateLegacySession();
+  const sessions = getSessions();
+  if(sessions.length){
+    const active = sessions.find(s=>s.code===getActiveCode()) || sessions[0];
+    setActiveCode(active.code);
+    groupCode = active.code;
+    me = active.player;
+    loadGroup(groupCode, true);
+  } else {
+    showScreen('onboard');
+  }
+}
+
+function showScreen(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(`screen-${name}`).classList.add('active');
+}
+
+// ── ONBOARDING ────────────────────────────────────────────────────────────
+function showObStep(n){
+  document.querySelectorAll('.ob-step').forEach(s=>s.classList.remove('active'));
+  document.getElementById(`ob-s${n}`).classList.add('active');
+}
+
+async function verifyCode(){
+  const code = document.getElementById('codeInput').value.trim().toUpperCase();
+  if(code.length < 4) return;
+  const err = document.getElementById('codeError');
+  err.classList.add('hidden');
+  try {
+    if(window._joinMode && getSessions().some(s=>s.code===code)){ alert('You\'re already in this group — switching to it.'); switchGroup(code); return; }
+    const snap = await db.collection('groups').doc(code).get();
+    if(!snap.exists){ err.classList.remove('hidden'); return; }
+    groupData = snap.data();
+    groupCode = code;
+
+    // Load the active season so onboarding can show team/role
+    const sid = groupData.currentSeasonId;
+    if(!sid){ err.textContent = 'Group has no active season. Contact admin.'; err.classList.remove('hidden'); return; }
+    const sSnap = await db.collection('groups').doc(code).collection('seasons').doc(sid).get();
+    if(!sSnap.exists){ err.textContent = 'Active season missing. Contact admin.'; err.classList.remove('hidden'); return; }
+    season = sSnap.data();
+    seasonId = sid;
+
+    document.getElementById('ob-s2-group').textContent = `${groupData.name} · ${season.roster?.length||0} members · ${season.month}/${season.year}`;
+    buildPlayerPicker(season.roster||[]);
+    showObStep(2);
+  } catch(e){ console.error(e); err.textContent = 'Could not load group.'; err.classList.remove('hidden'); }
+}
+
+function buildPlayerPicker(players){
+  document.getElementById('obgrid').innerHTML = players.map(p=>`
+    <div class="pbtn" onclick="choosePlayer('${p.name}')">
+      <div class="pname">${esc(p.name)}</div>
+      <div class="prole">${p.role}</div>
+      <div class="pteam t${p.team}">Team ${p.team}</div>
+    </div>`).join('');
+}
+
+function choosePlayer(name){
+  const p = (season.roster||[]).find(x=>x.name===name);
+  if(!p){ return; }
+  // No PIN yet (existing pre-auth user) → grace flow: set one before entering.
+  if(!p.pin){
+    window._pinFlow = { mode:'grace', name:p.name };
+    document.getElementById('ob-s3-sub').textContent = `Welcome back, ${p.name}. Set a 4-digit PIN to secure your account.`;
+    document.getElementById('pinInput').value = '';
+    document.getElementById('pinConfirm').value = '';
+    document.getElementById('pinError').classList.add('hidden');
+    showObStep(3);
+    return;
+  }
+  // Stage 3: player HAS a PIN → require them to enter it before launching.
+  window._pinEntryFor = p.name;
+  document.getElementById('ob-s4-sub').textContent = `Welcome back, ${p.name}. Enter your 4-digit PIN.`;
+  document.getElementById('pinEntry').value = '';
+  document.getElementById('pinEntryError').classList.add('hidden');
+  showObStep(4);
+  setTimeout(()=>document.getElementById('pinEntry').focus(), 100);
+}
+
+// Stage 3: validate the entered PIN against the player's stored PIN.
+function submitPinEntry(){
+  const name = window._pinEntryFor;
+  const p = (season.roster||[]).find(x=>x.name===name);
+  const err = document.getElementById('pinEntryError');
+  err.classList.add('hidden');
+  if(!p){ err.textContent='Something went wrong. Pick your name again.'; err.classList.remove('hidden'); return; }
+  const entered = document.getElementById('pinEntry').value;
+  if(!/^\d{4}$/.test(entered)){ err.textContent='Enter your 4-digit PIN.'; err.classList.remove('hidden'); return; }
+  if(entered !== p.pin){
+    err.textContent='Incorrect PIN. Try again, or ask your admin to reset it.';
+    err.classList.remove('hidden');
+    document.getElementById('pinEntry').value='';
+    return;
+  }
+  // Correct PIN — log them in and remember this group on this device.
+  me = p;
+  window._pinEntryFor = null;
+  upsertSession(groupCode, p, groupData?.name);
+  launchApp();
+}
+
+// Escape hatch from the PIN-entry screen back to the name grid.
+function backToPicker(){
+  window._pinEntryFor = null;
+  document.getElementById('pinEntry').value='';
+  document.getElementById('pinEntryError').classList.add('hidden');
+  showObStep(2);
+}
+
+// Stage 2 grace check for users resumed from a saved localStorage session.
+// If their roster record lacks a PIN, send them through the set-PIN step
+// instead of straight into the app. Returns true if it redirected.
+function gracePinCheckOnResume(){
+  if(!me || !season) return false;
+  const fresh = (season.roster||[]).find(p=>p.name===me.name);
+  if(fresh && !fresh.pin){
+    showScreen('onboard');
+    window._pinFlow = { mode:'grace', name:fresh.name };
+    document.getElementById('ob-s3-sub').textContent = `Welcome back, ${fresh.name}. Set a 4-digit PIN to secure your account.`;
+    document.getElementById('pinInput').value = '';
+    document.getElementById('pinConfirm').value = '';
+    document.getElementById('pinError').classList.add('hidden');
+    showObStep(3);
+    return true;
+  }
+  return false;
+}
+
+// PIN flow state: what are we setting a PIN FOR right now?
+//   mode 'register' = brand-new player being created
+//   mode 'grace'    = existing player (no pin yet) setting one for the first time
+window._pinFlow = null;
+// Stage 3: which player is currently being asked to ENTER their PIN (login gate).
+window._pinEntryFor = null;
+
+async function registerAndJoin(){
+  const nameInput = document.getElementById('newPlayerNameInput');
+  const name = nameInput.value.trim();
+  if(!name){ alert('Please enter a name!'); return; }
+  // Standardise: first letter of each word upper, rest lower ("RISHIL" -> "Rishil")
+  const formattedName = name.split(' ').filter(Boolean).map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
+  // Validate: length + safe characters only. Blocks XSS payloads (which need
+  // < > or quotes) and names that would break inline click handlers.
+  if(formattedName.length < 2 || formattedName.length > 24){ alert('Name must be 2–24 characters.'); return; }
+  if(/[^\p{L}\p{N} .\-]/u.test(formattedName)){ alert('Name can only contain letters, numbers, spaces, hyphens and periods — no symbols.'); return; }
+  // Name must be unique within this group's roster (case-insensitive)
+  const existing = (season.roster||[]).find(p=>p.name.toLowerCase()===formattedName.toLowerCase());
+  if(existing){ alert(`The name "${formattedName}" is already taken in this group. Please use a different name (e.g. add your surname or initial).`); return; }
+  const numTeams = season.numTeams === 2 ? 2 : 3;
+  const teams = numTeams === 2 ? ['A','B'] : ['A','B','C'];
+  const assignedTeam = teams[(season.roster||[]).length % teams.length];
+
+  // Stage the new player and route to PIN-setting. Nothing is written until the
+  // PIN is set in submitNewPin() — so a half-finished registration leaves no debris.
+  window._pinFlow = { mode:'register', name:formattedName, team:assignedTeam, role:'Player' };
+  document.getElementById('ob-s3-sub').textContent = `Welcome, ${formattedName}. Pick a 4-digit PIN to secure your account.`;
+  document.getElementById('pinInput').value = '';
+  document.getElementById('pinConfirm').value = '';
+  document.getElementById('pinError').classList.add('hidden');
+  showObStep(3);
+}
+
+// Finalizes whichever PIN flow is active (register or grace).
+async function submitNewPin(){
+  const pin = document.getElementById('pinInput').value;
+  const confirm = document.getElementById('pinConfirm').value;
+  const err = document.getElementById('pinError');
+  err.classList.add('hidden');
+  if(!/^\d{4}$/.test(pin)){ err.textContent='PIN must be exactly 4 digits.'; err.classList.remove('hidden'); return; }
+  if(pin !== confirm){ err.textContent='PINs don\'t match. Try again.'; err.classList.remove('hidden'); return; }
+
+  const flow = window._pinFlow;
+  if(!flow){ err.textContent='Something went wrong. Please refresh.'; err.classList.remove('hidden'); return; }
+  if(!season || !seasonId){ err.textContent='Still loading — try again in a second.'; err.classList.remove('hidden'); return; }
+
+  try {
+    if(flow.mode === 'register'){
+      const newPlayerObj = { name:flow.name, role:flow.role, team:flow.team, pin, uid:(window.currentUid||null) };
+      const gRef = db.collection('groups').doc(groupCode);
+      const sRef = gRef.collection('seasons').doc(seasonId);
+      let wPlayers=null, wRoster=null;
+      await db.runTransaction(async tx=>{
+        const gSnap=await tx.get(gRef);               // ALL reads first
+        const sSnap=await tx.get(sRef);
+        if(!sSnap.exists) throw new Error('SEASON_MISSING');
+        const players=(gSnap.exists && gSnap.data().players)||[];
+        const roster=sSnap.data().roster||[];
+        if(roster.some(p=>p.name.toLowerCase()===flow.name.toLowerCase())) throw new Error('NAME_TAKEN');  // someone grabbed it during the race
+        players.push({name:flow.name});
+        roster.push(newPlayerObj);
+        tx.update(gRef,{players});                    // then writes
+        tx.update(sRef,{roster});
+        wPlayers=players; wRoster=roster;
+      });
+      groupData.players=wPlayers;
+      season.roster=wRoster;
+      me=newPlayerObj;
+      upsertSession(groupCode, newPlayerObj, groupData?.name);
+    } else if(flow.mode === 'grace'){
+      const sRef = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
+      let wRoster=null, myEntry=null;
+      await db.runTransaction(async tx=>{
+        const sSnap=await tx.get(sRef);
+        if(!sSnap.exists) throw new Error('SEASON_MISSING');
+        const roster=sSnap.data().roster||[];
+        const entry=roster.find(p=>p.name===flow.name);
+        if(!entry) throw new Error('NO_RECORD');
+        entry.pin=pin;
+        entry.uid=(window.currentUid||null);
+        tx.update(sRef,{roster});
+        wRoster=roster; myEntry=entry;
+      });
+      season.roster=wRoster;
+      me=myEntry;
+      upsertSession(groupCode, myEntry, groupData?.name);
+    }
+    window._pinFlow = null;
+    launchApp();
+  } catch(e){
+    logErr('submitNewPin '+(flow?.mode||''), e);
+    if(e.message==='NAME_TAKEN'){ err.textContent='That name was just taken by someone else — go back and pick a different one.'; }
+    else if(e.message==='NO_RECORD'){ err.textContent='Could not find your record. Please refresh.'; }
+    else { err.textContent='Save failed — check connection.'; }
+    err.classList.remove('hidden');
+  }
+}
+
+function promptSwitch(){
+  const sessions = getSessions();
+  if(sessions.length > 1){
+    if(!confirm(`Leave "${groupData?.name||groupCode}" on this device?\n\nYour other groups stay logged in. Your data and membership are safe — you can rejoin anytime with the group code.`)) return;
+    unsub.forEach(fn=>fn()); unsub = [];
+    const remaining = removeSession(groupCode);
+    const next = remaining[0];
+    groupCode = next.code; me = next.player; setActiveCode(next.code);
+    allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; adminUnlocked=false;
+    showTab('home');
+    loadGroup(groupCode, true);
+  } else {
+    if(!confirm('Log out on this device? You can sign back in with your group code.')) return;
+    unsub.forEach(fn=>fn()); unsub = [];
+    localStorage.removeItem('forge_sessions');
+    localStorage.removeItem('forge_active');
+    location.reload();
+  }
+}
+
+// ── LOAD GROUP ────────────────────────────────────────────────────────────
+async function loadGroup(code, fromCache){
+  // On a genuine "this group is gone/broken" error we drop ONLY that group's
+  // session (handleDeadGroup) and fall back to another joined group — never nuke
+  // everything (that caused the mass-lockout). Transient errors just alert.
+  try {
+    const gSnap = await db.collection('groups').doc(code).get();
+    if(!gSnap.exists){ handleDeadGroup(code, 'That group no longer exists.'); return; }
+    groupData = gSnap.data();
+
+    const sid = groupData.currentSeasonId;
+    if(!sid){ handleDeadGroup(code, 'That group has no active season.'); return; }
+    const sSnap = await db.collection('groups').doc(code).collection('seasons').doc(sid).get();
+    if(!sSnap.exists){ handleDeadGroup(code, 'That group\'s active season is missing.'); return; }
+    season = sSnap.data();
+    seasonId = sid;
+
+    // Refresh `me` against the freshly loaded roster (team/role/consent may have changed)
+    if(me){
+      const fresh = (season.roster||[]).find(p=>p.name===me.name);
+      if(fresh) me = fresh;
+    }
+    // Keep this group's session entry fresh (group name + latest player record).
+    upsertSession(code, me, groupData.name);
+
+    if(gracePinCheckOnResume()) return;
+    launchApp();
+  } catch(e){
+    console.error('loadGroup failed:', e);
+    alert('Could not load your group — check your connection and try again.');
+    if(!getSessions().length){ showScreen('onboard'); showObStep(1); }
+  }
+}
+
+// A specific group is gone/broken: drop just its session, fall back to another.
+function handleDeadGroup(code, msg){
+  const remaining = removeSession(code);
+  alert(msg + ' Removing it from this device.');
+  if(remaining.length){
+    const next = remaining[0];
+    groupCode = next.code; me = next.player; setActiveCode(next.code);
+    allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; adminUnlocked=false;
+    loadGroup(groupCode, true);
+  } else {
+    showScreen('onboard'); showObStep(1);
+  }
+}
+
+function launchApp(){
+  window._joinMode = false;
+  document.getElementById('joinCancel')?.classList.add('hidden');
+  showScreen('app');
+  document.getElementById('navAv').textContent = me.name[0];
+  document.getElementById('navNm').textContent = me.name;
+  renderGroupSwitcher();
+  const sel = document.getElementById('aPlayer');
+  sel.innerHTML = '<option value="">Select player</option>';
+  (season.roster||[]).forEach(p=>{
+    const o = document.createElement('option');
+    o.value=p.name; o.textContent=p.name; sel.appendChild(o);
+  });
+  renderAdminRoles();
+  renderTwistToggles();
+  const rg=document.getElementById('roleGuideCard');
+  if(rg) rg.style.display = (season.rolesEnabled!==false) ? '' : 'none';
+  subscribe();
+}
+
+// Top row of group chips — tap to switch. Hidden when only one group or in super-admin.
+function renderGroupSwitcher(){
+  const el = document.getElementById('groupSwitcher');
+  if(!el) return;
+  const sessions = getSessions();
+  if(window.fromSuper || sessions.length <= 1){ el.style.display='none'; el.innerHTML=''; return; }
+  el.style.display='flex';
+  el.innerHTML = sessions.map(s=>{
+    const active = s.code===groupCode;
+    return `<div class="gs-chip${active?' active':''}" onclick="switchGroup('${s.code}')">${s.name||s.code}</div>`;
+  }).join('') + `<div class="gs-chip gs-add" onclick="joinAnotherGroup()">+ Join</div>`;
+}
+
+// Switch active group: tear down listeners, swap state, CLEAR the old group's
+// painted DOM (so its data can't linger as a ghost while the new group's first
+// snapshot loads), then reload.
+// Switch active group: NULL the season first, swap state, clear stale DOM, reload.
+function switchGroup(code){
+  if(code===groupCode) return;
+  const s = getSessions().find(x=>x.code===code);
+  if(!s) return;
+  unsub.forEach(fn=>fn()); unsub = [];
+  // CRITICAL: null season + seasonId BEFORE flipping groupCode. Otherwise there's an
+  // async window where groupCode = new group but `season` still holds the OLD group's
+  // roster — and because groups share a seasonId ("2026-06"), a roster write in that
+  // window (consent toggle / save roles) overwrites the new group's roster with the old
+  // one. Nulled, any such write hits an invalid path and fails harmlessly.
+  season = null; seasonId = null;
+  setActiveCode(code);
+  groupCode = s.code; me = s.player;
+  allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; adminUnlocked=false;
+  ['heroCard','nudgeCard','streakCardHighlight','roleBar','hStats','twistBanner','calGrid','streakCard','teamStand','indLb','ptsBk','feedList','globalConsentCard'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=''; });
+  showTab('home');
+  loadGroup(groupCode, true);
+}
+
+// Start the flow to join an additional group (max MAX_GROUPS).
+function joinAnotherGroup(){
+  if(getSessions().length >= MAX_GROUPS){ alert(`You can be in up to ${MAX_GROUPS} groups on this device. Leave one (tap your name, top-right) before joining another.`); return; }
+  window._joinMode = true;
+  unsub.forEach(fn=>fn()); unsub = [];
+  document.getElementById('codeInput').value='';
+  document.getElementById('codeError').classList.add('hidden');
+  document.getElementById('joinCancel')?.classList.remove('hidden');
+  showScreen('onboard');
+  showObStep(1);
+}
+
+// Cancel an in-progress join and return to the active group.
+function cancelJoin(){
+  window._joinMode = false;
+  document.getElementById('joinCancel')?.classList.add('hidden');
+  const sessions = getSessions();
+  if(!sessions.length) return;
+  const active = sessions.find(s=>s.code===getActiveCode()) || sessions[0];
+  groupCode = active.code; me = active.player; setActiveCode(active.code);
+  loadGroup(groupCode, true);
+}
+
+// ── SUBSCRIPTIONS ─────────────────────────────────────────────────────────
+function subscribe(){
+  unsub.forEach(fn=>fn());
+  unsub = [];
+  const {month, year} = season;
+
+  unsub.push(db.collection('logs').where('groupCode','==',groupCode).where('month','==',month).where('year','==',year).onSnapshot(s=>{ allLogs=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }));
+  unsub.push(db.collection('bonuses_30day').where('groupCode','==',groupCode).where('month','==',month).where('year','==',year).onSnapshot(s=>{ bonus30=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }));
+  unsub.push(db.collection('flags').where('groupCode','==',groupCode).where('month','==',month).where('year','==',year).onSnapshot(s=>{ flags=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }));
+
+  // Twists now live under the season as a subcollection
+  unsub.push(
+    db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('twists')
+      .onSnapshot(s=>{ activeTwists={}; s.docs.forEach(d=>{ activeTwists[d.id]=d.data(); }); renderTwistToggles(); refresh(); })
+  );
+}
+
+function refresh(){ renderHome(); renderLB(); renderFeed(); renderFlagQueue(); renderGlobalConsent(); }
+
+// ── HOME ──────────────────────────────────────────────────────────────────
+function renderHome(){
+  if(!groupData||!me) return;
+  const now=new Date();
+  const h=now.getHours();
+  const g=h<12?'Good morning':h<17?'Good afternoon':'Good evening';
+  document.getElementById('hGreet').textContent=`${g}, ${me.name} 👋`;
+  document.getElementById('hDate').textContent=now.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+  const sc=score(me.name);
+  const pl=(season.roster||[]).find(p=>p.name===me.name)||me;
+  const tc=pl.team==='A'?'#ef4444':pl.team==='B'?'#3b82f6':'#22c55e';
+
+  // Daily fact
+  document.getElementById('factCard').innerHTML=`<div class="fact-card"><div class="fact-icon">🧠</div><div class="fact-text"><strong>Did you know?</strong> ${getDailyFact()}</div></div>`;
+
+  // Hero card
+  document.getElementById('heroCard').innerHTML=`
+    <div class="hero-card">
+      <div class="hero-stripe" style="background:${tc}"></div>
+      <div class="hero-label">Your points</div>
+      <div class="hero-pts" style="color:${tc}">${sc.total}</div>
+      <div class="hero-sub">Rank #${getRank(me.name)} of ${(season.roster||[]).length} · Team ${pl.team}</div>
+    </div>`;
+
+  // Nudge card
+  document.getElementById('nudgeCard').innerHTML=getNudgeHTML(me.name,sc);
+
+  // Streak highlight card
+  const smsg=getStreakMsg(sc.streak);
+  document.getElementById('streakCardHighlight').innerHTML=sc.streak>=2&&smsg?`
+    <div class="streak-card-highlight">
+      <div class="streak-num">${sc.streak} 🔥</div>
+      <div class="streak-msg">${smsg}</div>
+    </div>`:'';
+
+  // Stats row
+  document.getElementById('hStats').style.gridTemplateColumns='1fr 1fr';
+  document.getElementById('hStats').innerHTML=`
+    <div class="sc"><div class="sv">${sc.wo}</div><div class="sl">WORKOUTS</div></div>
+    <div class="sc"><div class="sv" style="color:var(--orange)">${sc.streak}🔥</div><div class="sl">STREAK</div></div>`;
+
+  // Role bar
+  const {capTarget=16,vcTarget=20,minWorkouts=12,days:DAYS=31,month,year}=season;
+  let rHTML='';
+  const rolesOn = season.rolesEnabled !== false;
+  if(rolesOn && pl.role!=='Player'){
+    const tgt=pl.role==='Captain'?capTarget:vcTarget;
+    const bonus=pl.role==='Captain'?10:15;
+    const penalty=10;
+    const pct=Math.min(100,Math.round(sc.wo/tgt*100));
+    const ok=sc.wo>=tgt;
+    const bc=ok?'var(--green)':pct>60?'var(--gold)':'var(--red)';
+    const remaining=Math.max(0,tgt-sc.wo);
+    rHTML=`<div class="card">
+      <div class="row">
+        <div><div style="font-size:14px;font-weight:700">${pl.role} Target</div><div class="tmuted" style="font-size:12px">${sc.wo}/${tgt} workouts</div></div>
+        <div class="rbadge ${pl.role==='Captain'?'rCaptain':'rVC'}">${pl.role}</div>
+      </div>
+      <div class="pwrap"><div class="pbar" style="width:${pct}%;background:${bc}"></div></div>
+      ${ok?`<div class="warn-box warn-green" style="margin-top:10px;margin-bottom:0">✅ Target hit — +${bonus} pts on day ${DAYS}</div>`:`<div class="warn-box warn-red" style="margin-top:10px;margin-bottom:0">⚠️ ${remaining} more workouts needed — missing target deducts ${penalty} pts on day ${DAYS}</div>`}
+    </div>`;
+  }
+  if(sc.wo<minWorkouts){
+    const missing=minWorkouts-sc.wo;
+    rHTML=`<div class="warn-box warn-orange">⚠️ You need ${missing} more workouts to avoid a <strong>${missing*5} pt deduction</strong> on day ${DAYS}</div>`+rHTML;
+  }
+  document.getElementById('roleBar').innerHTML=rHTML;
+
+  // Twist banner
+  const activeTwistList=TWIST_LIBRARY.filter(t=>activeTwists[t.id]?.enabled);
+  document.getElementById('twistBanner').innerHTML=activeTwistList.length===0?'':
+    `<div class="card" style="border-color:var(--purple)">
+      <div style="font-size:12px;font-weight:600;color:var(--purple);margin-bottom:8px">⚡ ACTIVE TWISTS THIS MONTH</div>
+      ${activeTwistList.map(t=>`<div style="font-size:13px;margin-bottom:4px">• <strong>${t.name}</strong> — ${t.desc}</div>`).join('')}
+    </div>`;
+
+  // Calendar with tooltip
+  const todayD=now.getMonth()+1===month&&now.getFullYear()===year?now.getDate():-1;
+  const firstDOW=(new Date(year,month-1,1).getDay()||7)-1;
+  const hdrs=['M','T','W','T','F','S','S'];
+  let cal=hdrs.map(d=>`<div class="cdh">${d}</div>`).join('');
+  for(let i=0;i<firstDOW;i++) cal+=`<div class="cd empty"></div>`;
+  for(let d=1;d<=DAYS;d++){
+    const logged=sc.days.has(d),isToday=d===todayD;
+    if(logged){
+      const workoutsToday=[...new Set(allLogs.filter(l=>l.player===me.name&&l.day===d).flatMap(l=>l.workouts||[l.workout]).filter(Boolean))].join(', ');
+      cal+=`<div class="cd logged" onclick="showCalTip(this,'${workoutsToday.replace(/'/g,"&#39;")}')">${d}</div>`;
+    } else {
+      cal+=`<div class="cd${isToday?' today':''}">${d}</div>`;
+    }
+  }
+  document.getElementById('calGrid').innerHTML=cal;
+
+  // Team streak card
+  const team=pl.team;
+  const teamMembers=(season.roster||[]).filter(p=>p.team===team);
+  const threshold=Math.ceil(teamMembers.length*(season.teamStreakThreshold??0.6));
+  const teamLogs=allLogs.filter(l=>(season.roster||[]).find(p=>p.name===l.player&&p.team===team));
+  const dc={};
+  teamLogs.forEach(l=>{ if(!dc[l.day]) dc[l.day]=new Set(); dc[l.day].add(l.player); });
+  const bonusDays=Object.entries(dc).filter(([d,ps])=>ps.size>=threshold).map(([d])=>+d).sort((a,b)=>a-b);
+  document.getElementById('streakCard').innerHTML=`
+    <div class="card-title">Team ${team} — qualifying streak days</div>
+    ${bonusDays.length===0
+      ?`<div class="tmuted">No days yet. Get ${threshold}+ teammates to log on the same day!</div>`
+      :bonusDays.map(d=>`<div class="row" style="padding:6px 0;border-bottom:1px solid var(--border)"><span style="font-size:13px">Day ${d} — ${dc[d].size} members</span><span style="font-size:11px;color:var(--green)">✅ Streak bonus</span></div>`).join('')
+    }`;
+}
+
+function showCalTip(el,text){
+  document.querySelectorAll('.cal-tip').forEach(t=>t.remove());
+  const tip=document.createElement('div');
+  tip.className='cal-tip'; tip.textContent=text;
+  el.appendChild(tip);
+  setTimeout(()=>tip.remove(),2500);
+}
+
+function getRank(playerName){
+  const sorted=(season.roster||[]).map(p=>({name:p.name,pts:score(p.name).total})).sort((a,b)=>b.pts-a.pts);
+  return sorted.findIndex(p=>p.name===playerName)+1;
+}
+
+function getNudgeHTML(playerName,sc){
+  const sorted=(season.roster||[]).map(p=>({name:p.name,pts:score(p.name).total})).sort((a,b)=>b.pts-a.pts);
+  const myIdx=sorted.findIndex(p=>p.name===playerName);
+  const myPts=sorted[myIdx]?.pts||0;
+  if(myIdx===0){
+    const second=sorted[1];
+    if(!second){
+      return `<div class="nudge"><div class="nudge-icon">👑</div><div class="nudge-text">You're the only one here so far. Top spot's yours by default — invite the others and defend it.</div></div>`;
+    }
+    const gap=myPts-second.pts;
+    return `<div class="nudge"><div class="nudge-icon">👑</div><div class="nudge-text">You're leading the pack. <strong>${esc(second.name)}</strong> is ${gap} pts behind. Don't get comfortable.</div></div>`;
+  }
+  const ahead=sorted[myIdx-1];
+  const gap=ahead.pts-myPts;
+  const needed=Math.ceil(gap/5);
+  return `<div class="nudge"><div class="nudge-icon">⚡</div><div class="nudge-text">You're <strong>${gap} pts behind ${esc(ahead.name)}</strong>. ${needed} workout${needed>1?'s':''} and you overtake them.</div></div>`;
+}
+
+// ── LOG ───────────────────────────────────────────────────────────────────
+function pickDay(t){
+  if(t==='today'){
+    const now=new Date();
+    if(now.getMonth()+1!==season.month||now.getFullYear()!==season.year){ alert(`Today is not in the active month (${season.month}/${season.year})`); return; }
+    selDay=now.getDate();
+  }
+  goS2();
+}
+function showPicker(){ document.getElementById('pickerWrap').classList.remove('hidden'); }
+function pickDayFromInput(){ const v=document.getElementById('dpick').value; if(!v) return; selDay=new Date(v).getDate(); goS2(); }
+function goS2(){
+  document.getElementById('ls1').classList.add('hidden');
+  document.getElementById('ls2').classList.remove('hidden');
+  const {month,year}=season;
+  const dt=new Date(year,month-1,selDay);
+  document.getElementById('lDateLbl').textContent=dt.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'});
+  const ex=allLogs.filter(l=>l.player===me.name&&l.day===selDay).flatMap(l=>l.workouts||[l.workout]).filter(Boolean);
+  document.getElementById('lExisting').textContent=ex.length?`Already logged: ${ex.join(', ')}`:'';
+  buildChips(); selW=[]; updateSel(); updBtn();
+}
+function buildChips(){
+  const mine=[...new Set(allLogs.filter(l=>l.player===me.name).flatMap(l=>l.workouts||[l.workout]).filter(Boolean))];
+  const all=[...new Set([...mine,...COMMON_WORKOUTS])];
+  document.getElementById('wChips').innerHTML=all.map(w=>`<div class="chip${mine.includes(w)?' mine':''}" onclick="toggleChip(this,'${w.replace(/'/g,"\\'")}')">${esc(w)}</div>`).join('');
+}
+function toggleChip(el,w){ el.classList.toggle('sel'); if(el.classList.contains('sel')){if(!selW.includes(w))selW.push(w);}else{selW=selW.filter(x=>x!==w);} updateSel(); updBtn(); }
+function addCustom(){
+  const inp=document.getElementById('custInp');
+  const v=inp.value.trim().slice(0,30);   // cap length at 30
+  if(!v) return;
+  if(/[<>"'\\]/.test(v)){ alert('Workout name can\'t contain these characters: < > " \' \\'); return; }
+  if(!selW.includes(v)) selW.push(v);
+  inp.value=''; updateSel(); updBtn();
+}
+function updateSel(){ const w=document.getElementById('selPrev'),l=document.getElementById('selList'); if(selW.length===0){w.classList.add('hidden');return;} w.classList.remove('hidden'); l.textContent=selW.join(' · '); }
+function updBtn(){ document.getElementById('subBtn').disabled=selW.length===0; }
+
+async function submitLog(){
+  const btn=document.getElementById('subBtn');
+  btn.disabled=true; btn.textContent='Saving...';
+  try{
+    // Log once, post to every group you're in on this device — but ONLY to groups
+    // currently on the SAME season month as this workout. A June workout has no
+    // place in a group that's rolled over to July. Active group is always a target.
+    const sessions = getSessions();
+    const targets = [];
+    await Promise.all(sessions.map(async sess => {
+      if(sess.code === groupCode){ targets.push(sess); return; }
+      try {
+        const gSnap = await db.collection('groups').doc(sess.code).get();
+        if(gSnap.exists && gSnap.data().currentSeasonId === seasonId) targets.push(sess);
+      } catch(e){ logErr('submitLog: skipped unreadable group '+sess.code, e); /* never block the log */ }
+    }));
+
+    const batch = db.batch();
+    targets.forEach(sess => {
+      const ref = db.collection('logs').doc();
+      batch.set(ref, {
+        groupCode: sess.code,
+        player: sess.player.name,
+        team: sess.player.team,
+        role: sess.player.role,
+        workouts: selW,
+        day: selDay,
+        month: season.month,
+        year: season.year,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    });
+    await batch.commit();
+
+    const sc=score(me.name);
+    const myDays=[...allLogs.filter(l=>l.player===me.name).map(l=>l.day)].sort((a,b)=>a-b);
+    const lastDay=myDays.length>=2?myDays[myDays.length-2]:null;
+    const isComeback=lastDay&&(selDay-lastDay)>=3;
+    document.getElementById('ls2').classList.add('hidden');
+    document.getElementById('ls3').classList.remove('hidden');
+    document.getElementById('succTitle').textContent=isComeback?'Welcome Back!':'Forged!';
+    const multiNote = targets.length>1 ? ` · posted to ${targets.length} groups` : '';
+    document.getElementById('succSub').textContent=`${selW.join(', ')} · Day ${selDay}${multiNote}`;
+    const cbMsg=document.getElementById('comebackMsg');
+    if(isComeback){cbMsg.textContent=getRandomComeback();cbMsg.classList.remove('hidden');}else{cbMsg.classList.add('hidden');}
+    document.getElementById('succStats').innerHTML=`<div class="srow" style="margin-bottom:0"><div class="sc"><div class="sv">${sc.total}</div><div class="sl">POINTS</div></div><div class="sc"><div class="sv">${sc.wo}</div><div class="sl">WORKOUTS</div></div><div class="sc"><div class="sv" style="color:var(--orange)">${sc.streak}🔥</div><div class="sl">STREAK</div></div></div>`;
+  } catch(e){ console.error('submitLog failed:',e); alert('Error saving. Check connection.'); btn.disabled=false; btn.textContent='Log Workout'; }
+}
+function resetLog(){ selDay=null; selW=[]; ['ls1','ls2','ls3'].forEach((id,i)=>document.getElementById(id).classList[i===0?'remove':'add']('hidden')); document.getElementById('pickerWrap').classList.add('hidden'); showTab('home'); }
+function backToS1(){ document.getElementById('ls1').classList.remove('hidden'); document.getElementById('ls2').classList.add('hidden'); }
+
+// ── LEADERBOARD ───────────────────────────────────────────────────────────
+function renderLB(){
+  if(!season) return;
+  const players=season.roster||[];
+  const teams=[...new Set(players.map(p=>p.team))];
+  const tcol=t=>t==='A'?'var(--A)':t==='B'?'var(--B)':'var(--C)';
+  const ts=teams.map(t=>({t,s:teamTotal(t),count:players.filter(p=>p.team===t).length})).sort((a,b)=>b.s-a.s);
+  document.getElementById('teamStand').innerHTML=ts.map((t,i)=>`
+    <div class="tcard ${t.t}">
+      <div>
+        <div class="tcname">#${i+1} Team ${t.t}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">${players.filter(p=>p.team===t.t).map(p=>p.name).join(', ')}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">${t.count} members · avg score</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:26px;font-weight:800;color:${tcol(t.t)}">${t.s}</div>
+        <div style="font-size:10px;color:var(--muted)">avg pts</div>
+      </div>
+    </div>`).join('');
+
+  const ind=players.map(p=>({...p,sc:score(p.name)})).sort((a,b)=>b.sc.total-a.sc.total);
+  const myName=me.name;
+  document.getElementById('indLb').innerHTML=ind.map((p,i)=>`
+    <div class="lbrow" style="${p.name===myName?'background:rgba(245,158,11,0.06);margin:0 -16px;padding:12px 16px;border-radius:8px':''}">
+      <div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div>
+      <div style="width:34px;height:34px;border-radius:50%;background:${p.team==='A'?'var(--Al)':p.team==='B'?'var(--Bl)':'var(--Cl)'};border:1.5px solid ${tcol(p.team)};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:${tcol(p.team)};flex-shrink:0">${esc(p.name[0])}</div>
+      <div class="lbinfo">
+        <div class="lbname">${esc(p.name)}${p.name===myName?' <span style="font-size:10px;color:var(--green);font-weight:700">· you</span>':''} <span class="rbadge ${p.role==='Captain'?'rCaptain':p.role==='Vice Captain'?'rVC':'rPlayer'}">${p.role}</span></div>
+        <div class="lbmeta">${p.sc.wo} workouts · ${p.sc.streak}🔥</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:18px;font-weight:800;color:var(--gold)">${p.sc.total}</div>
+        <div style="font-size:10px;color:var(--muted)">pts</div>
+      </div>
+    </div>`).join('');
+
+  const my=score(me.name);
+  const pl=(season.roster||[]).find(p=>p.name===me.name)||me;
+  document.getElementById('ptsBk').innerHTML=`
+    <div class="card-title">Your breakdown — ${esc(me.name)}</div>
+    ${[
+      ['Base points',my.base,`${my.wo} workouts × 5`],
+      ['Perfect week',my.wb,'+10 per complete Mon–Sun week'],
+      ['Team streak',my.tb,'Cumulative +1/+2/+3 (proportional threshold)'],
+      ['Role bonus',my.rb,pl.role+' — applied on last day'],
+      ['30-day bonus',my.b30,'All days logged'],
+      ['Boss week bonus',my.bossBonus||0,'Double base points week'],
+      ['Penalty',my.pen,'If under min workouts (last day)'],
+    ].map(([l,v,s])=>`
+      <div class="row" style="padding:8px 0;border-bottom:1px solid var(--border);gap:12px">
+        <div style="flex:1"><div style="font-size:13px">${l}</div><div style="font-size:11px;color:var(--muted)">${s}</div></div>
+        <div style="font-size:14px;font-weight:700;flex-shrink:0;color:${v<0?'var(--red)':v>0?'var(--green)':'var(--muted)'}">${v>0?'+':''}${v}</div>
+      </div>`).join('')}
+    <div class="row" style="padding:14px 0 0;margin-top:6px;border-top:2px solid var(--border)">
+      <div style="font-size:15px;font-weight:700">Total</div>
+      <div style="font-size:24px;font-weight:800;color:var(--gold)">${my.total}</div>
+    </div>`;
+}
+
+// ── FEED ──────────────────────────────────────────────────────────────────
+function renderFeed(){
+  const sorted=[...allLogs].sort((a,b)=>(b.timestamp?.seconds||0)-(a.timestamp?.seconds||0));
+  const tcol=t=>t==='A'?'var(--A)':t==='B'?'var(--B)':'var(--C)';
+  const tbg=t=>t==='A'?'var(--Al)':t==='B'?'var(--Bl)':'var(--Cl)';
+  const now=new Date();
+  const todayDay=now.getMonth()+1===season.month&&now.getFullYear()===season.year?now.getDate():-1;
+
+  // Feed stats
+  const todayPlayers=new Set(allLogs.filter(l=>l.day===todayDay).map(l=>l.player));
+  const todayCount=todayPlayers.size;
+  const total=(season.roster||[]).length;
+  const teamCounts={A:0,B:0,C:0};
+  todayPlayers.forEach(name=>{ const p=(season.roster||[]).find(x=>x.name===name); if(p) teamCounts[p.team]++; });
+  const topTeamEntry=Object.entries(teamCounts).sort((a,b)=>b[1]-a[1])[0];
+  const topTeam=topTeamEntry[1]>0?topTeamEntry[0]:null;
+  const allStreaks=(season.roster||[]).map(p=>({name:p.name,streak:score(p.name).streak})).filter(p=>p.streak>0).sort((a,b)=>b.streak-a.streak);
+  const topStreak=allStreaks[0]?.streak||0;
+  const topStreakers=allStreaks.filter(p=>p.streak===topStreak);
+
+  let statsHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+    <div style="background:var(--green-l);border-radius:10px;padding:12px;text-align:center">
+      <div style="font-size:26px;font-weight:900;color:var(--green)">${todayCount}<span style="font-size:13px;font-weight:500;color:var(--green)">/${total}</span></div>
+      <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Logged today</div>
+    </div>
+    <div style="background:${topTeam?tbg(topTeam):'var(--surface)'};border-radius:10px;padding:12px;text-align:center">
+      <div style="font-size:26px;font-weight:900;color:${topTeam?tcol(topTeam):'var(--muted)'}">${topTeam?'Team '+topTeam:'—'}</div>
+      <div style="font-size:10px;font-weight:700;color:${topTeam?tcol(topTeam):'var(--muted)'};text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Leading today</div>
+    </div>
+    ${topStreakers.length>0?`<div style="background:var(--gold-l);border-radius:10px;padding:12px;text-align:center;grid-column:1/-1">
+      <div style="font-size:16px;font-weight:800;color:var(--orange)">${topStreakers.length<=3?topStreakers.map(p=>p.name).join(' · ')+' · '+topStreak+' days 🔥':'Multiple players · '+topStreak+' days 🔥'}</div>
+      <div style="font-size:10px;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">${topStreakers.length<=3?'Longest active streak':topStreakers.length+' players tied — check the board'}</div>
+    </div>`:''}
+  </div>`;
+
+  if(sorted.length===0){ document.getElementById('feedList').innerHTML=statsHTML+'<div class="tmuted">No workouts logged yet. Be the first! 🔥</div>'; return; }
+  document.getElementById('feedList').innerHTML=statsHTML+sorted.slice(0,60).map(l=>{
+    const w=Array.isArray(l.workouts)?l.workouts.join(', '):(l.workout||'');
+    const ts=l.timestamp?.seconds?new Date(l.timestamp.seconds*1000):null;
+    const tstr=ts?ts.toLocaleDateString('en-IN',{day:'numeric',month:'short'})+' · '+ts.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):`Day ${l.day}`;
+    const isMine=l.player===me.name;
+    const ct=(season.roster||[]).find(x=>x.name===l.player)?.team||l.team;
+    const flagCount=flags.filter(f=>f.logId===l.id).length;
+    const alreadyFlagged=flags.some(f=>f.logId===l.id&&f.flaggedBy===me.name);
+    const isBacklog=l.day<todayDay&&ts&&ts.toDateString()===now.toDateString();
+    return `<div class="fi">
+      <div class="fav" style="background:${tbg(ct)};color:${tcol(ct)};border:1.5px solid ${tcol(ct)}">${esc(l.player[0])}</div>
+      <div class="ftxt">
+        <div class="fn">${esc(l.player)} <span style="font-size:10px;color:${tcol(ct)};font-weight:600">Team ${ct}</span>${flagCount>=2?'<span class="pill" style="background:var(--red-l);color:var(--red);margin-left:6px">⚑ flagged</span>':''}</div>
+        <div class="fw">💪 ${esc(w)}</div>
+        <div class="ft">${tstr} · <span style="color:var(--muted)">Day ${l.day}</span>${isBacklog?' <span style="background:var(--orange-l);color:var(--orange);font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:4px">backlog</span>':''}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0;align-items:center">
+        ${isMine?`<button onclick="deleteLog('${l.id}')" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:4px">×</button>`:''}
+        ${!isMine&&!alreadyFlagged?`<button onclick="flagLog('${l.id}','${l.player}')" style="background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:4px">⚑</button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function deleteLog(id){ if(!confirm('Delete this workout entry?')) return; await db.collection('logs').doc(id).delete(); }
+async function flagLog(logId,player){
+  if(!confirm(`Flag ${player}'s workout as suspicious?`)) return;
+  await db.collection('flags').add({groupCode,logId,player,flaggedBy:me.name,month:season.month,year:season.year,timestamp:firebase.firestore.FieldValue.serverTimestamp()});
+}
+
+// ── FLAG QUEUE ────────────────────────────────────────────────────────────
+function renderFlagQueue(){
+  const grouped={};
+  flags.forEach(f=>{ if(!grouped[f.logId]) grouped[f.logId]=[]; grouped[f.logId].push(f); });
+  const suspected=Object.entries(grouped).filter(([id,fs])=>fs.length>=2);
+  document.getElementById('flagCount').textContent=suspected.length>0?` (${suspected.length})`:'';
+  if(suspected.length===0){ document.getElementById('flagQueue').innerHTML='<div class="tmuted">No flagged entries</div>'; return; }
+  document.getElementById('flagQueue').innerHTML=suspected.map(([logId,fs])=>{
+    const log=allLogs.find(l=>l.id===logId); if(!log) return '';
+    const w=Array.isArray(log.workouts)?log.workouts.join(', '):(log.workout||'');
+    return `<div class="flag-item">
+      <div style="font-size:13px;font-weight:600">${esc(log.player)} · Day ${log.day}</div>
+      <div style="font-size:12px;color:var(--muted);margin:3px 0">${esc(w)}</div>
+      <div style="font-size:11px;color:var(--red);margin-bottom:8px">Flagged by ${fs.map(f=>esc(f.flaggedBy)).join(', ')}</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-surface btn-sm" onclick="resolveFlag('${logId}','keep')">✅ Keep</button>
+        <button class="btn btn-red btn-sm" onclick="resolveFlag('${logId}','remove')">🗑 Remove</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+async function resolveFlag(logId,action){
+  if(action==='remove') await db.collection('logs').doc(logId).delete();
+  await Promise.all(flags.filter(f=>f.logId===logId).map(f=>db.collection('flags').doc(f.id).delete()));
+}
+
+// ── ADMIN ─────────────────────────────────────────────────────────────────
+function renderAdminRoles(){
+  const players=season.roster||[];
+  const numTeams=season.numTeams===2?2:3;
+  const teamOpts=numTeams===2?['A','B']:['A','B','C'];
+  const rolesOn=season.rolesEnabled!==false;
+  const cols=rolesOn?'1fr 80px 130px':'1fr 80px';
+  document.getElementById('adminRoles').innerHTML=players.map(p=>`
+    <div style="display:grid;grid-template-columns:${cols};gap:6px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:13px;font-weight:600">${esc(p.name)}</span>
+      <select id="team_${p.name}" style="padding:6px;font-size:12px;margin-bottom:0">
+        ${teamOpts.map(t=>`<option value="${t}"${p.team===t?' selected':''}>Team ${t}</option>`).join('')}
+      </select>
+      ${rolesOn?`<select id="role_${p.name}" style="padding:6px;font-size:12px;margin-bottom:0">
+        ${['Player','Vice Captain','Captain'].map(r=>`<option value="${r}"${p.role===r?' selected':''}>${r}</option>`).join('')}
+      </select>`:''}
+    </div>`).join('');
+}
+
+async function saveRoles(){
+  if(!season || !seasonId){ alert('This group is still loading — give it a second and try again.'); return; }
+  const ref = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
+  try {
+    let written=null;
+    await db.runTransaction(async tx=>{
+      const snap=await tx.get(ref);
+      if(!snap.exists) throw new Error('SEASON_MISSING');
+      const roster=snap.data().roster||[];           // FRESH copy — includes anyone who joined while you edited
+      roster.forEach(p=>{
+        const t=document.getElementById(`team_${p.name}`)?.value;
+        const r=document.getElementById(`role_${p.name}`)?.value;
+        if(t) p.team=t;
+        if(r) p.role=r;                               // players with no input row are left untouched
+      });
+      tx.update(ref,{roster});
+      written=roster;
+    });
+    if(written){ season.roster=written; const fresh=written.find(p=>p.name===me.name); if(fresh) me=fresh; }
+    upsertSession(groupCode, me, groupData?.name);
+    renderAdminRoles(); refresh();
+    alert('✅ Roles saved');
+  } catch(e){ logErr('saveRoles', e); alert('❌ Save failed — check connection: '+e.message); }
+}
+
+function renderTwistToggles(){
+  document.getElementById('twistToggles').innerHTML=TWIST_LIBRARY.map(t=>{
+    const active=activeTwists[t.id];
+    const isOn=active?.enabled||false;
+    return `<div class="twist-row">
+      <div style="flex:1;margin-right:12px">
+        <div style="font-size:13px;font-weight:600">${t.name}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${t.desc}</div>
+        ${t.config&&isOn?`<input id="twist_cfg_${t.id}" placeholder="${t.config}" value="${active?.[t.configKey]||t.configDefault||''}" style="margin-top:6px;padding:6px 10px;font-size:12px;margin-bottom:0" onchange="saveTwistConfig('${t.id}','${t.configKey}',this.value)">`:''}
+      </div>
+      <div class="toggle${isOn?' on':''}" onclick="toggleTwist('${t.id}',${!isOn})"></div>
+    </div>`;
+  }).join('');
+}
+async function toggleTwist(id,enable){
+  const twist=TWIST_LIBRARY.find(t=>t.id===id);
+  const data={enabled:enable};
+  if(enable&&twist.configKey) data[twist.configKey]=activeTwists[id]?.[twist.configKey]||twist.configDefault||'';
+  await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('twists').doc(id).set(data);
+}
+async function saveTwistConfig(id,key,value){
+  await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('twists').doc(id).update({[key]:value});
+}
+async function award30(){
+  const p=document.getElementById('aPlayer').value;
+  if(!p){alert('Select player');return;}
+  if(bonus30.find(b=>b.player===p)){alert('Already awarded');return;}
+  await db.collection('bonuses_30day').add({groupCode,player:p,month:season.month,year:season.year});
+  alert(`✅ +50 pts awarded to ${p}`);
+}
+
+// Super-admin engagement trends: active people/day + participation rate,
+// Super-admin engagement trends with a day-window toggle (7 / 14 / All).
+let _trend=null, _trendWin='all', _trendCharts=[];
+async function renderTrendCharts(groups){
+  const el=document.getElementById('trendCharts'); if(!el||typeof Chart==='undefined') return;
+  el.innerHTML='<div class="tmuted">Loading trends…</div>';
+  try{
+    const now=new Date(), M=now.getMonth()+1, Y=now.getFullYear();
+    const reg=groups.reduce((s,g)=>s+(g.players?.length||0),0)||1;
+    const snap=await db.collection('logs').get();
+    const dp={}; snap.docs.forEach(dn=>{const l=dn.data(); if(l.month===M&&l.year===Y)(dp[l.day]=dp[l.day]||new Set()).add(l.player);});
+    let base=null; try{const b=await db.collection('analytics').doc('baseline-2026-04').get(); if(b.exists) base=b.data();}catch(e){ logErr('renderTrendCharts: baseline read', e); }
+    _trend={reg,dp,base,today:(now.getMonth()+1===M?now.getDate():31)};
+    el.innerHTML=
+      '<div style="display:flex;gap:6px;margin-bottom:10px">'+
+      [['7','Last 7'],['14','Last 14'],['all','All']].map(([w,t])=>`<button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="setTrendWin('${w}')">${t}</button>`).join('')+
+      '</div>'+
+      '<div class="card" style="margin:0 0 12px"><div class="card-title">Active people / day</div><canvas id="chA" height="170"></canvas></div>'+
+      '<div class="card" style="margin:0"><div class="card-title">Participation rate</div><canvas id="chP" height="170"></canvas></div>';
+    drawTrend();
+  }catch(e){console.error('renderTrendCharts',e); el.innerHTML='<div class="tmuted">Could not load trends.</div>';}
+}
+function setTrendWin(w){ _trendWin=w; drawTrend(); }
+function drawTrend(){
+  if(!_trend) return;
+  _trendCharts.forEach(c=>{try{c.destroy();}catch(e){}}); _trendCharts=[];
+  const {reg,dp,base,today}=_trend;
+  let days=Array.from({length:31},(_,i)=>i+1);
+  if(_trendWin!=='all'){ const n=parseInt(_trendWin); days=days.filter(d=>d<=today&&d>today-n); }
+  const ca=days.map(d=>dp[d]?dp[d].size:null);
+  const cp=days.map(d=>dp[d]?Math.round(dp[d].size/reg*100):null);
+  const br=base?.registered||1;
+  const ba=base?days.map(d=>base.daily[d]??null):null;
+  const bp=base?days.map(d=>base.daily[d]!=null?Math.round(base.daily[d]/br*100):null):null;
+  const lbl=base?.label||'Baseline';
+  const mk=(id,cur,bse,sfx)=>_trendCharts.push(new Chart(document.getElementById(id),{type:'line',data:{labels:days,datasets:[
+    {label:'This month',data:cur,borderColor:'#f59e0b',backgroundColor:'#f59e0b',spanGaps:true,tension:.3},
+    ...(bse?[{label:lbl,data:bse,borderColor:'#6b7280',borderDash:[5,4],spanGaps:true,tension:.3}]:[])
+  ]},options:{responsive:true,plugins:{legend:{labels:{color:'#9ca3af',boxWidth:12}}},scales:{x:{ticks:{color:'#6b7280',maxTicksLimit:10}},y:{beginAtZero:true,ticks:{color:'#6b7280',callback:v=>v+(sfx||'')}}}}}));
+  mk('chA',ca,ba,''); mk('chP',cp,bp,'%');
+}
+
+// ── SUPER ADMIN ───────────────────────────────────────────────────────────
+async function loadSuperAdmin(){
+  const snap=await db.collection('groups').get();
+  const groups=snap.docs.map(d=>({code:d.id,...d.data()}));
+
+  // ── Dashboard strip: cross-group totals, fetched on load ──
+  renderSuperDashboard(groups);
+
+  // ── Rollover nudge: if any active season's month has ended/is last day ──
+  checkRolloverNudges(groups);
+  renderTrendCharts(groups);
+
+  document.getElementById('superGroupList').innerHTML=groups.length===0
+    ?'<div class="tmuted">No groups yet</div>'
+    :groups.map(g=>`
+      <div class="admin-group-card">
+        <div class="row" onclick="superViewGroup('${g.code}')" style="cursor:pointer">
+          <div>
+            <div style="font-size:15px;font-weight:700">${esc(g.name)}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:3px">${g.players?.length||0} players · current season ${g.currentSeasonId||'—'}</div>
+          </div>
+          <div style="font-size:20px;font-weight:800;letter-spacing:3px;color:var(--gold)">${g.code}</div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="event.stopPropagation();openEditGroup('${g.code}')">⚙ Manage</button>
+          <button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="event.stopPropagation();startNewSeason('${g.code}')">↻ New Season</button>
+        </div>
+      </div>`).join('');
+}
+
+// Cross-group totals. Reads logs once (on load), not a live listener.
+async function renderSuperDashboard(groups){
+  const el=document.getElementById('superDashboard');
+  if(!el) return;
+  el.innerHTML='<div class="tmuted">Loading stats…</div>';
+  try{
+    const totalGroups=groups.length;
+    const totalPlayers=groups.reduce((s,g)=>s+(g.players?.length||0),0);
+
+    // Logs logged today (by calendar date of the timestamp), across all groups
+    const now=new Date();
+    const startOfDay=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    const logsSnap=await db.collection('logs').get();
+    let loggedToday=0;
+    const perGroupToday={};
+    logsSnap.docs.forEach(d=>{
+      const l=d.data();
+      const ts=l.timestamp?.seconds?new Date(l.timestamp.seconds*1000):null;
+      if(ts && ts>=startOfDay){
+        loggedToday++;
+        perGroupToday[l.groupCode]=(perGroupToday[l.groupCode]||0)+1;
+      }
+    });
+    const topEntry=Object.entries(perGroupToday).sort((a,b)=>b[1]-a[1])[0];
+    const topGroupName=topEntry ? (groups.find(g=>g.code===topEntry[0])?.name||topEntry[0]) : '—';
+
+    el.innerHTML=`
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="card" style="margin:0;text-align:center;padding:12px">
+          <div style="font-size:26px;font-weight:900;color:var(--gold)">${totalGroups}</div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Groups</div>
+        </div>
+        <div class="card" style="margin:0;text-align:center;padding:12px">
+          <div style="font-size:26px;font-weight:900;color:var(--gold)">${totalPlayers}</div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Total players</div>
+        </div>
+        <div class="card" style="margin:0;text-align:center;padding:12px">
+          <div style="font-size:26px;font-weight:900;color:var(--green)">${loggedToday}</div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Logs today</div>
+        </div>
+        <div class="card" style="margin:0;text-align:center;padding:12px">
+          <div style="font-size:15px;font-weight:800;color:var(--text);margin-top:4px">${topGroupName}</div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Most active today</div>
+        </div>
+      </div>`;
+  }catch(e){ console.error(e); el.innerHTML='<div class="tmuted">Could not load stats.</div>'; }
+}
+
+// If an active season's month is over (or it's the last day), nudge to roll over.
+function checkRolloverNudges(groups){
+  const el=document.getElementById('rolloverNudge');
+  if(!el) return;
+  const now=new Date();
+  const curMonth=now.getMonth()+1, curYear=now.getFullYear();
+  const due=[];
+  groups.forEach(g=>{
+    // We only have the group doc here; use currentSeasonId "YYYY-MM" to read the month.
+    const sid=g.currentSeasonId;
+    if(!sid) return;
+    const [yStr,mStr]=sid.split('-');
+    const sYear=parseInt(yStr), sMonth=parseInt(mStr);
+    if(!sYear||!sMonth) return;
+    // Due if the season's month/year is now in the past relative to today.
+    const seasonEnded = (sYear<curYear) || (sYear===curYear && sMonth<curMonth);
+    if(seasonEnded) due.push(g);
+  });
+
+  if(due.length===0){ el.innerHTML=''; return; }
+  el.innerHTML=`<div class="card" style="border:1px solid var(--orange);background:var(--orange-l)">
+    <div style="font-size:13px;font-weight:700;color:var(--orange);margin-bottom:6px">⏰ Season rollover due</div>
+    <div class="tmuted" style="margin-bottom:10px">These groups are still on a past month. Roll them into the current month when ready (teams carry forward; you confirm each step):</div>
+    ${due.map(g=>`<button class="btn btn-surface btn-sm" style="margin:0 6px 6px 0" onclick="startNewSeason('${g.code}')">↻ Roll over ${g.name}</button>`).join('')}
+  </div>`;
+}
+async function superViewGroup(code){
+  groupCode=code;
+  const gSnap=await db.collection('groups').doc(code).get();
+  groupData=gSnap.data();
+  const sid=groupData.currentSeasonId;
+  if(!sid){ alert('This group has no active season.'); return; }
+  const sSnap=await db.collection('groups').doc(code).collection('seasons').doc(sid).get();
+  if(!sSnap.exists){ alert('Active season missing.'); return; }
+  season=sSnap.data();
+  seasonId=sid;
+  me=(season.roster&&season.roster[0])||{name:'Admin',team:'A',role:'Player'};
+  window.fromSuper=true;     // mark that we entered the app via super admin
+  launchApp();
+}
+
+function backToSuper(){
+  window.fromSuper=false;
+  showScreen('super');
+  loadSuperAdmin();
+}
+// ── EDIT GROUP SETTINGS (super admin) ─────────────────────────────────────
+// Loads the group's ACTIVE season config into the edit form and writes changes
+// back to that season doc. Uses ?? defaults so pre-existing seasons that lack
+// numTeams / teamStreakThreshold still populate sensibly.
+window._editGroupCode=null;
+window._editSeasonId=null;
+window._editRoster=null;
+
+async function openEditGroup(code){
+  try{
+    const gSnap=await db.collection('groups').doc(code).get();
+    if(!gSnap.exists){ alert('Group not found.'); return; }
+    const g=gSnap.data();
+    const sid=g.currentSeasonId;
+    if(!sid){ alert('Group has no active season.'); return; }
+    const sSnap=await db.collection('groups').doc(code).collection('seasons').doc(sid).get();
+    if(!sSnap.exists){ alert('Active season missing.'); return; }
+    const s=sSnap.data();
+
+    window._editGroupCode=code;
+    window._editSeasonId=sid;
+    window._editRoster=s.roster||[];
+
+    document.getElementById('editGroupName').textContent=`${g.name} (${sid})`;
+    document.getElementById('editDays').value=s.days ?? 30;
+    document.getElementById('editCapTarget').value=s.capTarget ?? 16;
+    document.getElementById('editVCTarget').value=s.vcTarget ?? 20;
+    document.getElementById('editMinWO').value=s.minWorkouts ?? 12;
+    document.getElementById('editNumTeams').value=s.numTeams ?? 3;
+    document.getElementById('editThreshold').value=Math.round((s.teamStreakThreshold ?? 0.6)*100);
+    document.getElementById('editRoles').checked=(s.rolesEnabled!==false);
+
+    document.getElementById('editGroupStatus').textContent='';
+    document.getElementById('editGroupModal').classList.remove('hidden');
+    document.getElementById('editGroupModal').scrollIntoView({behavior:'smooth',block:'center'});
+  }catch(e){ console.error(e); alert('Could not open settings: '+e.message); }
+}
+
+function closeEditGroup(){
+  document.getElementById('editGroupModal').classList.add('hidden');
+  window._editGroupCode=null; window._editSeasonId=null; window._editRoster=null;
+}
+
+async function saveEditGroup(){
+  const code=window._editGroupCode, sid=window._editSeasonId;
+  if(!code||!sid){ return; }
+  const status=document.getElementById('editGroupStatus');
+
+  const days=parseInt(document.getElementById('editDays').value)||30;
+  const capTarget=parseInt(document.getElementById('editCapTarget').value)||16;
+  const vcTarget=parseInt(document.getElementById('editVCTarget').value)||20;
+  const minWorkouts=parseInt(document.getElementById('editMinWO').value)||12;
+  const numTeams=Math.min(3,Math.max(2,parseInt(document.getElementById('editNumTeams').value)||3));
+  const thresholdPct=Math.min(100,Math.max(30,parseInt(document.getElementById('editThreshold').value)||60));
+  const rolesEnabled=document.getElementById('editRoles').checked;
+
+  // ── Guard: reducing team count while players sit on a vanishing team ──
+  if(numTeams===2){
+    const orphans=(window._editRoster||[]).filter(p=>p.team==='C').map(p=>p.name);
+    if(orphans.length>0){
+      const ok=confirm(`⚠️ Reducing to 2 teams, but these players are on Team C:\n\n${orphans.join(', ')}\n\nThey will stay on Team C in the data (not lost), but the app will only offer Teams A and B. You'll need to reassign them via that group's Admin → Team & Role Assignment.\n\nProceed anyway?`);
+      if(!ok){ status.textContent='Cancelled — no changes saved.'; return; }
+    }
+  }
+
+  status.textContent='Saving…';
+  try{
+    await db.collection('groups').doc(code).collection('seasons').doc(sid).update({
+      days, capTarget, vcTarget, minWorkouts, numTeams,
+      teamStreakThreshold: thresholdPct/100,
+      rolesEnabled
+    });
+    // If we're editing the group we're currently viewing in-app, refresh local state.
+    if(window.season && window.seasonId===sid && window.groupCode===code){
+      Object.assign(window.season,{days,capTarget,vcTarget,minWorkouts,numTeams,teamStreakThreshold:thresholdPct/100,rolesEnabled});
+    }
+    status.textContent='✅ Saved.';
+    setTimeout(()=>{ closeEditGroup(); loadSuperAdmin(); }, 700);
+  }catch(e){ console.error(e); status.textContent='❌ Save failed: '+e.message; }
+}
+// ── START NEW SEASON ──────────────────────────────────────────────────────
+// Archives the group's current active season and creates the next one,
+// carrying the roster (names+teams+roles), targets, and rolesEnabled forward.
+// Logs/bonuses/flags are untouched — they stay scoped to their own month+year,
+// so the archived season stays frozen and the new season starts with a clean board.
+async function startNewSeason(code){
+  const gSnap = await db.collection('groups').doc(code).get();
+  if(!gSnap.exists){ alert('Group not found.'); return; }
+  const g = gSnap.data();
+  const curSid = g.currentSeasonId;
+  if(!curSid){ alert('Group has no active season to roll over from.'); return; }
+  const curSnap = await db.collection('groups').doc(code).collection('seasons').doc(curSid).get();
+  if(!curSnap.exists){ alert('Current season doc missing.'); return; }
+  const cur = curSnap.data();
+
+  // Gather the new season parameters
+  const month = parseInt(prompt(`New season — month (1-12)?\n(Current active: ${cur.month}/${cur.year})`));
+  if(!month || month<1 || month>12){ alert('Invalid month.'); return; }
+  const year = parseInt(prompt('New season — year?', cur.year));
+  if(!year){ alert('Invalid year.'); return; }
+  const newSid = seasonIdOf(month, year);
+
+  if(newSid === curSid){ alert('That season is already the active one.'); return; }
+
+  // Refuse to clobber an existing season doc (guards double-rollover)
+  const existing = await db.collection('groups').doc(code).collection('seasons').doc(newSid).get();
+  if(existing.exists){ alert(`A ${newSid} season already exists for this group. Aborting to avoid overwriting it.`); return; }
+
+  const days = parseInt(prompt('Days in the new month?', new Date(year, month, 0).getDate()));
+  if(!days){ alert('Invalid day count.'); return; }
+
+  const carryRoster = confirm('Carry forward the roster (same players, teams, roles)?\n\nOK = carry forward\nCancel = start with empty roster');
+  const newRoster = carryRoster ? JSON.parse(JSON.stringify(cur.roster||[])) : [];
+
+  const keepRoles = confirm('Keep Captain/Vice Captain roles enabled this season?\n\nOK = enabled\nCancel = disabled (everyone is a Player, no role bonuses)');
+
+  const now = firebase.firestore.FieldValue.serverTimestamp();
+  const batch = db.batch();
+
+  // 1. Archive current season
+  const curRef = db.collection('groups').doc(code).collection('seasons').doc(curSid);
+  batch.update(curRef, { status:'archived', endedAt:now });
+
+  // 2. Create new active season (carries numTeams + threshold forward from prev)
+  const newRef = db.collection('groups').doc(code).collection('seasons').doc(newSid);
+  batch.set(newRef, {
+    month, year, days,
+    capTarget: cur.capTarget ?? 16,
+    vcTarget: cur.vcTarget ?? 20,
+    minWorkouts: cur.minWorkouts ?? 12,
+    numTeams: cur.numTeams ?? 3,
+    teamStreakThreshold: cur.teamStreakThreshold ?? 0.6,
+    rolesEnabled: keepRoles,
+    roster: newRoster,
+    status: 'active',
+    startedAt: now,
+    endedAt: null
+  });
+
+  // 3. Point the group at the new season
+  batch.update(db.collection('groups').doc(code), { currentSeasonId: newSid });
+
+  try {
+    await batch.commit();
+    alert(`✅ ${cur.month}/${cur.year} archived. ${month}/${year} is now the active season${carryRoster?` with ${newRoster.length} players carried over`:' (empty roster)'}.\n\nTip: adjust teams/roles in Admin → Team & Role Assignment if needed.`);
+    loadSuperAdmin();
+  } catch(e){ console.error(e); alert('❌ Rollover failed: '+e.message); }
+}
+function exitSuper(){
+  // Leave super admin entirely. If a normal player session exists on this
+  // device, the onboarding boot logic will pick it up on reload; otherwise
+  // the user lands on the group-code entry screen.
+  if(getSessions().length){
+    location.reload();           // boot logic resumes the player's own session
+  } else {
+    showScreen('onboard');
+    showObStep(1);
+  }
+}
+// ── DATA EXPORT (super admin) ─────────────────────────────────────────────
+// Exports a complete snapshot of all Forge data across every group and season.
+// Reads fresh from Firestore (not from in-memory state, which only holds the
+// currently-loaded group/season). Use this for backups and offline analysis.
+async function exportAllData(){
+  const status = document.getElementById('exportStatus');
+  status.textContent = 'Gathering data… this may take a few seconds.';
+  try {
+    const snapshot = {
+      exportedAt: new Date().toISOString(),
+      schemaVersion: 'forge-v1',
+      groups: [],
+      logs: [],
+      bonuses_30day: [],
+      flags: []
+    };
+
+    // 1. All groups + their seasons + each season's twists
+    const groupsSnap = await db.collection('groups').get();
+    for(const gDoc of groupsSnap.docs){
+      const group = { code: gDoc.id, ...gDoc.data(), seasons: [] };
+      const seasonsSnap = await db.collection('groups').doc(gDoc.id).collection('seasons').get();
+      for(const sDoc of seasonsSnap.docs){
+        const season = { id: sDoc.id, ...sDoc.data(), twists: {} };
+        const twistsSnap = await db.collection('groups').doc(gDoc.id).collection('seasons').doc(sDoc.id).collection('twists').get();
+        twistsSnap.docs.forEach(t => { season.twists[t.id] = t.data(); });
+        group.seasons.push(season);
+      }
+      snapshot.groups.push(group);
+    }
+
+    // 2. Top-level collections (scoped by groupCode + month + year on each doc)
+    const [logsSnap, bonusSnap, flagsSnap] = await Promise.all([
+      db.collection('logs').get(),
+      db.collection('bonuses_30day').get(),
+      db.collection('flags').get()
+    ]);
+    snapshot.logs = logsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    snapshot.bonuses_30day = bonusSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    snapshot.flags = flagsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    downloadJSON(snapshot, `forge_full_backup_${todayStamp()}.json`);
+    status.textContent = `✅ Exported ${snapshot.groups.length} groups, ${snapshot.logs.length} logs.`;
+  } catch(e){
+    console.error(e);
+    status.textContent = '❌ Export failed: ' + e.message;
+  }
+}
+
+// Helper: trigger a browser download of a JS object as pretty-printed JSON.
+function downloadJSON(obj, filename){
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url); // clean up the object URL
+}
+
+// Helper: YYYY-MM-DD stamp for filenames.
+function todayStamp(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+async function createGroup(){
+  const name=document.getElementById('newGroupName').value.trim();
+  if(!name){alert('Enter a group name');return;}
+  const month=parseInt(document.getElementById('newGroupMonth').value);
+  const year=parseInt(document.getElementById('newGroupYear').value);
+  const days=parseInt(document.getElementById('newGroupDays').value);
+  const capTarget=parseInt(document.getElementById('newGroupCapTarget').value);
+  const vcTarget=parseInt(document.getElementById('newGroupVCTarget').value);
+  const minWorkouts=parseInt(document.getElementById('newGroupMinWO').value);
+  const numTeams=Math.min(3, Math.max(2, parseInt(document.getElementById('newGroupNumTeams').value)||3));
+  const thresholdPct=Math.min(100, Math.max(30, parseInt(document.getElementById('newGroupThreshold').value)||60));
+  const rolesEnabled=document.getElementById('newGroupRoles').checked;
+  const code=Math.random().toString(36).substring(2,8).toUpperCase();
+  const sid=seasonIdOf(month, year);
+  const now=firebase.firestore.FieldValue.serverTimestamp();
+
+  // Write group + first season in a batch so they always exist together
+  const batch = db.batch();
+  const groupRef = db.collection('groups').doc(code);
+  batch.set(groupRef, {
+    name,
+    players: [],            // canonical roster of names; populated as players register
+    currentSeasonId: sid,
+    createdAt: now
+  });
+  const seasonRef = groupRef.collection('seasons').doc(sid);
+  batch.set(seasonRef, {
+    month, year, days,
+    capTarget, vcTarget, minWorkouts,
+    numTeams,                          // 2 or 3 — how many teams this season uses
+    teamStreakThreshold: thresholdPct/100,  // fraction (0.6 = 60%)
+    rolesEnabled,                      // Captain/VC on or off for this season
+    roster: [],             // populated as players register
+    status: 'active',
+    startedAt: now,
+    endedAt: null
+  });
+  await batch.commit();
+
+  const res=document.getElementById('newGroupResult');
+  res.className='warn-box warn-green';
+  res.innerHTML=`✅ Group created! Code: <strong style="font-size:20px;letter-spacing:3px">${code}</strong><br>Share this code with your group members.`;
+  res.classList.remove('hidden');
+  loadSuperAdmin();
+}
+
+// ── THEME (light/dark) ─────────────────────────────────────────────────────
+// Persisted in localStorage. Applied to <html data-theme="...">. CSS vars do
+// the rest. Default is dark (no attribute = dark via the :root default).
+function applyTheme(theme){
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('forge_theme', theme);
+  const btn=document.getElementById('themeToggle');
+  if(btn) btn.textContent = theme==='light' ? '☀️' : '🌙';
+}
+function toggleTheme(){
+  const cur=document.documentElement.getAttribute('data-theme')||'dark';
+  applyTheme(cur==='light' ? 'dark' : 'light');
+}
+// Apply saved theme immediately at script load (before user interacts)
+(function(){
+  const saved=localStorage.getItem('forge_theme')||'dark';
+  document.documentElement.setAttribute('data-theme', saved);
+})();
+
+// ── GLOBAL LEADERBOARD (cross-group, opt-in) ───────────────────────────────
+// One-shot read (not a live listener). Points use the SAME scoring engine as
+// in-app, passing each group's data as ctx. Only players who opted in appear.
+// ── GLOBAL LEADERBOARD (cross-group, opt-in) ───────────────────────────────
+// One-shot read. Each group's active season is loaded once and scored with the
+// SAME engine (via ctx). Group-level boards use all players; the individual
+// points board uses only opted-in players (globalConsent===true).
+async function loadGlobal(){
+  const actEl=document.getElementById('globalActive');
+  const grpEl=document.getElementById('globalGroups');
+  const ptsEl=document.getElementById('globalPoints');
+  if(!actEl||!grpEl||!ptsEl) return;
+  actEl.innerHTML=grpEl.innerHTML=ptsEl.innerHTML='<div class="tmuted">Loading…</div>';
+  try{
+    const gSnap=await db.collection('groups').get();
+    const groups=gSnap.docs.map(d=>({code:d.id,...d.data()}));
+    const logsSnap=await db.collection('logs').get();
+    const allLogsArr=logsSnap.docs.map(d=>({id:d.id,...d.data()}));
+    const bonusSnap=await db.collection('bonuses_30day').get();
+    const allBonuses=bonusSnap.docs.map(d=>d.data());
+
+    // Most active groups today
+    const now=new Date();
+    const startOfDay=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    const perGroup={};
+    allLogsArr.forEach(l=>{
+      const ts=l.timestamp?.seconds?new Date(l.timestamp.seconds*1000):null;
+      if(ts&&ts>=startOfDay) perGroup[l.groupCode]=(perGroup[l.groupCode]||0)+1;
+    });
+    const activeRanked=Object.entries(perGroup)
+      .map(([code,count])=>({name:groups.find(g=>g.code===code)?.name||code,count}))
+      .sort((a,b)=>b.count-a.count).slice(0,5);
+    actEl.innerHTML = activeRanked.length===0
+      ? '<div class="tmuted">No workouts logged anywhere yet today.</div>'
+      : activeRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(g.name)}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--green)">${g.count}</div><div style="font-size:10px;color:var(--muted)">logs today</div></div></div>`).join('');
+
+    // Score every group's active season once → group aggregates + consented players
+    const groupAgg=[];
+    const playerEntries=[];
+    for(const g of groups){
+      const sid=g.currentSeasonId; if(!sid) continue;
+      const sSnap=await db.collection('groups').doc(g.code).collection('seasons').doc(sid).get();
+      if(!sSnap.exists) continue;
+      const sData=sSnap.data();
+      const roster=sData.roster||[];
+      if(roster.length===0) continue;
+      const twSnap=await db.collection('groups').doc(g.code).collection('seasons').doc(sid).collection('twists').get();
+      const twists={}; twSnap.docs.forEach(t=>{twists[t.id]=t.data();});
+      const ctx={
+        season:sData,
+        logs:allLogsArr.filter(l=>l.groupCode===g.code&&l.month===sData.month&&l.year===sData.year),
+        twists,
+        bonuses:allBonuses.filter(b=>b.groupCode===g.code&&b.month===sData.month&&b.year===sData.year)
+      };
+      let groupTotal=0;
+      roster.forEach(p=>{
+        const t=score(p.name, ctx).total;
+        groupTotal+=t;
+        if(p.globalConsent===true) playerEntries.push({name:p.name, group:g.name, points:t});
+      });
+      groupAgg.push({name:g.name, total:groupTotal, count:roster.length, avg:Math.round(groupTotal/roster.length)});
+    }
+
+    // Top groups by avg points / player (total shown alongside)
+    const grpRanked=groupAgg.sort((a,b)=>b.avg-a.avg).slice(0,5);
+    grpEl.innerHTML = grpRanked.length===0
+      ? '<div class="tmuted">No groups yet.</div>'
+      : grpRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(g.name)}</div><div class="lbmeta">${g.count} players · ${g.total} total pts</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${g.avg}</div><div style="font-size:10px;color:var(--muted)">avg/player</div></div></div>`).join('');
+
+    // Individual points — opt-in only
+    playerEntries.sort((a,b)=>b.points-a.points);
+    const top=playerEntries.slice(0,5);
+    ptsEl.innerHTML = top.length===0
+      ? '<div class="tmuted">No one has opted in yet. Turn on "Show me on the global leaderboard" on your Home screen to appear here.</div>'
+      : top.map((e,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(e.name)}</div><div class="lbmeta">${esc(e.group)}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${e.points}</div><div style="font-size:10px;color:var(--muted)">pts</div></div></div>`).join('');
+  }catch(e){ console.error('loadGlobal failed:',e); actEl.innerHTML='<div class="tmuted">Could not load global stats. Check connection.</div>'; grpEl.innerHTML=''; ptsEl.innerHTML=''; }
+}
+
+// Self-serve opt-in for the global points board. Default OFF (privacy-first).
+function renderGlobalConsent(){
+  const el=document.getElementById('globalConsentCard');
+  if(!el||!me) return;
+  const on = !!me.globalConsent;
+  el.innerHTML=`<div class="row">
+    <div style="flex:1;margin-right:12px"><div style="font-size:14px;font-weight:600">Show me on the global leaderboard</div><div class="tmuted" style="font-size:12px">Your name, group and points become visible to every Forge group. Off by default.</div></div>
+    <div class="toggle${on?' on':''}" onclick="toggleGlobalConsent(${!on})"></div>
+  </div>`;
+}
+async function toggleGlobalConsent(val){
+  if(!season || !seasonId){ return; }
+  const ref = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
+  try{
+    let written=null;
+    await db.runTransaction(async tx=>{
+      const snap=await tx.get(ref);
+      if(!snap.exists) throw new Error('SEASON_MISSING');
+      const roster=snap.data().roster||[];          // FRESH copy from server
+      const entry=roster.find(p=>p.name===me.name);
+      if(!entry) throw new Error('NOT_ON_ROSTER');
+      entry.globalConsent=val;
+      tx.update(ref,{roster});                       // atomic write
+      written=roster;
+    });
+    if(written){ season.roster=written; me=written.find(p=>p.name===me.name)||me; }
+    upsertSession(groupCode, me, groupData?.name);
+    renderGlobalConsent();
+  }catch(e){ logErr('toggleGlobalConsent', e); alert('Could not update preference — check connection.'); renderGlobalConsent(); }
+}
+// ── TABS ──────────────────────────────────────────────────────────────────
+const TABS=['home','log','lb','feed','global','admin'];
+function showTab(t){
+  if(t==='admin'&&!adminUnlocked){
+    const pin=prompt('Enter admin PIN:');
+    if(pin!==ADMIN_PIN){alert('Wrong PIN');return;}
+    adminUnlocked=true;
+  }
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.getElementById(`page-${t}`).classList.add('active');
+  document.querySelectorAll('.tab')[TABS.indexOf(t)]?.classList.add('active');
+  window.scrollTo(0,0);
+  if(t==='global') loadGlobal();
+}
+
+// dismiss cal tip on outside tap
+document.addEventListener('click',e=>{ if(!e.target.classList.contains('cd')) document.querySelectorAll('.cal-tip').forEach(t=>t.remove()); });
+</script>
+</body>
+</html>
