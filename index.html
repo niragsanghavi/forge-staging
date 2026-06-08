@@ -430,6 +430,18 @@ function migrateLegacySession(){
   localStorage.removeItem('forge_session');
 }
 
+// In-app toast — replaces native alert().  toast('Saved!','success') / toast('Oops','error') / toast('Heads up')
+function toast(msg, type){
+  let host=document.getElementById('toastHost');
+  if(!host){ host=document.createElement('div'); host.id='toastHost'; document.body.appendChild(host); }
+  const t=document.createElement('div');
+  t.className='toast'+(type?' '+type:'');
+  const ic = type==='success'?'✅':type==='error'?'⚠️':'';
+  t.innerHTML=(ic?`<span class="toast-ic">${ic}</span>`:'')+`<span>${esc(msg)}</span>`;
+  host.appendChild(t);
+  setTimeout(()=>{ t.classList.add('out'); setTimeout(()=>t.remove(),240); }, type==='error'?4200:2600);
+}
+
 // ── BOOT ──────────────────────────────────────────────────────────────────
 window.onload = () => {
   // Establish the anonymous auth session FIRST, before any Firestore read.
