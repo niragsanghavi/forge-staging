@@ -206,3 +206,13 @@ label{font-size:12px;color:var(--muted);margin-bottom:4px;display:block}
 .warn-green{background:var(--green-l);border:1px solid var(--green);color:var(--green)}
 .warn-purple{background:var(--purple-l);border:1px solid var(--purple);color:var(--purple)}
 .pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+
+/* ── Toasts — in-app messages, replaces native alert() ── */
+#toastHost{position:fixed;top:0;left:0;right:0;display:flex;flex-direction:column;align-items:center;gap:8px;z-index:9999;pointer-events:none;padding:calc(env(safe-area-inset-top) + 10px) 16px 0}
+.toast{pointer-events:auto;max-width:440px;width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border);border-left:4px solid var(--gold);border-radius:12px;padding:13px 16px;font-size:14px;font-weight:500;box-shadow:0 10px 30px rgba(0,0,0,.45);display:flex;align-items:center;gap:10px;animation:toastIn .28s cubic-bezier(.22,1,.36,1)}
+.toast.out{animation:toastOut .22s ease forwards}
+.toast.success{border-left-color:var(--green)}
+.toast.error{border-left-color:#ef4444}
+.toast-ic{font-size:18px;flex-shrink:0;line-height:1}
+@keyframes toastIn{from{opacity:0;transform:translateY(-16px) scale(.96)}to{opacity:1;transform:none}}
+@keyframes toastOut{to{opacity:0;transform:translateY(-10px) scale(.97)}}
