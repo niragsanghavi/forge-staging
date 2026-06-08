@@ -907,8 +907,8 @@ function renderHome(){
         </div>
         <div class="heat-meta">
           <div class="heat-num ${cold?'cold':''}">${st}<span style="font-size:15px"> day${st===1?'':'s'}</span></div>
-          <div class="heat-cap">${cold?'Fire's out':'The heat'}</div>
-          <div class="heat-msg">${cold?'Log today to spark it back up.':(smsg||'Keep it lit — don't let it cool.')}</div>
+          <div class="heat-cap">${cold?'Fire&#39;s out':'The heat'}</div>
+          <div class="heat-msg">${cold?'Log today to spark it back up.':(smsg||'Keep it lit — don&#39;t let it cool.')}</div>
         </div>
       </div>
     </div>`;
@@ -1125,7 +1125,7 @@ async function submitLog(){
     document.getElementById('succSub').textContent=`${selW.join(', ')} · Day ${selDay}${multiNote}`;
     const cbMsg=document.getElementById('comebackMsg');
     if(isComeback){cbMsg.textContent=getRandomComeback();cbMsg.classList.remove('hidden');}else{cbMsg.classList.add('hidden');}
-    document.getElementById('succStats').innerHTML=`<div class="srow" style="margin-bottom:0"><div class="sc"><div class="sv">${sc.total}</div><div class="sl">POINTS</div></div><div class="sc"><div class="sv">${sc.wo}</div><div class="sl">WORKOUTS</div></div><div class="sc"><div class="sv" style="color:var(--orange)">${sc.streak}🔥</div><div class="sl">STREAK</div></div></div>`;
+    document.getElementById('succStats').innerHTML=`<div class="srow" style="margin-bottom:0"><div class="sc"><div class="sv cu" id="cuPoints">0</div><div class="sl">POINTS</div></div><div class="sc"><div class="sv cu" id="cuWo">0</div><div class="sl">WORKOUTS</div></div><div class="sc"><div class="sv cu" id="cuStreak" style="color:var(--orange)">0</div><div class="sl">STREAK</div></div></div>`;
     const si=document.querySelector('#ls3 .succ-icon'); if(si){si.classList.remove('strike-icon');void si.offsetWidth;si.classList.add('strike-icon');}
     fireSparks();
     celebrateLog(sc);
