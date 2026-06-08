@@ -873,31 +873,74 @@ function renderHome(){
   // Daily fact
   document.getElementById('factCard').innerHTML=`<div class="fact-card"><div class="fact-icon">🧠</div><div class="fact-text"><strong>Did you know?</strong> ${getDailyFact()}</div></div>`;
 
-  // Hero card
+  // ── THE STEEL: personal rank + points + competitive sting ──
+  const rank=getRank(me.name);
+  const rosterN=(season.roster||[]).length;
+  const sorted=(season.roster||[]).map(p=>({name:p.name,pts:score(p.name).total})).sort((a,b)=>b.pts-a.pts);
+  const myIdx=sorted.findIndex(p=>p.name===me.name);
+  let behindHTML='';
+  if(myIdx>0){
+    const ahead=sorted[myIdx-1];
+    const gap=ahead.pts-sc.total;
+    behindHTML=`<div class="steel-behind">#${rank} of ${rosterN} · <strong>${gap} pts behind ${esc(ahead.name)}</strong></div>`;
+  } else if(rosterN>1){
+    const gap=sc.total-(sorted[1]?.pts||0);
+    behindHTML=`<div class="steel-behind lead">👑 #1 of ${rosterN} · <strong>${gap} pts ahead</strong> — defend it</div>`;
+  } else {
+    behindHTML=`<div class="steel-behind lead">👑 Top spot's yours — invite the squad and defend it</div>`;
+  }
+  // heat (streak) scaling: faster flicker + taller flame as streak grows
+  const st=sc.streak;
+  const fdur=Math.max(0.45,0.95-st*0.05).toFixed(2);
+  const flameScale=Math.min(1.6,0.85+st*0.06).toFixed(2);
+  const cold=st<1;
+  const smsg=getStreakMsg(st);
   document.getElementById('heroCard').innerHTML=`
-    <div class="hero-card">
-      <div class="hero-stripe" style="background:${tc}"></div>
-      <div class="hero-label">Your points</div>
-      <div class="hero-pts" style="color:${tc}">${sc.total}</div>
-      <div class="hero-sub">Rank #${getRank(me.name)} of ${(season.roster||[]).length} · Team ${pl.team}</div>
+    <div class="steel-hero">
+      <span class="steel-rank">⚒️ RANK #${rank} OF ${rosterN}</span>
+      <div class="steel-label">Your steel</div>
+      <div class="steel-pts cu" id="steelPts">${sc.total}<span class="u">pts</span></div>
+      ${behindHTML}
+      <div class="heat-wrap">
+        <div class="flame ${cold?'cold':''}" style="--fdur:${fdur}s;transform:scale(${cold?1:flameScale});transform-origin:center bottom">
+          <i class="f1"></i><i class="f2"></i><i class="f3"></i>
+        </div>
+        <div class="heat-meta">
+          <div class="heat-num ${cold?'cold':''}">${st}<span style="font-size:15px"> day${st===1?'':'s'}</span></div>
+          <div class="heat-cap">${cold?'Fire's out':'The heat'}</div>
+          <div class="heat-msg">${cold?'Log today to spark it back up.':(smsg||'Keep it lit — don't let it cool.')}</div>
+        </div>
+      </div>
     </div>`;
 
-  // Nudge card
-  document.getElementById('nudgeCard').innerHTML=getNudgeHTML(me.name,sc);
+  // ── THE FOUNDRY: shared season goal ──
+  const totalStrikes=allLogs.length;
+  const perPerson=(season.minWorkouts||12)+8; // ambition target per member
+  const goal=Math.max(50,rosterN*perPerson);
+  const pct=Math.min(100,Math.round(totalStrikes/goal*100));
+  const ingotN=10;
+  const litN=Math.round(pct/100*ingotN);
+  let ingots='';
+  for(let i=0;i<ingotN;i++){
+    const lit=i<litN;
+    const hgt=28+i*9; // rising staircase monument
+    ingots+=`<div class="ingot ${lit?'molten':''}" style="height:${hgt}px"></div>`;
+  }
+  document.getElementById('nudgeCard').innerHTML=`
+    <div class="foundry-card">
+      <div class="foundry-head">
+        <span class="foundry-title">The Foundry · Season Goal</span>
+        <span class="foundry-trophy">🏆 ${pct}%</span>
+      </div>
+      <div class="ingot-rail">${ingots}</div>
+      <div class="foundry-bar"><div class="foundry-fill" style="width:${pct}%"></div></div>
+      <div class="foundry-stat"><span class="n">${totalStrikes} <span class="g" style="font-size:13px;font-weight:600">/ ${goal} strikes</span></span><span class="g">${Math.max(0,goal-totalStrikes)} to go</span></div>
+      <div class="foundry-sub">Every workout the squad logs is a strike on the anvil. Hit the goal to forge the season trophy.</div>
+    </div>`;
 
-  // Streak highlight card
-  const smsg=getStreakMsg(sc.streak);
-  document.getElementById('streakCardHighlight').innerHTML=sc.streak>=2&&smsg?`
-    <div class="streak-card-highlight">
-      <div class="streak-num">${sc.streak} 🔥</div>
-      <div class="streak-msg">${smsg}</div>
-    </div>`:'';
-
-  // Stats row
-  document.getElementById('hStats').style.gridTemplateColumns='1fr 1fr';
-  document.getElementById('hStats').innerHTML=`
-    <div class="sc"><div class="sv">${sc.wo}</div><div class="sl">WORKOUTS</div></div>
-    <div class="sc"><div class="sv" style="color:var(--orange)">${sc.streak}🔥</div><div class="sl">STREAK</div></div>`;
+  // (steel-hero replaces old streak highlight + stats row)
+  document.getElementById('streakCardHighlight').innerHTML='';
+  document.getElementById('hStats').innerHTML='';
 
   // Role bar
   const {capTarget=16,vcTarget=20,minWorkouts=12,days:DAYS=31,month,year}=season;
@@ -1082,13 +1125,33 @@ async function submitLog(){
     document.getElementById('succSub').textContent=`${selW.join(', ')} · Day ${selDay}${multiNote}`;
     const cbMsg=document.getElementById('comebackMsg');
     if(isComeback){cbMsg.textContent=getRandomComeback();cbMsg.classList.remove('hidden');}else{cbMsg.classList.add('hidden');}
-    document.getElementById('succStats').innerHTML=`<div class="srow" style="margin-bottom:0"><div class="sc"><div class="sv"><span id="cuPoints">0</span></div><div class="sl">POINTS</div></div><div class="sc"><div class="sv"><span id="cuWo">0</span></div><div class="sl">WORKOUTS</div></div><div class="sc"><div class="sv" style="color:var(--orange)"><span id="cuStreak">0</span>🔥</div><div class="sl">STREAK</div></div></div>`;
+    document.getElementById('succStats').innerHTML=`<div class="srow" style="margin-bottom:0"><div class="sc"><div class="sv">${sc.total}</div><div class="sl">POINTS</div></div><div class="sc"><div class="sv">${sc.wo}</div><div class="sl">WORKOUTS</div></div><div class="sc"><div class="sv" style="color:var(--orange)">${sc.streak}🔥</div><div class="sl">STREAK</div></div></div>`;
+    const si=document.querySelector('#ls3 .succ-icon'); if(si){si.classList.remove('strike-icon');void si.offsetWidth;si.classList.add('strike-icon');}
+    fireSparks();
     celebrateLog(sc);
   } catch(e){ console.error('submitLog failed:',e); alert('Error saving. Check connection.'); btn.disabled=false; btn.textContent='Log Workout'; }
 }
 function resetLog(){ selDay=null; selW=[]; ['ls1','ls2','ls3'].forEach((id,i)=>document.getElementById(id).classList[i===0?'remove':'add']('hidden')); document.getElementById('pickerWrap').classList.add('hidden'); showTab('home'); }
 function backToS1(){ document.getElementById('ls1').classList.remove('hidden'); document.getElementById('ls2').classList.add('hidden'); }
 
+function fireSparks(){
+  const n=22;
+  for(let i=0;i<n;i++){
+    const s=document.createElement('div');
+    s.className='spark';
+    const ang=(-Math.PI/2)+(Math.random()-0.5)*1.8;
+    const dist=70+Math.random()*120;
+    s.style.setProperty('--sx',(Math.cos(ang)*dist)+'px');
+    s.style.setProperty('--sy',(Math.sin(ang)*dist)+'px');
+    s.style.setProperty('--sdur',(0.6+Math.random()*0.6)+'s');
+    const c=Math.random();
+    s.style.background=c<0.5?'#ffb01f':c<0.85?'#ff5a1f':'#ffe89a';
+    s.style.left=(window.innerWidth/2)+'px';
+    s.style.top=(window.innerHeight*0.34)+'px';
+    document.body.appendChild(s);
+    setTimeout(()=>s.remove(),1300);
+  }
+}
 // Animate a number from 0 up to its final value (ease-out).
 function countUp(el, to, dur){
   to = Number(to) || 0;
