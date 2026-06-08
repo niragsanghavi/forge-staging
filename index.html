@@ -1076,12 +1076,14 @@ async function submitLog(){
     const isComeback=lastDay&&(selDay-lastDay)>=3;
     document.getElementById('ls2').classList.add('hidden');
     document.getElementById('ls3').classList.remove('hidden');
-    document.getElementById('succTitle').textContent=isComeback?'Welcome Back!':'Forged!';
+    const HYPE=['Forged! 🔨','Beast mode 🔥','Logged & loaded 💪','Another one in the books ✅','Showing up wins 🏆','Crushed it 💥'];
+    document.getElementById('succTitle').textContent = isComeback ? 'Welcome Back!' : HYPE[Math.floor(Math.random()*HYPE.length)];
     const multiNote = targets.length>1 ? ` · posted to ${targets.length} groups` : '';
     document.getElementById('succSub').textContent=`${selW.join(', ')} · Day ${selDay}${multiNote}`;
     const cbMsg=document.getElementById('comebackMsg');
     if(isComeback){cbMsg.textContent=getRandomComeback();cbMsg.classList.remove('hidden');}else{cbMsg.classList.add('hidden');}
-    document.getElementById('succStats').innerHTML=`<div class="srow" style="margin-bottom:0"><div class="sc"><div class="sv">${sc.total}</div><div class="sl">POINTS</div></div><div class="sc"><div class="sv">${sc.wo}</div><div class="sl">WORKOUTS</div></div><div class="sc"><div class="sv" style="color:var(--orange)">${sc.streak}🔥</div><div class="sl">STREAK</div></div></div>`;
+    document.getElementById('succStats').innerHTML=`<div class="srow" style="margin-bottom:0"><div class="sc"><div class="sv"><span id="cuPoints">0</span></div><div class="sl">POINTS</div></div><div class="sc"><div class="sv"><span id="cuWo">0</span></div><div class="sl">WORKOUTS</div></div><div class="sc"><div class="sv" style="color:var(--orange)"><span id="cuStreak">0</span>🔥</div><div class="sl">STREAK</div></div></div>`;
+    celebrateLog(sc);
   } catch(e){ console.error('submitLog failed:',e); alert('Error saving. Check connection.'); btn.disabled=false; btn.textContent='Log Workout'; }
 }
 function resetLog(){ selDay=null; selW=[]; ['ls1','ls2','ls3'].forEach((id,i)=>document.getElementById(id).classList[i===0?'remove':'add']('hidden')); document.getElementById('pickerWrap').classList.add('hidden'); showTab('home'); }
