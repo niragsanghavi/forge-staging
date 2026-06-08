@@ -220,3 +220,55 @@ label{font-size:12px;color:var(--muted);margin-bottom:4px;display:block}
 .toast-ic{font-size:18px;flex-shrink:0;line-height:1}
 @keyframes toastIn{from{opacity:0;transform:translateY(-16px) scale(.96)}to{opacity:1;transform:none}}
 @keyframes toastOut{to{opacity:0;transform:translateY(-10px) scale(.97)}}
+
+/* ════════════════ FOUNDRY ════════════════ */
+
+/* — THE STEEL (personal hero) — */
+.steel-hero{position:relative;background:linear-gradient(160deg,#1b1b23 0%,#15151c 100%);border:1px solid var(--border);border-radius:20px;padding:22px 20px 20px;overflow:hidden;margin-bottom:14px}
+.steel-hero::before{content:'';position:absolute;inset:0;background:radial-gradient(120% 80% at 50% -10%,rgba(212,175,55,0.10),transparent 60%);pointer-events:none}
+.steel-rank{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--gold);background:var(--gold-l);border:1px solid rgba(212,175,55,.25);padding:5px 11px;border-radius:999px;position:relative}
+.steel-label{font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:16px 0 2px}
+.steel-pts{font-size:60px;line-height:1;font-weight:800;letter-spacing:-.02em;color:var(--text);font-variant-numeric:tabular-nums}
+.steel-pts .u{font-size:20px;font-weight:600;color:var(--muted);margin-left:6px;letter-spacing:0}
+.steel-behind{margin-top:14px;font-size:13.5px;color:var(--text);background:var(--orange-l);border:1px solid rgba(255,90,31,.22);border-radius:12px;padding:10px 13px;line-height:1.45}
+.steel-behind strong{color:var(--orange)}
+.steel-behind.lead{background:var(--gold-l);border-color:rgba(212,175,55,.22)}
+.steel-behind.lead strong{color:var(--gold)}
+
+/* — THE HEAT (animated streak fire) — */
+.heat-wrap{display:flex;align-items:center;gap:16px;margin-top:18px;padding-top:16px;border-top:1px solid var(--border)}
+.flame{position:relative;width:46px;height:58px;flex:none}
+.flame i{position:absolute;left:50%;bottom:0;transform:translateX(-50%);border-radius:50% 50% 50% 50%/60% 60% 40% 40%;filter:blur(.4px);animation:flick var(--fdur,.9s) ease-in-out infinite alternate;transform-origin:center bottom}
+.flame .f1{width:30px;height:42px;background:linear-gradient(to top,#ff5a1f,#ffb01f 70%,#ffe89a);opacity:.95}
+.flame .f2{width:18px;height:30px;background:linear-gradient(to top,#ffb01f,#ffe89a);bottom:3px;animation-duration:calc(var(--fdur,.9s) * .7);opacity:.9}
+.flame .f3{width:8px;height:16px;background:#fff7df;bottom:6px;animation-duration:calc(var(--fdur,.9s) * .5);opacity:.85}
+.flame.cold i{background:#3a3a44 !important;animation:none;opacity:.5}
+@keyframes flick{0%{transform:translateX(-50%) scaleY(1) scaleX(1) rotate(-2deg)}50%{transform:translateX(-52%) scaleY(1.12) scaleX(.94) rotate(1deg)}100%{transform:translateX(-48%) scaleY(.96) scaleX(1.05) rotate(2deg)}}
+.heat-meta{flex:1}
+.heat-num{font-size:30px;font-weight:800;line-height:1;color:var(--orange);font-variant-numeric:tabular-nums}
+.heat-num.cold{color:var(--muted)}
+.heat-cap{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:3px}
+.heat-msg{font-size:12.5px;color:var(--text);margin-top:5px;line-height:1.4;opacity:.85}
+
+/* — THE FOUNDRY (season goal monument) — */
+.foundry-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:18px 18px 16px;margin-bottom:14px;overflow:hidden}
+.foundry-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px}
+.foundry-title{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.foundry-trophy{font-size:13px;color:var(--gold);font-weight:700}
+.ingot-rail{position:relative;height:120px;display:flex;align-items:flex-end;justify-content:center;gap:0;margin-bottom:12px}
+.ingot{width:64px;background:linear-gradient(to top,#2a2a33,#3a3a44);border:1px solid rgba(255,255,255,.06);border-bottom:none;border-radius:3px 3px 0 0;position:relative;transition:height .9s cubic-bezier(.2,.8,.2,1)}
+.ingot.molten{background:linear-gradient(to top,#ff5a1f,#ffb01f);box-shadow:0 0 24px rgba(255,90,31,.45);border-color:rgba(255,176,31,.5)}
+.ingot.molten::after{content:'';position:absolute;top:-3px;left:0;right:0;height:6px;background:#ffe89a;border-radius:3px;box-shadow:0 0 12px #ffb01f}
+.foundry-bar{height:9px;background:#23232c;border-radius:999px;overflow:hidden;margin-bottom:8px}
+.foundry-fill{height:100%;background:linear-gradient(90deg,#ff5a1f,#ffb01f);border-radius:999px;width:0;transition:width 1s cubic-bezier(.2,.8,.2,1)}
+.foundry-stat{display:flex;justify-content:space-between;align-items:baseline;font-size:13px}
+.foundry-stat .n{font-weight:800;color:var(--text);font-size:16px;font-variant-numeric:tabular-nums}
+.foundry-stat .g{color:var(--muted)}
+.foundry-sub{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.45}
+
+/* — THE STRIKE (log celebration: hammer sparks) — */
+@keyframes strikeFlash{0%{transform:scale(0);opacity:0}40%{transform:scale(1.15);opacity:1}100%{transform:scale(1);opacity:1}}
+@keyframes sparkFly{0%{transform:translate(0,0) scale(1);opacity:1}100%{transform:translate(var(--sx),var(--sy)) scale(0);opacity:0}}
+.strike-icon{animation:strikeFlash .55s cubic-bezier(.2,1.4,.4,1) both}
+.spark{position:fixed;top:0;left:0;width:7px;height:7px;border-radius:50%;pointer-events:none;z-index:9999;animation:sparkFly var(--sdur,.9s) ease-out forwards}
+.cu{font-variant-numeric:tabular-nums}
