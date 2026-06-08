@@ -72,6 +72,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:1
 .btn-purple{background:var(--purple);color:#fff}
 .btn-sm{padding:8px 14px;font-size:12px;width:auto;display:inline-block;border-radius:8px;margin-bottom:0}
 
+/* ── after-log celebration ── */
+@keyframes succPop{0%{transform:scale(.3);opacity:0}55%{transform:scale(1.18)}100%{transform:scale(1);opacity:1}}
+@keyframes confFall{to{transform:translateY(105vh) rotate(720deg);opacity:0}}
+
 /* ── INPUTS ── */
 input,select,textarea{background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;padding:13px 14px;width:100%;outline:none;font-family:var(--font);margin-bottom:10px;transition:border .2s}
 input:focus,select:focus{border-color:var(--gold)}
