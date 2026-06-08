@@ -1087,6 +1087,43 @@ async function submitLog(){
 function resetLog(){ selDay=null; selW=[]; ['ls1','ls2','ls3'].forEach((id,i)=>document.getElementById(id).classList[i===0?'remove':'add']('hidden')); document.getElementById('pickerWrap').classList.add('hidden'); showTab('home'); }
 function backToS1(){ document.getElementById('ls1').classList.remove('hidden'); document.getElementById('ls2').classList.add('hidden'); }
 
+// Animate a number from 0 up to its final value (ease-out).
+function countUp(el, to, dur){
+  to = Number(to) || 0;
+  const start = performance.now();
+  (function tick(now){
+    const t = Math.min(1, (now - start) / dur);
+    el.textContent = Math.round(to * (1 - Math.pow(1 - t, 3)));
+    if(t < 1) requestAnimationFrame(tick); else el.textContent = to;
+  })(performance.now());
+}
+
+// Lightweight DOM confetti — no library.
+function fireConfetti(){
+  const colors=['#f59e0b','#22c55e','#ffffff','#fb923c','#fbbf24'];
+  const host=document.createElement('div');
+  host.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:9998;overflow:hidden';
+  document.body.appendChild(host);
+  for(let i=0;i<46;i++){
+    const p=document.createElement('div');
+    const sz=6+Math.random()*6;
+    p.style.cssText=`position:absolute;top:-14px;left:${Math.random()*100}%;width:${sz}px;height:${sz*0.6}px;background:${colors[i%colors.length]};opacity:.95;border-radius:1px;transform:rotate(${Math.random()*360}deg);animation:confFall ${1.1+Math.random()*1.1}s cubic-bezier(.2,.6,.4,1) ${Math.random()*.25}s forwards`;
+    host.appendChild(p);
+  }
+  setTimeout(()=>host.remove(),2700);
+}
+
+// The whole celebration, fired after a successful log.
+function celebrateLog(sc){
+  const ic=document.querySelector('#ls3 .succ-icon');
+  if(ic){ ic.style.animation='none'; void ic.offsetWidth; ic.style.animation='succPop .7s cubic-bezier(.22,1,.36,1)'; }
+  const p=document.getElementById('cuPoints'), w=document.getElementById('cuWo'), s=document.getElementById('cuStreak');
+  if(p) countUp(p, sc.total, 900);
+  if(w) countUp(w, sc.wo, 700);
+  if(s) countUp(s, sc.streak, 700);
+  fireConfetti();
+}
+  
 // ── LEADERBOARD ───────────────────────────────────────────────────────────
 function renderLB(){
   if(!season) return;
