@@ -1,9 +1,9 @@
 /* ── DARK THEME (default) ── */
 :root, :root[data-theme="dark"] {
-  --bg:#0a0a0f;--surface:#13131a;--card:#1a1a24;--border:rgba(255,255,255,0.07);
-  --text:#f0f0f5;--muted:#6b7280;--gold:#f59e0b;--gold-l:#1c1507;
+  --bg:#0c0c11;--surface:#15151c;--card:#1b1b23;--border:rgba(255,255,255,0.08);
+  --text:#f2f0ee;--muted:#8d877e;--gold:#d4af37;--gold-l:#1a1505;
   --red:#ef4444;--red-l:#1c0707;--blue:#3b82f6;--blue-l:#070f1c;
-  --green:#22c55e;--green-l:#071a0d;--orange:#f97316;--orange-l:#1c0d04;
+  --green:#22c55e;--green-l:#071a0d;--orange:#ff5a1f;--orange-l:#1f0c04;
   --purple:#a855f7;--purple-l:#130a1c;--pink:#ec4899;--pink-l:#1c0710;
   --A:#ef4444;--Al:#1c0707;--B:#3b82f6;--Bl:#070f1c;--C:#22c55e;--Cl:#071a0d;
   --r:12px;--font:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
