@@ -14,10 +14,8 @@ window.TWIST_LIBRARY = [
   {
     id:'boss_week',
     name:'Boss Week',
-    desc:'One week targets double, streak bonuses triple',
-    config:'Which week? (1-4)',
-    configKey:'week',
-    configDefault:3
+    desc:'All base workout points ×2 for the entire month',
+    config:null
   },
   {
     id:'double_points_day',
@@ -36,7 +34,7 @@ window.TWIST_LIBRARY = [
   {
     id:'bonus_workout',
     name:'Bonus Workout Type',
-    desc:'A specific workout earns +3 pts instead of +2 this month',
+    desc:'A specific workout earns +6 pts instead of +5 this month',
     config:'Which workout?',
     configKey:'workout',
     configDefault:'Run'
@@ -51,6 +49,36 @@ window.TWIST_LIBRARY = [
     id:'stakes_mode',
     name:'Stakes Mode',
     desc:'Losing team covers next month for the whole group',
+    config:null
+  },
+  {
+    id:'freaky_fridays',
+    name:'Freaky Fridays',
+    desc:'Workouts logged on a Friday earn ×2 base points for that day',
+    config:null
+  },
+  {
+    id:'monday_motivation',
+    name:'Monday Motivation',
+    desc:'Workouts logged on a Monday earn ×2 base points for that day',
+    config:null
+  },
+  {
+    id:'underdog_week',
+    name:'Underdog Week',
+    desc:'Player(s) in last place (fewest logged days) get ×2 on all base workout points. Ties all qualify.',
+    config:null
+  },
+  {
+    id:'jack_of_all_trades',
+    name:'Jack of All Trades',
+    desc:'Log 4 distinct workout types in one Mon–Sun week → one-time +20 pts. One award per player per week.',
+    config:null
+  },
+  {
+    id:'double_or_nothing',
+    name:'Iron Pledge',
+    desc:'Players lock in a weekly workout target. Hit it: base points for the week double. Miss it: base points for the week go to zero.',
     config:null
   }
 ];
@@ -67,6 +95,9 @@ window.allLogs = [];
 window.bonus30 = [];
 window.flags = [];
 window.activeTwists = {};
+window.jackAwards = [];         // groups/{CODE}/seasons/{ID}/jackAwards subcollection
+window.bets = {};               // groups/{CODE}/seasons/{ID}/bets — keyed by playerName
+window.ironPledgeBonuses = [];  // bonuses_iron_pledge top-level collection
 window.selDay = null;
 window.selW = [];
 window.adminUnlocked = false;

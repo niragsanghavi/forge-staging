@@ -7,11 +7,14 @@ function _logsOf(ctx){ return (ctx && ctx.logs) || (typeof allLogs!=='undefined'
 function _twistsOf(ctx){ return (ctx && ctx.twists) || (typeof activeTwists!=='undefined' ? activeTwists : {}) || {}; }
 function _bonusesOf(ctx){ return (ctx && ctx.bonuses) || (typeof bonus30!=='undefined' ? bonus30 : []) || []; }
 function _rosterOf(ctx){ const s=_seasonOf(ctx); return (s && Array.isArray(s.roster)) ? s.roster : []; }
+function _jackAwardsOf(ctx){ return (ctx&&ctx.jackAwards)||(typeof jackAwards!=='undefined'?jackAwards:[])||[]; }
+function _ironPledgeBonusesOf(ctx){ return (ctx&&ctx.ironPledgeBonuses)||(typeof ironPledgeBonuses!=='undefined'?ironPledgeBonuses:[])||[]; }
+function _activeGroupCode(ctx){ return (ctx&&ctx.groupCode)||groupCode||''; }
 
 function score(playerName, ctx){
   const roster = _rosterOf(ctx);
   const p = roster.find(x => x.name === playerName);
-  if(!p) return {wo:0,base:0,sb:0,wb:0,rb:0,tb:0,b30:0,pen:0,bossBonus:0,total:0,streak:0,days:new Set()};
+  if(!p) return {wo:0,base:0,sb:0,wb:0,rb:0,tb:0,b30:0,pen:0,bossBonus:0,dayBonuses:0,underdogBonus:0,jackBonus:0,ipBonus:0,total:0,streak:0,days:new Set()};
 
   const cfg = _seasonOf(ctx);
   const allLogsLocal = _logsOf(ctx);
@@ -24,7 +27,9 @@ function score(playerName, ctx){
   const days = new Set(logs.map(l=>l.day));
   const wo = days.size;
 
+  // ── BASE (bonus_workout and boss_week applied here) ──
   const bonusWT = twists['bonus_workout'];
+  const bossWT  = twists['boss_week'];
   let base = wo * 5;
   if(bonusWT?.enabled){
     const bonusDaySet = new Set(
@@ -36,7 +41,10 @@ function score(playerName, ctx){
     );
     base = (wo - bonusDaySet.size)*5 + bonusDaySet.size*6;
   }
+  // Boss Week: ×2 all base points for the entire month
+  if(bossWT?.enabled) base = base * 2;
 
+  // ── STREAK ──
   const today = new Date();
   const todayDay = today.getMonth()+1===month && today.getFullYear()===year ? today.getDate() : DAYS;
   const checkUpTo = days.has(todayDay) ? todayDay : todayDay - 1;
@@ -45,6 +53,7 @@ function score(playerName, ctx){
   const streak = cur;
   const sb = 0;
 
+  // ── PERFECT WEEK ──
   const firstDate = new Date(year, month-1, 1);
   const firstDOW = firstDate.getDay()===0 ? 6 : firstDate.getDay()-1;
   const fullWeeks = [];
@@ -56,6 +65,7 @@ function score(playerName, ctx){
     wb += 10;
   });
 
+  // ── TEAM STREAK ──
   const teamMembers = roster.filter(x=>x.team===p.team);
   const teamThreshold = Math.ceil(teamMembers.length * (cfg.teamStreakThreshold ?? 0.6));
   const teamLogs = allLogsLocal.filter(l=>roster.find(x=>x.name===l.player&&x.team===p.team));
@@ -72,6 +82,7 @@ function score(playerName, ctx){
     }
   }
 
+  // ── ROLE BONUS / PENALTY ──
   const isEnd = (today.getMonth()+1>month && today.getFullYear()>=year) ||
                 (today.getMonth()+1===month && today.getFullYear()===year && today.getDate()===DAYS);
   let rb = 0;
@@ -83,20 +94,51 @@ function score(playerName, ctx){
   const pen = isEnd && wo<minWorkouts ? (wo-minWorkouts)*5 : 0;
   const b30 = bonuses.find(b=>b.player===playerName) ? 50 : 0;
 
-  const bossWT = twists['boss_week'];
-  let bossBonus = 0;
-  if(bossWT?.enabled){
-    const bw = parseInt(bossWT.week||3);
-    const bossWeek = fullWeeks[bw-1];
-    if(bossWeek){
-      let bossWO = 0;
-      for(let d=bossWeek[0]; d<=bossWeek[1]; d++){ if(days.has(d)) bossWO++; }
-      bossBonus = bossWO * 5;
-    }
+  // bossBonus kept in return shape for backward compat (value now always 0;
+  // the doubling is folded into base above)
+  const bossBonus = 0;
+
+  // ── DAY-OF-WEEK BONUSES (Freaky Fridays, Monday Motivation) ──
+  // Stacks with Boss Week: if boss_week is also on, base is already doubled, then
+  // day bonuses add an extra +5 per qualifying day (net ×4 on that day).
+  const freakFriWT = twists['freaky_fridays'];
+  const monMotWT   = twists['monday_motivation'];
+  let dayBonuses = 0;
+  if(freakFriWT?.enabled || monMotWT?.enabled){
+    [...days].forEach(d=>{
+      const dow = new Date(year, month-1, d).getDay(); // 0=Sun,1=Mon,...,5=Fri,6=Sat
+      if(freakFriWT?.enabled && dow===5) dayBonuses += 5; // +5 extra = effectively ×2 that day
+      if(monMotWT?.enabled  && dow===1) dayBonuses += 5;
+    });
   }
 
-  const total = base+sb+wb+rb+tb+b30+bossBonus+pen;
-  return {wo,base,sb,wb,rb,tb,b30,pen,bossBonus,total,streak,days,fullWeeks};
+  // ── UNDERDOG WEEK ──
+  // Last place = fewest unique logged days across the whole roster.
+  // All players tied at the minimum qualify. Non-circular: uses raw log counts.
+  const underdogWT = twists['underdog_week'];
+  let underdogBonus = 0;
+  if(underdogWT?.enabled && roster.length > 1){
+    const allWOs = roster.map(r=>new Set(allLogsLocal.filter(l=>l.player===r.name).map(l=>l.day)).size);
+    const minWO = Math.min(...allWOs);
+    if(wo <= minWO) underdogBonus = base; // doubles base (add base again)
+  }
+
+  // ── JACK OF ALL TRADES (+20 per awarded week) ──
+  const jackAwardsArr = _jackAwardsOf(ctx);
+  const jackBonus = jackAwardsArr.filter(a=>a.player===playerName).length * 20;
+
+  // ── IRON PLEDGE ──
+  // type='double' → +rawPoints added (effectively doubles raw workout pts that week)
+  // type='zero'   → -rawPoints subtracted (forfeits raw workout pts that week)
+  // Streaks, role bonuses, and all other points are untouched.
+  const ipBonuses = _ironPledgeBonusesOf(ctx);
+  const myGC = _activeGroupCode(ctx);
+  const ipBonus = ipBonuses
+    .filter(b=>b.player===playerName && b.groupCode===myGC)
+    .reduce((sum,b)=> sum + (b.type==='double' ? +b.rawPoints : -b.rawPoints), 0);
+
+  const total = Math.max(0, base+sb+wb+rb+tb+b30+bossBonus+pen+dayBonuses+underdogBonus+jackBonus+ipBonus);
+  return {wo,base,sb,wb,rb,tb,b30,pen,bossBonus,dayBonuses,underdogBonus,jackBonus,ipBonus,total,streak,days,fullWeeks};
 }
 
 function teamTotal(team){

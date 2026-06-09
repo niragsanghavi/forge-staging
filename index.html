@@ -79,12 +79,14 @@
   </nav>
   <div id="groupSwitcher" class="group-switcher" style="display:none"></div>
   <div class="tabs">
+    <div class="tab-pill" id="tabPill"></div>
     <div class="tab active" onclick="showTab('home')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg><span>Home</span></div>
     <div class="tab" onclick="showTab('log')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg><span>Log</span></div>
     <div class="tab" onclick="showTab('lb')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 20v-6M12 20V8M18 20v-10"/><path d="M3 20h18"/></svg><span>Board</span></div>
     <div class="tab" onclick="showTab('feed')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg><span>Feed</span></div>
     <div class="tab" onclick="showTab('global')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.7 2.7 2.7 15.3 0 18M12 3c-2.7 2.7-2.7 15.3 0 18"/></svg><span>Global</span></div>
     <div class="tab" onclick="showTab('admin')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg><span>Admin</span></div>
+    <div class="tab" id="pledgeTab" onclick="showTab('pledge')" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg><span>Pledge</span></div>
   </div>
 
   <!-- HOME -->
@@ -95,6 +97,8 @@
     </div>
     <div id="factCard"></div>
     <div id="heroCard"></div>
+    <div id="pledgeStatusCard"></div>
+    <div id="goalRingCard"></div>
     <div id="nudgeCard"></div>
     <div id="streakCardHighlight"></div>
     <div id="roleBar"></div>
@@ -221,6 +225,12 @@
       <div class="tmuted" style="margin-bottom:12px">Toggle mechanics for this month.</div>
       <div id="twistToggles"></div>
     </div>
+    <div class="card" id="ironPledgeAdminCard" style="display:none">
+      <div class="card-title" style="color:var(--orange)">⚔️ Iron Pledge — Results</div>
+      <div class="tmuted" style="margin-bottom:12px">Players who locked in a pledge this week. Calculate to apply bonuses and zeroes.</div>
+      <div id="ironPledgeTable"></div>
+      <button class="btn btn-gold" style="margin-top:12px" onclick="calculateIronPledgeResults()">Calculate & Apply Results</button>
+    </div>
     <div class="card">
       <div class="card-title">Flagged Workouts <span id="flagCount" style="color:var(--red)"></span></div>
       <div class="tmuted" style="margin-bottom:12px">Entries flagged by 2+ members.</div>
@@ -238,6 +248,12 @@
       <select id="aPlayer"><option value="">Select player</option></select>
       <button class="btn btn-gold" onclick="award30()">Award +50 Pts</button>
     </div>
+  <!-- IRON PLEDGE -->
+  <div class="page" id="page-pledge">
+    <div style="padding:8px 0 14px;font-size:20px;font-weight:800">The Iron Pledge</div>
+    <div id="pledgeContent"></div>
+  </div>
+
   </div>
 </div>
 
@@ -400,6 +416,14 @@ function esc(s){
 function getDailyFact(){ return DAILY_FACTS[(new Date().getDate()-1)%DAILY_FACTS.length]; }
 function getStreakMsg(s){ const keys=Object.keys(STREAK_MSGS).map(Number).sort((a,b)=>b-a); for(const k of keys){if(s>=k)return STREAK_MSGS[k];} return null; }
 function getRandomComeback(){ return COMEBACK_MSGS[Math.floor(Math.random()*COMEBACK_MSGS.length)]; }
+
+// ISO week string — Monday-start, format "YYYY-W{n}". Used by Jack of All Trades and Iron Pledge.
+function getISOWeek(date){
+  const d=new Date(Date.UTC(date.getFullYear(),date.getMonth(),date.getDate()));
+  d.setUTCDate(d.getUTCDate()+4-(d.getUTCDay()||7));
+  const y=new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  return `${d.getUTCFullYear()}-W${Math.ceil(((d-y)/86400000+1)/7)}`;
+}
 
 // ── SESSION STORE (multi-group) ─────────────────────────────────────────────
 // Device-local multi-session: localStorage holds a LIST of {code, player, name}
@@ -705,7 +729,7 @@ function promptSwitch(){
     const remaining = removeSession(groupCode);
     const next = remaining[0];
     groupCode = next.code; me = next.player; setActiveCode(next.code);
-    allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; adminUnlocked=false;
+    allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; jackAwards=[]; bets={}; ironPledgeBonuses=[]; adminUnlocked=false;
     showTab('home');
     loadGroup(groupCode, true);
   } else {
@@ -758,7 +782,7 @@ function handleDeadGroup(code, msg){
   if(remaining.length){
     const next = remaining[0];
     groupCode = next.code; me = next.player; setActiveCode(next.code);
-    allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; adminUnlocked=false;
+    allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; jackAwards=[]; bets={}; ironPledgeBonuses=[]; adminUnlocked=false;
     loadGroup(groupCode, true);
   } else {
     showScreen('onboard'); showObStep(1);
@@ -778,6 +802,8 @@ function launchApp(){
     const o = document.createElement('option');
     o.value=p.name; o.textContent=p.name; sel.appendChild(o);
   });
+  setTimeout(()=>updateTabPill('home'),0); // initialize pill after layout
+  initScrollCompression();
   renderAdminRoles();
   renderTwistToggles();
   const rg=document.getElementById('roleGuideCard');
@@ -817,7 +843,7 @@ function switchGroup(code){
   season = null; seasonId = null;
   setActiveCode(code);
   groupCode = s.code; me = s.player;
-  allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; adminUnlocked=false;
+  allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; jackAwards=[]; bets={}; ironPledgeBonuses=[]; adminUnlocked=false;
   ['heroCard','nudgeCard','streakCardHighlight','roleBar','hStats','twistBanner','calGrid','streakCard','teamStand','indLb','ptsBk','feedList','globalConsentCard'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=''; });
   showTab('home');
   loadGroup(groupCode, true);
@@ -861,9 +887,23 @@ function subscribe(){
     db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('twists')
       .onSnapshot(s=>{ activeTwists={}; s.docs.forEach(d=>{ activeTwists[d.id]=d.data(); }); renderTwistToggles(); refresh(); })
   );
+  // Jack of All Trades awards
+  unsub.push(
+    db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('jackAwards')
+      .onSnapshot(s=>{ jackAwards=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); })
+  );
+  // Iron Pledge: bets (per season) + bonuses_iron_pledge (top-level scoped by groupCode)
+  unsub.push(
+    db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('bets')
+      .onSnapshot(s=>{ bets={}; s.docs.forEach(d=>{ bets[d.id]=d.data(); }); renderPledgeStatusCard(); renderIronPledgePage(); renderIronPledgeAdmin(); })
+  );
+  unsub.push(
+    db.collection('bonuses_iron_pledge').where('groupCode','==',groupCode)
+      .onSnapshot(s=>{ ironPledgeBonuses=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); })
+  );
 }
 
-function refresh(){ renderHome(); renderLB(); renderFeed(); renderFlagQueue(); renderGlobalConsent(); }
+function refresh(){ renderHome(); renderLB(); renderFeed(); renderFlagQueue(); renderGlobalConsent(); renderIronPledgePage(); renderIronPledgeAdmin(); }
 
 // ── HOME ──────────────────────────────────────────────────────────────────
 function renderHome(){
@@ -1016,6 +1056,115 @@ function renderHome(){
       ?`<div class="tmuted">No days yet. Get ${threshold}+ teammates to log on the same day!</div>`
       :bonusDays.map(d=>`<div class="row" style="padding:6px 0;border-bottom:1px solid var(--border)"><span style="font-size:13px">Day ${d} — ${dc[d].size} members</span><span style="font-size:11px;color:var(--green)">✅ Streak bonus</span></div>`).join('')
     }`;
+
+  renderPledgeStatusCard();
+  renderGoalRing();
+}
+
+// ── PERSONAL MONTHLY GOAL RING ────────────────────────────────────────────
+// Stored entirely in localStorage — never touches Firestore.
+// Key: forge_goal_{groupCode}_{YYYY-MM}
+function _goalKey(){
+  if(!season||!groupCode) return null;
+  return `forge_goal_${groupCode}_${season.year}-${String(season.month).padStart(2,'0')}`;
+}
+function renderGoalRing(){
+  const el=document.getElementById('goalRingCard');
+  if(!el||!season||!me) return;
+  const key=_goalKey(); if(!key) return;
+  const goal=parseInt(localStorage.getItem(key))||0;
+  const sc=score(me.name);
+  const wo=sc.wo;
+
+  if(!goal){
+    el.innerHTML=`<div class="card" style="text-align:center;padding:20px 16px;cursor:pointer" onclick="openGoalInput()">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:8px">No monthly goal set yet.</div>
+      <div style="font-size:28px">🎯</div>
+      <div style="font-size:12px;color:var(--gold);margin-top:8px">Tap to set a goal</div>
+    </div>`;
+    return;
+  }
+
+  const r=44,cx=52,cy=52;
+  const circ=+(2*Math.PI*r).toFixed(2);
+  const pct=Math.min(1,wo/goal);
+  const offset=+(circ*(1-pct)).toFixed(2);
+  const col=pct>=1?'var(--green)':pct>0.6?'var(--gold)':'var(--orange)';
+
+  el.innerHTML=`<div class="card" style="display:flex;align-items:center;gap:16px;padding:16px">
+    <div onclick="openGoalInput()" style="cursor:pointer;flex-shrink:0" title="Tap to change goal">
+      <svg width="104" height="104" viewBox="0 0 104 104">
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--border)" stroke-width="8"/>
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${col}" stroke-width="8"
+          stroke-dasharray="${circ}" stroke-dashoffset="${offset}"
+          stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"
+          style="transition:stroke-dashoffset .8s cubic-bezier(.2,.8,.2,1)"/>
+        <text x="${cx}" y="${cy-4}" text-anchor="middle" dominant-baseline="central"
+          style="fill:var(--text);font-size:18px;font-weight:800;font-family:-apple-system,sans-serif">${wo}</text>
+        <text x="${cx}" y="${cy+14}" text-anchor="middle"
+          style="fill:var(--muted);font-size:10px;font-family:-apple-system,sans-serif">/ ${goal}</text>
+      </svg>
+    </div>
+    <div style="flex:1">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Monthly Goal</div>
+      <div style="font-size:28px;font-weight:800;color:${col}">${Math.round(pct*100)}<span style="font-size:14px;font-weight:600;color:var(--muted)">%</span></div>
+      <div style="font-size:13px;color:var(--muted);margin-top:2px">${Math.max(0,goal-wo)} workout${Math.max(0,goal-wo)===1?'':'s'} to go</div>
+      <div style="font-size:11px;color:var(--gold);margin-top:10px;cursor:pointer" onclick="openGoalInput()">Tap ring to change goal ›</div>
+    </div>
+  </div>
+  <div id="goalInputWrap" class="hidden" style="padding:0 16px 16px;margin-top:-4px">
+    <input type="number" id="goalInput" min="1" max="31" placeholder="Workouts this month (1–31)" style="margin-bottom:8px">
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="closeGoalInput()">Cancel</button>
+      <button class="btn btn-gold btn-sm" style="flex:1;margin:0" onclick="saveGoalInput()">Set Goal</button>
+    </div>
+  </div>`;
+}
+
+function openGoalInput(){
+  const key=_goalKey(); if(!key) return;
+  const goal=parseInt(localStorage.getItem(key))||0;
+  if(!goal){
+    // No goal yet — replace the placeholder card with an inline input form
+    const el=document.getElementById('goalRingCard');
+    if(!el) return;
+    el.innerHTML=`<div class="card" style="padding:16px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:10px">Set your monthly goal</div>
+      <input type="number" id="goalInput" min="1" max="31" placeholder="Workouts this month (1–31)" style="margin-bottom:8px">
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="renderGoalRing()">Cancel</button>
+        <button class="btn btn-gold btn-sm" style="flex:1;margin:0" onclick="saveGoalInput()">Set Goal</button>
+      </div>
+    </div>`;
+    setTimeout(()=>document.getElementById('goalInput')?.focus(),50);
+    return;
+  }
+  const wrap=document.getElementById('goalInputWrap');
+  if(!wrap) return;
+  const isHidden=wrap.classList.contains('hidden');
+  wrap.classList.toggle('hidden',!isHidden);
+  if(isHidden) setTimeout(()=>document.getElementById('goalInput')?.focus(),50);
+}
+
+function closeGoalInput(){
+  document.getElementById('goalInputWrap')?.classList.add('hidden');
+}
+
+function saveGoalInput(){
+  const key=_goalKey(); if(!key) return;
+  const inp=document.getElementById('goalInput');
+  const val=parseInt(inp?.value);
+  if(!val||val<1||val>31){toast('Enter a goal between 1 and 31 workouts.','error');return;}
+  const oldGoal=parseInt(localStorage.getItem(key))||0;
+  localStorage.setItem(key,val);
+  if(oldGoal>0&&val<oldGoal){
+    toast('Setting the bar lower. Efficiency, not defeat.');
+  } else if(oldGoal>0&&val>oldGoal){
+    toast('Raising the bar. Your future self is either grateful or training harder.');
+  } else {
+    toast(`Goal set: ${val} workouts this month.`,'success');
+  }
+  renderGoalRing();
 }
 
 function showCalTip(el,text){
@@ -1121,6 +1270,11 @@ async function submitLog(){
     });
     await batch.commit();
 
+    // Jack of All Trades: check after batch lands (uses allLogs + current selW)
+    if(activeTwists['jack_of_all_trades']?.enabled){
+      await checkJackOfAllTrades(selDay, selW);
+    }
+
     const sc=score(me.name);
     const myDays=[...allLogs.filter(l=>l.player===me.name).map(l=>l.day)].sort((a,b)=>a-b);
     const lastDay=myDays.length>=2?myDays[myDays.length-2]:null;
@@ -1136,6 +1290,7 @@ async function submitLog(){
     document.getElementById('succStats').innerHTML=`<div class="srow" style="margin-bottom:0"><div class="sc"><div class="sv cu" id="cuPoints">0</div><div class="sl">POINTS</div></div><div class="sc"><div class="sv cu" id="cuWo">0</div><div class="sl">WORKOUTS</div></div><div class="sc"><div class="sv cu" id="cuStreak" style="color:var(--orange)">0</div><div class="sl">STREAK</div></div></div>`;
     const si=document.querySelector('#ls3 .succ-icon'); if(si){si.classList.remove('strike-icon');void si.offsetWidth;si.classList.add('strike-icon');}
     fireSparks();
+    if(navigator.vibrate) navigator.vibrate(200);
     celebrateLog(sc);
   } catch(e){ console.error('submitLog failed:',e); toast('Error saving. Check connection.','error'); btn.disabled=false; btn.textContent='Log Workout'; }
 }
@@ -1204,18 +1359,32 @@ function renderLB(){
   const teams=[...new Set(players.map(p=>p.team))];
   const tcol=t=>t==='A'?'var(--A)':t==='B'?'var(--B)':'var(--C)';
   const ts=teams.map(t=>({t,s:teamTotal(t),count:players.filter(p=>p.team===t).length})).sort((a,b)=>b.s-a.s);
-  document.getElementById('teamStand').innerHTML=ts.map((t,i)=>`
-    <div class="tcard ${t.t}">
-      <div>
-        <div class="tcname">#${i+1} Team ${t.t}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:3px">${players.filter(p=>p.team===t.t).map(p=>p.name).join(', ')}</div>
-        <div style="font-size:10px;color:var(--muted);margin-top:2px">${t.count} members · avg score</div>
+  // Podium: 2nd | 1st | 3rd (left-centre-right), heights proportional to score
+  // 1st = fixed 140px; 2nd/3rd = 60 + (score/firstScore)*80, min 60px
+  const firstS = ts[0]?.s || 1;
+  const slots = [ts[1]||null, ts[0]||null, ts[2]||null]; // 2nd, 1st, 3rd
+  const medals = ['🥈','🥇','🥉'];
+  const ptsCols = ['#C0C0C0','#FFD700','#CD7F32'];   // silver, gold, bronze
+  const ptsSizes = ['18px','22px','15px'];             // 2nd, 1st, 3rd
+  const podiumBlocks = slots.map((t,pos)=>{
+    if(!t) return `<div style="flex:1"></div>`;
+    const baseH = pos===1 ? 140 : Math.max(60, Math.round(60 + (t.s/firstS)*80));
+    const col = tcol(t.t);
+    const bg = t.t==='A'?'var(--Al)':t.t==='B'?'var(--Bl)':'var(--Cl)';
+    const names = players.filter(p=>p.team===t.t).map(p=>esc(p.name)).join(', ');
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+      <div style="font-size:${pos===1?'22':'16'}px">${medals[pos]}</div>
+      <div style="font-size:${ptsSizes[pos]};font-weight:800;color:${ptsCols[pos]}">${t.s}<span style="font-size:9px;font-weight:600;color:var(--muted)"> pts</span></div>
+      <div style="height:${baseH}px;width:100%;background:${bg};border:1.5px solid ${col};border-bottom:none;border-radius:8px 8px 0 0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:10px 6px 0;overflow:hidden">
+        <div style="font-size:14px;font-weight:800;color:${col}">Team ${t.t}</div>
+        <div style="font-size:9px;color:var(--muted);text-align:center;margin-top:5px;line-height:1.35;word-break:break-word">${names}</div>
+        <div style="font-size:9px;color:var(--muted);margin-top:4px">${t.count} members</div>
       </div>
-      <div style="text-align:right">
-        <div style="font-size:26px;font-weight:800;color:${tcol(t.t)}">${t.s}</div>
-        <div style="font-size:10px;color:var(--muted)">avg pts</div>
-      </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+  document.getElementById('teamStand').innerHTML=`
+    <div style="display:flex;align-items:flex-end;gap:3px">${podiumBlocks}</div>
+    <div style="height:3px;background:linear-gradient(90deg,var(--B),var(--gold),var(--A));border-radius:0 0 6px 6px;margin-bottom:16px"></div>`;
 
   const ind=players.map(p=>({...p,sc:score(p.name)})).sort((a,b)=>b.sc.total-a.sc.total);
   const myName=me.name;
@@ -1238,12 +1407,15 @@ function renderLB(){
   document.getElementById('ptsBk').innerHTML=`
     <div class="card-title">Your breakdown — ${esc(me.name)}</div>
     ${[
-      ['Base points',my.base,`${my.wo} workouts × 5`],
+      ['Base points',my.base,`${my.wo} workouts × 5${activeTwists['boss_week']?.enabled?' (×2 Boss Week)':''}`],
       ['Perfect week',my.wb,'+10 per complete Mon–Sun week'],
       ['Team streak',my.tb,'Cumulative +1/+2/+3 (proportional threshold)'],
       ['Role bonus',my.rb,pl.role+' — applied on last day'],
       ['30-day bonus',my.b30,'All days logged'],
-      ['Boss week bonus',my.bossBonus||0,'Double base points week'],
+      ...(my.dayBonuses?[['Day bonuses',my.dayBonuses,'Freaky Fridays / Monday Motivation']]:[] ),
+      ...(my.underdogBonus?[['Underdog bonus',my.underdogBonus,'Last place ×2 on base points']]:[] ),
+      ...(my.jackBonus?[['Jack of All Trades',my.jackBonus,`${Math.round(my.jackBonus/20)} award(s) × +20 pts`]]:[] ),
+      ...(my.ipBonus?[['Iron Pledge',my.ipBonus,my.ipBonus>0?'Pledge met — base pts doubled':'Pledge missed — base pts zeroed']]:[] ),
       ['Penalty',my.pen,'If under min workouts (last day)'],
     ].map(([l,v,s])=>`
       <div class="row" style="padding:8px 0;border-bottom:1px solid var(--border);gap:12px">
@@ -1393,7 +1565,7 @@ async function saveRoles(){
 }
 
 function renderTwistToggles(){
-  document.getElementById('twistToggles').innerHTML=TWIST_LIBRARY.map(t=>{
+  const renderRow = t => {
     const active=activeTwists[t.id];
     const isOn=active?.enabled||false;
     return `<div class="twist-row">
@@ -1404,7 +1576,17 @@ function renderTwistToggles(){
       </div>
       <div class="toggle${isOn?' on':''}" onclick="toggleTwist('${t.id}',${!isOn})"></div>
     </div>`;
-  }).join('');
+  };
+  const standard = TWIST_LIBRARY.filter(t=>t.id!=='double_or_nothing');
+  const highStakes = TWIST_LIBRARY.find(t=>t.id==='double_or_nothing');
+  let html = standard.map(renderRow).join('');
+  if(highStakes){
+    html += `<div style="margin:16px 0 8px;padding:8px 0;border-top:1px solid var(--border);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--orange)">⚔️ High Stakes</div>`;
+    html += renderRow(highStakes);
+  }
+  document.getElementById('twistToggles').innerHTML = html;
+  updatePledgeTabVisibility();
+  renderIronPledgeAdmin();
 }
 async function toggleTwist(id,enable){
   const twist=TWIST_LIBRARY.find(t=>t.id===id);
@@ -2005,8 +2187,255 @@ async function toggleGlobalConsent(val){
     renderGlobalConsent();
   }catch(e){ logErr('toggleGlobalConsent', e); toast('Could not update preference — check connection.','error'); renderGlobalConsent(); }
 }
+// ── JACK OF ALL TRADES AWARD CHECK ────────────────────────────────────────
+// Called after a successful batch.commit() in submitLog. Checks if the player
+// now has 4+ distinct workout types in the current Mon-Sun week and awards +20
+// (via Firestore jackAwards subcollection) if not already awarded this week.
+async function checkJackOfAllTrades(day, newWorkouts){
+  if(!activeTwists['jack_of_all_trades']?.enabled||!me||!season||!seasonId) return;
+  const date=new Date(season.year,season.month-1,day);
+  const dow=date.getDay()===0?6:date.getDay()-1;
+  const monDay=day-dow, sunDay=monDay+6;
+  const weekStr=getISOWeek(date);
+  // Collect distinct types: existing logs this week + new workouts being submitted
+  const weekLogs=allLogs.filter(l=>l.player===me.name&&l.day>=monDay&&l.day<=sunDay);
+  const types=new Set([...weekLogs.flatMap(l=>l.workouts||[l.workout]).filter(Boolean),...newWorkouts]);
+  if(types.size<4) return;
+  const docId=(me.name+'_'+weekStr).replace(/[^a-zA-Z0-9_-]/g,'_');
+  const awardRef=db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('jackAwards').doc(docId);
+  try{
+    const ex=await awardRef.get();
+    if(ex.exists) return;
+    await awardRef.set({player:me.name,week:weekStr,groupCode,workoutTypes:[...types],awardedAt:firebase.firestore.FieldValue.serverTimestamp()});
+    toast('🃏 Jack of All Trades! +20 pts for 4 distinct workout types this week.','success');
+  }catch(e){ logErr('checkJackOfAllTrades',e); }
+}
+
+// ── IRON PLEDGE ───────────────────────────────────────────────────────────
+// Show/hide pledge tab + admin card based on twist state
+function updatePledgeTabVisibility(){
+  const tab=document.getElementById('pledgeTab');
+  if(tab) tab.style.display=activeTwists['double_or_nothing']?.enabled?'':'none';
+  const card=document.getElementById('ironPledgeAdminCard');
+  if(card) card.style.display=activeTwists['double_or_nothing']?.enabled?'':'none';
+}
+
+// Status mini-card on home page (between hero and goal ring)
+function renderPledgeStatusCard(){
+  const el=document.getElementById('pledgeStatusCard');
+  if(!el||!me||!season) return;
+  if(!activeTwists['double_or_nothing']?.enabled){ el.innerHTML=''; return; }
+  const today=new Date();
+  const weekStr=getISOWeek(today);
+  const myBet=bets[me.name];
+  if(!myBet||myBet.week!==weekStr){
+    el.innerHTML=`<div class="card" style="border-color:var(--orange);cursor:pointer" onclick="showTab('pledge')">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="font-size:32px">🔒</div>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--orange)">Iron Pledge is active this month</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">You haven't pledged this week yet. Tap to lock in your target.</div>
+        </div>
+      </div>
+    </div>`;
+    return;
+  }
+  const dow=today.getDay()===0?6:today.getDay()-1;
+  const monDay=today.getDate()-dow;
+  const daysInWeek=new Set(allLogs.filter(l=>l.player===me.name&&l.day>=monDay&&l.day<=monDay+6).map(l=>l.day)).size;
+  const pledge=myBet.pledge;
+  const calc=ironPledgeBonuses.find(b=>b.player===me.name&&b.week===weekStr&&b.groupCode===groupCode);
+  const bdrCol=calc?(calc.type==='double'?'var(--green)':'var(--red)'):(daysInWeek>=pledge?'var(--green)':'var(--orange)');
+  el.innerHTML=`<div class="card" style="border-color:${bdrCol};cursor:pointer" onclick="showTab('pledge')">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--orange)">Iron Pledge</div>
+        <div style="font-size:22px;font-weight:800;margin:2px 0">${daysInWeek}<span style="font-size:13px;font-weight:500;color:var(--muted)"> / ${pledge} pledged</span></div>
+        ${calc
+          ?(calc.type==='double'
+            ?`<div style="font-size:12px;color:var(--green)">✅ Met — double base pts applied</div>`
+            :`<div style="font-size:12px;color:var(--red)">❌ Missed — base pts zeroed</div>`)
+          :`<div style="font-size:12px;color:${daysInWeek>=pledge?'var(--green)':'var(--muted)'}">${daysInWeek>=pledge?'✅ On track':'Still time to hit it'}</div>`
+        }
+      </div>
+      <div style="font-size:28px">${calc?(calc.type==='double'?'🔥':'💀'):(daysInWeek>=pledge?'✅':'⏳')}</div>
+    </div>
+  </div>`;
+}
+
+// Full pledge page
+function renderIronPledgePage(){
+  const el=document.getElementById('pledgeContent');
+  if(!el||!me||!season) return;
+  if(!activeTwists['double_or_nothing']?.enabled){ el.innerHTML='<div class="tmuted">Iron Pledge is not active this month.</div>'; return; }
+  const today=new Date();
+  const weekStr=getISOWeek(today);
+  const myBet=bets[me.name];
+  if(!myBet||myBet.week!==weekStr){
+    el.innerHTML=`
+      <div class="card" style="text-align:center;padding:28px 20px">
+        <div style="font-size:52px;margin-bottom:12px">🔒</div>
+        <div style="font-size:18px;font-weight:800;margin-bottom:8px">Lock In Your Weekly Target</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.6">
+          Commit to a number of workouts for this Mon–Sun week.<br>
+          <strong style="color:var(--green)">Hit it →</strong> base points for the week <strong style="color:var(--green)">double</strong>.<br>
+          <strong style="color:var(--red)">Miss it →</strong> base points for the week go to <strong style="color:var(--red)">zero</strong>.
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:16px">
+          <input type="number" id="pledgeInput" min="1" max="7" placeholder="1–7" style="width:90px;text-align:center;font-size:26px;font-weight:800;padding:10px;margin:0">
+          <span style="font-size:14px;color:var(--muted)">workouts</span>
+        </div>
+        <button class="btn btn-gold" style="margin:0" onclick="lockInPledge()">🔒 Lock It In</button>
+        <div style="font-size:11px;color:var(--muted);margin-top:14px">One pledge per week. No take-backs. Results applied by admin at week end.</div>
+      </div>`;
+    return;
+  }
+  // Pledged — show progress ring
+  const dow=today.getDay()===0?6:today.getDay()-1;
+  const monDay=today.getDate()-dow;
+  const daysInWeek=new Set(allLogs.filter(l=>l.player===me.name&&l.day>=monDay&&l.day<=monDay+6).map(l=>l.day)).size;
+  const pledge=myBet.pledge;
+  const r=44,cx=52,cy=52;
+  const circ=+(2*Math.PI*r).toFixed(2);
+  const pct=Math.min(1,daysInWeek/pledge);
+  const offset=+(circ*(1-pct)).toFixed(2);
+  const hit=daysInWeek>=pledge;
+  const col=hit?'var(--green)':pct>0.5?'var(--gold)':'var(--orange)';
+  const daysLeft=Math.max(0,6-dow);
+  const calc=ironPledgeBonuses.find(b=>b.player===me.name&&b.week===weekStr&&b.groupCode===groupCode);
+  let statusHTML='';
+  if(calc){
+    statusHTML=calc.type==='double'
+      ?`<div class="warn-box warn-green" style="margin-top:12px;margin-bottom:0">✅ Pledge met! Base pts for this week doubled (+${calc.rawPoints} pts bonus).</div>`
+      :`<div class="warn-box warn-red" style="margin-top:12px;margin-bottom:0">❌ Pledge missed. Base pts for this week zeroed (−${calc.rawPoints} pts).</div>`;
+  } else if(hit){
+    statusHTML=`<div class="warn-box warn-green" style="margin-top:12px;margin-bottom:0">✅ Target reached! Admin will confirm results at week end.</div>`;
+  } else {
+    statusHTML=`<div class="warn-box warn-orange" style="margin-top:12px;margin-bottom:0">⏳ ${daysLeft} day${daysLeft===1?'':'s'} left. Need ${Math.max(0,pledge-daysInWeek)} more workout${pledge-daysInWeek===1?'':'s'}.</div>`;
+  }
+  el.innerHTML=`
+    <div class="card" style="text-align:center;padding:24px 20px">
+      <div style="font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--orange);margin-bottom:14px">This Week's Pledge</div>
+      <svg width="104" height="104" viewBox="0 0 104 104" style="display:block;margin:0 auto">
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--border)" stroke-width="8"/>
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${col}" stroke-width="8"
+          stroke-dasharray="${circ}" stroke-dashoffset="${offset}"
+          stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"
+          style="transition:stroke-dashoffset .8s cubic-bezier(.2,.8,.2,1)"/>
+        <text x="${cx}" y="${cy-4}" text-anchor="middle" dominant-baseline="central"
+          style="fill:var(--text);font-size:18px;font-weight:800;font-family:-apple-system,sans-serif">${daysInWeek}</text>
+        <text x="${cx}" y="${cy+14}" text-anchor="middle"
+          style="fill:var(--muted);font-size:10px;font-family:-apple-system,sans-serif">/ ${pledge}</text>
+      </svg>
+      <div style="margin-top:12px;font-size:28px;font-weight:800;color:${col}">${daysInWeek}<span style="font-size:14px;font-weight:500;color:var(--muted)"> / ${pledge} pledged</span></div>
+      ${statusHTML}
+    </div>`;
+}
+
+async function lockInPledge(){
+  const inp=document.getElementById('pledgeInput');
+  const val=parseInt(inp?.value);
+  if(!val||val<1||val>7){ toast('Enter a number between 1 and 7.','error'); return; }
+  const weekStr=getISOWeek(new Date());
+  try{
+    await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId)
+      .collection('bets').doc(me.name).set({
+        player:me.name, pledge:val, week:weekStr, groupCode,
+        lockedAt:firebase.firestore.FieldValue.serverTimestamp()
+      });
+    toast(`Pledge locked: ${val} workout${val===1?'':'s'} this week. No take-backs.`,'success');
+  }catch(e){ logErr('lockInPledge',e); toast('Failed to lock pledge — check connection.','error'); }
+}
+
+// Admin table: players who pledged this week, with current status
+function renderIronPledgeAdmin(){
+  const el=document.getElementById('ironPledgeTable');
+  if(!el) return;
+  updatePledgeTabVisibility();
+  if(!activeTwists['double_or_nothing']?.enabled) return;
+  const today=new Date();
+  const weekStr=getISOWeek(today);
+  const activeBets=Object.entries(bets).filter(([,b])=>b.week===weekStr);
+  if(activeBets.length===0){ el.innerHTML='<div class="tmuted" style="margin-bottom:0">No pledges locked in this week yet.</div>'; return; }
+  const dow=today.getDay()===0?6:today.getDay()-1;
+  const monDay=today.getDate()-dow;
+  el.innerHTML=`<table style="width:100%;font-size:12px;border-collapse:collapse;margin-bottom:4px">
+    <tr style="border-bottom:1px solid var(--border)">
+      <th style="text-align:left;padding:6px 4px;color:var(--muted);font-weight:600">Player</th>
+      <th style="text-align:center;padding:6px 4px;color:var(--muted);font-weight:600">Pledged</th>
+      <th style="text-align:center;padding:6px 4px;color:var(--muted);font-weight:600">Logged</th>
+      <th style="text-align:center;padding:6px 4px;color:var(--muted);font-weight:600">Status</th>
+    </tr>
+    ${activeBets.map(([playerName,betData])=>{
+      const logged=new Set(allLogs.filter(l=>l.player===playerName&&l.day>=monDay&&l.day<=monDay+6).map(l=>l.day)).size;
+      const calc=ironPledgeBonuses.find(b=>b.player===playerName&&b.week===weekStr&&b.groupCode===groupCode);
+      const status=calc
+        ?(calc.type==='double'?`<span style="color:var(--green)">✅ Doubled</span>`:`<span style="color:var(--red)">❌ Zeroed</span>`)
+        :(logged>=betData.pledge?`<span style="color:var(--green)">On track</span>`:`<span style="color:var(--muted)">In progress</span>`);
+      return `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:8px 4px;font-weight:600">${esc(playerName)}</td>
+        <td style="padding:8px 4px;text-align:center">${betData.pledge}</td>
+        <td style="padding:8px 4px;text-align:center">${logged}</td>
+        <td style="padding:8px 4px;text-align:center">${status}</td>
+      </tr>`;
+    }).join('')}
+  </table>`;
+}
+
+async function calculateIronPledgeResults(){
+  if(!season||!seasonId||!groupCode) return;
+  const today=new Date();
+  const weekStr=getISOWeek(today);
+  const activeBets=Object.entries(bets).filter(([,b])=>b.week===weekStr);
+  if(activeBets.length===0){ toast('No active pledges this week.'); return; }
+  const dow=today.getDay()===0?6:today.getDay()-1;
+  const monDay=today.getDate()-dow;
+  const alreadyCalc=ironPledgeBonuses.filter(b=>b.groupCode===groupCode&&b.week===weekStr);
+  const toCalc=activeBets.filter(([p])=>!alreadyCalc.some(b=>b.player===p));
+  if(toCalc.length===0){ toast('All pledges already calculated for this week.'); return; }
+  try{
+    const batch=db.batch();
+    for(const [playerName,betData] of toCalc){
+      const daysLogged=new Set(allLogs.filter(l=>l.player===playerName&&l.day>=monDay&&l.day<=monDay+6).map(l=>l.day)).size;
+      const rawPoints=daysLogged*5;
+      const type=daysLogged>=betData.pledge?'double':'zero';
+      batch.set(db.collection('bonuses_iron_pledge').doc(),{
+        player:playerName, pledge:betData.pledge, actual:daysLogged,
+        week:weekStr, groupCode, type, rawPoints,
+        calculatedAt:firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+    await batch.commit();
+    toast(`Iron Pledge results applied for ${toCalc.length} player(s).`,'success');
+  }catch(e){ logErr('calculateIronPledgeResults',e); toast('Failed to calculate — check connection.','error'); }
+}
+
+// ── SCROLL COMPRESSION ────────────────────────────────────────────────────
+function initScrollCompression(){
+  const nav=document.querySelector('#screen-app .nav');
+  if(!nav) return;
+  // Pages have overflow-y:auto — scroll events live on them, not window.
+  document.querySelectorAll('#screen-app .page').forEach(pg=>{
+    pg.addEventListener('scroll',()=>{
+      nav.classList.toggle('scrolled',pg.scrollTop>40);
+    },{passive:true});
+  });
+}
+
 // ── TABS ──────────────────────────────────────────────────────────────────
-const TABS=['home','log','lb','feed','global','admin'];
+const TABS=['home','log','lb','feed','global','admin','pledge'];
+function updateTabPill(t){
+  const pill=document.getElementById('tabPill');
+  const tabEls=document.querySelectorAll('.tabs .tab');
+  const idx=TABS.indexOf(t);
+  if(!pill||!tabEls[idx]) return;
+  const tab=tabEls[idx];
+  const tabsEl=tab.parentElement;
+  const tabsRect=tabsEl.getBoundingClientRect();
+  const tabRect=tab.getBoundingClientRect();
+  pill.style.left=(tabRect.left-tabsRect.left)+'px';
+  pill.style.width=tabRect.width+'px';
+}
 function showTab(t){
   if(t==='admin'&&!adminUnlocked){
     const pin=prompt('Enter admin PIN:');
@@ -2015,10 +2444,13 @@ function showTab(t){
   }
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
-  document.getElementById(`page-${t}`).classList.add('active');
+  const pg=document.getElementById(`page-${t}`);
+  if(pg) pg.classList.add('active');
   document.querySelectorAll('.tab')[TABS.indexOf(t)]?.classList.add('active');
+  updateTabPill(t);
   window.scrollTo(0,0);
   if(t==='global') loadGlobal();
+  if(t==='pledge') renderIronPledgePage();
 }
 
 // dismiss cal tip on outside tap
