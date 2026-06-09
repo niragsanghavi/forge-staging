@@ -1,0 +1,96 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    // ── GROUPS + SEASON SUBCOLLECTIONS ────────────────────────────────────
+    match /groups/{groupCode} {
+      allow read:  if isAuthed();
+      allow write: if isAuthed();
+
+      match /seasons/{sid} {
+        allow read:  if isAuthed();
+        allow write: if isAuthed();
+
+        match /twists/{twistId} {
+          allow read:  if isAuthed();
+          allow write: if isAuthed();
+        }
+
+        // Iron Pledge bets — write-once per player per week
+        match /bets/{playerName} {
+          allow read:   if isAuthed();
+          allow create: if isAuthed();
+          allow update: if false;
+          allow delete: if false;
+        }
+
+        // Jack of All Trades awards — written by client, never deleted
+        match /jackAwards/{id} {
+          allow read:  if isAuthed();
+          allow write: if isAuthed();
+          allow delete: if false;
+        }
+      }
+    }
+
+    // ── TOP-LEVEL LOG COLLECTIONS ─────────────────────────────────────────
+    match /logs/{id} {
+      allow read:   if isAuthed();
+      allow create: if isAuthed();
+      allow delete: if isAuthed();
+      allow update: if false;
+    }
+
+    match /bonuses_30day/{id} {
+      allow read:   if isAuthed();
+      allow create: if isAuthed();
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /flags/{id} {
+      allow read:   if isAuthed();
+      allow create: if isAuthed();
+      allow delete: if isAuthed();
+      allow update: if false;
+    }
+
+    // Iron Pledge results — written by admin action, immutable thereafter
+    match /bonuses_iron_pledge/{id} {
+      allow read:   if isAuthed();
+      allow create: if isAuthed();
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ── ANALYTICS ─────────────────────────────────────────────────────────
+    // Top-level doc per group — never written directly
+    match /analytics/{groupCode} {
+      allow read:  if isAuthed();
+      allow write: if false;
+
+      // Tab click counters — clients increment via merge, super admin reads
+      match /tabClicks/{month} {
+        allow read:   if isAuthed();
+        allow create: if isAuthed();
+        allow update: if isAuthed();
+        allow delete: if false;
+      }
+
+      // Baseline aggregates — written server-side only
+      match /baseline-{docId} {
+        allow read:  if isAuthed();
+        allow write: if false;
+      }
+    }
+
+    // ── DEFAULT DENY ──────────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
