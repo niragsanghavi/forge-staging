@@ -248,13 +248,14 @@
       <select id="aPlayer"><option value="">Select player</option></select>
       <button class="btn btn-gold" onclick="award30()">Award +50 Pts</button>
     </div>
+  </div>
+
   <!-- IRON PLEDGE -->
   <div class="page" id="page-pledge">
     <div style="padding:8px 0 14px;font-size:20px;font-weight:800">The Iron Pledge</div>
     <div id="pledgeContent"></div>
   </div>
 
-  </div>
 </div>
 
 <!-- ══ SUPER ADMIN ══ -->
@@ -339,6 +340,18 @@
         </label>
         <button class="btn btn-gold" style="margin-top:10px" onclick="createGroup()">Create Group + Generate Code</button>
         <div id="newGroupResult" class="hidden"></div>
+      </div>
+    </div>
+
+    <div style="margin-top:24px">
+      <div class="shdr">Tab Analytics</div>
+      <div class="card">
+        <div class="card-title">Click counts by tab</div>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <input id="analyticsGroupCode" placeholder="Group code (e.g. BR0RRU)" style="margin:0;flex:1">
+          <button class="btn btn-surface btn-sm" style="margin:0" onclick="loadTabAnalytics()">Load</button>
+        </div>
+        <div id="tabAnalyticsResult"><div class="tmuted">Enter a group code to load analytics.</div></div>
       </div>
     </div>
   </div>
@@ -2060,6 +2073,38 @@ async function createGroup(){
   loadSuperAdmin();
 }
 
+// ── TAB ANALYTICS VIEW (super admin) ────────────────────────────────────────
+async function loadTabAnalytics(){
+  const code=(document.getElementById('analyticsGroupCode')?.value||'').trim().toUpperCase();
+  const el=document.getElementById('tabAnalyticsResult');
+  if(!el) return;
+  if(!code){ el.innerHTML='<div class="tmuted" style="color:var(--red)">Enter a group code first.</div>'; return; }
+  el.innerHTML='<div class="tmuted">Loading…</div>';
+  try{
+    const snap=await db.collection('analytics').doc(code).collection('tabClicks').get();
+    if(snap.empty){ el.innerHTML='<div class="tmuted">No analytics data yet for this group.</div>'; return; }
+    const docs=snap.docs.map(d=>({month:d.id,...d.data()})).sort((a,b)=>b.month.localeCompare(a.month));
+    const tabNames=[...new Set(docs.flatMap(d=>Object.keys(d).filter(k=>k!=='month')))].sort();
+    const latest=docs[0];
+    const topTab=[...tabNames].sort((a,b)=>(latest[b]||0)-(latest[a]||0))[0];
+    el.innerHTML=`
+      <div style="overflow-x:auto">
+        <table style="width:100%;font-size:12px;border-collapse:collapse;margin-bottom:12px">
+          <tr style="border-bottom:1px solid var(--border)">
+            <th style="text-align:left;padding:6px 4px;color:var(--muted);font-weight:600">Month</th>
+            ${tabNames.map(t=>`<th style="text-align:center;padding:6px 4px;color:var(--muted);font-weight:600">${t}</th>`).join('')}
+          </tr>
+          ${docs.map(d=>`
+            <tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:8px 4px;font-weight:600;white-space:nowrap">${d.month}</td>
+              ${tabNames.map(t=>`<td style="padding:8px 4px;text-align:center;color:${(d[t]||0)>0?'var(--text)':'var(--muted)'}">${d[t]||0}</td>`).join('')}
+            </tr>`).join('')}
+        </table>
+      </div>
+      <div style="font-size:12px;color:var(--muted)">Most visited this month (<strong style="color:var(--text)">${latest.month}</strong>): <span style="color:var(--gold);font-weight:700">${topTab||'—'}</span> (${latest[topTab]||0} clicks)</div>`;
+  }catch(e){ logErr('loadTabAnalytics',e); el.innerHTML='<div class="tmuted" style="color:var(--red)">Failed to load — check connection.</div>'; }
+}
+
 // ── THEME (light/dark) ─────────────────────────────────────────────────────
 // Persisted in localStorage. Applied to <html data-theme="...">. CSS vars do
 // the rest. Default is dark (no attribute = dark via the :root default).
@@ -2451,6 +2496,17 @@ function showTab(t){
   window.scrollTo(0,0);
   if(t==='global') loadGlobal();
   if(t==='pledge') renderIronPledgePage();
+  trackTabClick(t); // fire-and-forget — no await
+}
+
+// ── TAB ANALYTICS ─────────────────────────────────────────────────────────
+async function trackTabClick(tab){
+  if(!groupCode || !season) return;
+  const month=`${season.year}-${String(season.month).padStart(2,'0')}`;
+  const ref=db.collection('analytics').doc(groupCode).collection('tabClicks').doc(month);
+  try{
+    await ref.set({[tab]:firebase.firestore.FieldValue.increment(1)},{merge:true});
+  }catch(e){ /* silent fail — analytics must never break the app */ }
 }
 
 // dismiss cal tip on outside tap
