@@ -227,6 +227,12 @@
       <div id="flagQueue"></div>
     </div>
     <div class="card">
+      <div class="card-title">Foundry Season Goal</div>
+      <div class="tmuted" style="margin-bottom:10px">Override the auto-computed strike target for The Foundry. Leave blank to use the default.</div>
+      <input type="number" id="foundryGoalInput" min="1" placeholder="e.g. 200 (auto if blank)" style="margin-bottom:10px">
+      <button class="btn btn-gold" onclick="saveFoundryGoal()">Save Goal</button>
+    </div>
+    <div class="card">
       <div class="card-title">Award 30-Day Bonus</div>
       <div class="tmuted" style="margin-bottom:10px">+50 pts for completing all days this month</div>
       <select id="aPlayer"><option value="">Select player</option></select>
@@ -492,7 +498,7 @@ async function verifyCode(){
   const err = document.getElementById('codeError');
   err.classList.add('hidden');
   try {
-    if(window._joinMode && getSessions().some(s=>s.code===code)){ alert('You\'re already in this group — switching to it.'); switchGroup(code); return; }
+    if(window._joinMode && getSessions().some(s=>s.code===code)){ toast('You\'re already in this group — switching to it.'); switchGroup(code); return; }
     const snap = await db.collection('groups').doc(code).get();
     if(!snap.exists){ err.classList.remove('hidden'); return; }
     groupData = snap.data();
@@ -602,16 +608,16 @@ window._pinEntryFor = null;
 async function registerAndJoin(){
   const nameInput = document.getElementById('newPlayerNameInput');
   const name = nameInput.value.trim();
-  if(!name){ alert('Please enter a name!'); return; }
+  if(!name){ toast('Please enter a name!','error'); return; }
   // Standardise: first letter of each word upper, rest lower ("RISHIL" -> "Rishil")
   const formattedName = name.split(' ').filter(Boolean).map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
   // Validate: length + safe characters only. Blocks XSS payloads (which need
   // < > or quotes) and names that would break inline click handlers.
-  if(formattedName.length < 2 || formattedName.length > 24){ alert('Name must be 2–24 characters.'); return; }
-  if(/[^\p{L}\p{N} .\-]/u.test(formattedName)){ alert('Name can only contain letters, numbers, spaces, hyphens and periods — no symbols.'); return; }
+  if(formattedName.length < 2 || formattedName.length > 24){ toast('Name must be 2–24 characters.','error'); return; }
+  if(/[^\p{L}\p{N} .\-]/u.test(formattedName)){ toast('Name can only contain letters, numbers, spaces, hyphens and periods — no symbols.','error'); return; }
   // Name must be unique within this group's roster (case-insensitive)
   const existing = (season.roster||[]).find(p=>p.name.toLowerCase()===formattedName.toLowerCase());
-  if(existing){ alert(`The name "${formattedName}" is already taken in this group. Please use a different name (e.g. add your surname or initial).`); return; }
+  if(existing){ toast(`The name "${formattedName}" is already taken in this group. Please use a different name (e.g. add your surname or initial).`,'error'); return; }
   const numTeams = season.numTeams === 2 ? 2 : 3;
   const teams = numTeams === 2 ? ['A','B'] : ['A','B','C'];
   const assignedTeam = teams[(season.roster||[]).length % teams.length];
@@ -740,7 +746,7 @@ async function loadGroup(code, fromCache){
     launchApp();
   } catch(e){
     console.error('loadGroup failed:', e);
-    alert('Could not load your group — check your connection and try again.');
+    toast('Could not load your group — check your connection and try again.','error');
     if(!getSessions().length){ showScreen('onboard'); showObStep(1); }
   }
 }
@@ -748,7 +754,7 @@ async function loadGroup(code, fromCache){
 // A specific group is gone/broken: drop just its session, fall back to another.
 function handleDeadGroup(code, msg){
   const remaining = removeSession(code);
-  alert(msg + ' Removing it from this device.');
+  toast(msg + ' Removing it from this device.','error');
   if(remaining.length){
     const next = remaining[0];
     groupCode = next.code; me = next.player; setActiveCode(next.code);
@@ -776,6 +782,8 @@ function launchApp(){
   renderTwistToggles();
   const rg=document.getElementById('roleGuideCard');
   if(rg) rg.style.display = (season.rolesEnabled!==false) ? '' : 'none';
+  const fgi=document.getElementById('foundryGoalInput');
+  if(fgi) fgi.placeholder=season.foundryGoal?'Current: '+season.foundryGoal+' (edit to change)':'e.g. 200 (auto if blank)';
   subscribe();
 }
 
@@ -817,7 +825,7 @@ function switchGroup(code){
 
 // Start the flow to join an additional group (max MAX_GROUPS).
 function joinAnotherGroup(){
-  if(getSessions().length >= MAX_GROUPS){ alert(`You can be in up to ${MAX_GROUPS} groups on this device. Leave one (tap your name, top-right) before joining another.`); return; }
+  if(getSessions().length >= MAX_GROUPS){ toast(`You can be in up to ${MAX_GROUPS} groups on this device. Leave one (tap your name, top-right) before joining another.`,'error'); return; }
   window._joinMode = true;
   unsub.forEach(fn=>fn()); unsub = [];
   document.getElementById('codeInput').value='';
@@ -916,7 +924,7 @@ function renderHome(){
   // ── THE FOUNDRY: shared season goal ──
   const totalStrikes=allLogs.length;
   const perPerson=(season.minWorkouts||12)+8; // ambition target per member
-  const goal=Math.max(50,rosterN*perPerson);
+  const goal=season.foundryGoal||Math.max(50,rosterN*perPerson);
   const pct=Math.min(100,Math.round(totalStrikes/goal*100));
   const ingotN=10;
   const litN=Math.round(pct/100*ingotN);
@@ -1045,7 +1053,7 @@ function getNudgeHTML(playerName,sc){
 function pickDay(t){
   if(t==='today'){
     const now=new Date();
-    if(now.getMonth()+1!==season.month||now.getFullYear()!==season.year){ alert(`Today is not in the active month (${season.month}/${season.year})`); return; }
+    if(now.getMonth()+1!==season.month||now.getFullYear()!==season.year){ toast(`Today is not in the active month (${season.month}/${season.year})`,'error'); return; }
     selDay=now.getDate();
   }
   goS2();
@@ -1072,7 +1080,7 @@ function addCustom(){
   const inp=document.getElementById('custInp');
   const v=inp.value.trim().slice(0,30);   // cap length at 30
   if(!v) return;
-  if(/[<>"'\\]/.test(v)){ alert('Workout name can\'t contain these characters: < > " \' \\'); return; }
+  if(/[<>"'\\]/.test(v)){ toast('Workout name can\'t contain these characters: < > " \' \\','error'); return; }
   if(!selW.includes(v)) selW.push(v);
   inp.value=''; updateSel(); updBtn();
 }
@@ -1129,7 +1137,7 @@ async function submitLog(){
     const si=document.querySelector('#ls3 .succ-icon'); if(si){si.classList.remove('strike-icon');void si.offsetWidth;si.classList.add('strike-icon');}
     fireSparks();
     celebrateLog(sc);
-  } catch(e){ console.error('submitLog failed:',e); alert('Error saving. Check connection.'); btn.disabled=false; btn.textContent='Log Workout'; }
+  } catch(e){ console.error('submitLog failed:',e); toast('Error saving. Check connection.','error'); btn.disabled=false; btn.textContent='Log Workout'; }
 }
 function resetLog(){ selDay=null; selW=[]; ['ls1','ls2','ls3'].forEach((id,i)=>document.getElementById(id).classList[i===0?'remove':'add']('hidden')); document.getElementById('pickerWrap').classList.add('hidden'); showTab('home'); }
 function backToS1(){ document.getElementById('ls1').classList.remove('hidden'); document.getElementById('ls2').classList.add('hidden'); }
@@ -1360,7 +1368,7 @@ function renderAdminRoles(){
 }
 
 async function saveRoles(){
-  if(!season || !seasonId){ alert('This group is still loading — give it a second and try again.'); return; }
+  if(!season || !seasonId){ toast('This group is still loading — give it a second and try again.','error'); return; }
   const ref = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
   try {
     let written=null;
@@ -1380,8 +1388,8 @@ async function saveRoles(){
     if(written){ season.roster=written; const fresh=written.find(p=>p.name===me.name); if(fresh) me=fresh; }
     upsertSession(groupCode, me, groupData?.name);
     renderAdminRoles(); refresh();
-    alert('✅ Roles saved');
-  } catch(e){ logErr('saveRoles', e); alert('❌ Save failed — check connection: '+e.message); }
+    toast('Roles saved.','success');
+  } catch(e){ logErr('saveRoles', e); toast('Save failed — check connection: '+e.message,'error'); }
 }
 
 function renderTwistToggles(){
@@ -1409,10 +1417,28 @@ async function saveTwistConfig(id,key,value){
 }
 async function award30(){
   const p=document.getElementById('aPlayer').value;
-  if(!p){alert('Select player');return;}
-  if(bonus30.find(b=>b.player===p)){alert('Already awarded');return;}
+  if(!p){toast('Select player','error');return;}
+  if(bonus30.find(b=>b.player===p)){toast('Already awarded','error');return;}
   await db.collection('bonuses_30day').add({groupCode,player:p,month:season.month,year:season.year});
-  alert(`✅ +50 pts awarded to ${p}`);
+  toast(`+50 pts awarded to ${p}.`,'success');
+}
+
+async function saveFoundryGoal(){
+  if(!season||!seasonId){ toast('Group still loading — try again in a second.','error'); return; }
+  const raw=document.getElementById('foundryGoalInput').value.trim();
+  const val=raw===''?null:parseInt(raw);
+  if(val!==null&&(isNaN(val)||val<1)){ toast('Enter a positive number, or leave blank to use auto.','error'); return; }
+  try{
+    await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).update({
+      foundryGoal: val===null ? firebase.firestore.FieldValue.delete() : val
+    });
+    season.foundryGoal=val===null?undefined:val;
+    toast(val===null?'Goal reset to auto.':'Season goal set to '+val+' strikes.','success');
+    document.getElementById('foundryGoalInput').value='';
+    const fgi=document.getElementById('foundryGoalInput');
+    if(fgi) fgi.placeholder=val?'Current: '+val+' (edit to change)':'e.g. 200 (auto if blank)';
+    renderHome();
+  }catch(e){ logErr('saveFoundryGoal',e); toast('Save failed — check connection.','error'); }
 }
 
 // Super-admin engagement trends: active people/day + participation rate,
@@ -1566,9 +1592,9 @@ async function superViewGroup(code){
   const gSnap=await db.collection('groups').doc(code).get();
   groupData=gSnap.data();
   const sid=groupData.currentSeasonId;
-  if(!sid){ alert('This group has no active season.'); return; }
+  if(!sid){ toast('This group has no active season.','error'); return; }
   const sSnap=await db.collection('groups').doc(code).collection('seasons').doc(sid).get();
-  if(!sSnap.exists){ alert('Active season missing.'); return; }
+  if(!sSnap.exists){ toast('Active season missing.','error'); return; }
   season=sSnap.data();
   seasonId=sid;
   me=(season.roster&&season.roster[0])||{name:'Admin',team:'A',role:'Player'};
@@ -1592,12 +1618,12 @@ window._editRoster=null;
 async function openEditGroup(code){
   try{
     const gSnap=await db.collection('groups').doc(code).get();
-    if(!gSnap.exists){ alert('Group not found.'); return; }
+    if(!gSnap.exists){ toast('Group not found.','error'); return; }
     const g=gSnap.data();
     const sid=g.currentSeasonId;
-    if(!sid){ alert('Group has no active season.'); return; }
+    if(!sid){ toast('Group has no active season.','error'); return; }
     const sSnap=await db.collection('groups').doc(code).collection('seasons').doc(sid).get();
-    if(!sSnap.exists){ alert('Active season missing.'); return; }
+    if(!sSnap.exists){ toast('Active season missing.','error'); return; }
     const s=sSnap.data();
 
     window._editGroupCode=code;
@@ -1616,7 +1642,7 @@ async function openEditGroup(code){
     document.getElementById('editGroupStatus').textContent='';
     document.getElementById('editGroupModal').classList.remove('hidden');
     document.getElementById('editGroupModal').scrollIntoView({behavior:'smooth',block:'center'});
-  }catch(e){ console.error(e); alert('Could not open settings: '+e.message); }
+  }catch(e){ console.error(e); toast('Could not open settings: '+e.message,'error'); }
 }
 
 function closeEditGroup(){
@@ -1668,29 +1694,29 @@ async function saveEditGroup(){
 // so the archived season stays frozen and the new season starts with a clean board.
 async function startNewSeason(code){
   const gSnap = await db.collection('groups').doc(code).get();
-  if(!gSnap.exists){ alert('Group not found.'); return; }
+  if(!gSnap.exists){ toast('Group not found.','error'); return; }
   const g = gSnap.data();
   const curSid = g.currentSeasonId;
-  if(!curSid){ alert('Group has no active season to roll over from.'); return; }
+  if(!curSid){ toast('Group has no active season to roll over from.','error'); return; }
   const curSnap = await db.collection('groups').doc(code).collection('seasons').doc(curSid).get();
-  if(!curSnap.exists){ alert('Current season doc missing.'); return; }
+  if(!curSnap.exists){ toast('Current season doc missing.','error'); return; }
   const cur = curSnap.data();
 
   // Gather the new season parameters
   const month = parseInt(prompt(`New season — month (1-12)?\n(Current active: ${cur.month}/${cur.year})`));
-  if(!month || month<1 || month>12){ alert('Invalid month.'); return; }
+  if(!month || month<1 || month>12){ toast('Invalid month.','error'); return; }
   const year = parseInt(prompt('New season — year?', cur.year));
-  if(!year){ alert('Invalid year.'); return; }
+  if(!year){ toast('Invalid year.','error'); return; }
   const newSid = seasonIdOf(month, year);
 
-  if(newSid === curSid){ alert('That season is already the active one.'); return; }
+  if(newSid === curSid){ toast('That season is already the active one.','error'); return; }
 
   // Refuse to clobber an existing season doc (guards double-rollover)
   const existing = await db.collection('groups').doc(code).collection('seasons').doc(newSid).get();
-  if(existing.exists){ alert(`A ${newSid} season already exists for this group. Aborting to avoid overwriting it.`); return; }
+  if(existing.exists){ toast(`A ${newSid} season already exists for this group. Aborting to avoid overwriting it.`,'error'); return; }
 
   const days = parseInt(prompt('Days in the new month?', new Date(year, month, 0).getDate()));
-  if(!days){ alert('Invalid day count.'); return; }
+   if(!days){ toast('Invalid day count.','error'); return; }
 
   const carryRoster = confirm('Carry forward the roster (same players, teams, roles)?\n\nOK = carry forward\nCancel = start with empty roster');
   const newRoster = carryRoster ? JSON.parse(JSON.stringify(cur.roster||[])) : [];
@@ -1725,9 +1751,9 @@ async function startNewSeason(code){
 
   try {
     await batch.commit();
-    alert(`✅ ${cur.month}/${cur.year} archived. ${month}/${year} is now the active season${carryRoster?` with ${newRoster.length} players carried over`:' (empty roster)'}.\n\nTip: adjust teams/roles in Admin → Team & Role Assignment if needed.`);
+    toast(`${cur.month}/${cur.year} archived. ${month}/${year} is now live. Adjust teams in Admin if needed.`,'success');
     loadSuperAdmin();
-  } catch(e){ console.error(e); alert('❌ Rollover failed: '+e.message); }
+  } catch(e){ console.error(e); toast('Rollover failed: '+e.message,'error'); }
 }
 function exitSuper(){
   // Leave super admin entirely. If a normal player session exists on this
@@ -1808,7 +1834,7 @@ function todayStamp(){
 }
 async function createGroup(){
   const name=document.getElementById('newGroupName').value.trim();
-  if(!name){alert('Enter a group name');return;}
+  if(!name){toast('Enter a group name','error');return;}
   const month=parseInt(document.getElementById('newGroupMonth').value);
   const year=parseInt(document.getElementById('newGroupYear').value);
   const days=parseInt(document.getElementById('newGroupDays').value);
@@ -1977,14 +2003,14 @@ async function toggleGlobalConsent(val){
     if(written){ season.roster=written; me=written.find(p=>p.name===me.name)||me; }
     upsertSession(groupCode, me, groupData?.name);
     renderGlobalConsent();
-  }catch(e){ logErr('toggleGlobalConsent', e); alert('Could not update preference — check connection.'); renderGlobalConsent(); }
+  }catch(e){ logErr('toggleGlobalConsent', e); toast('Could not update preference — check connection.','error'); renderGlobalConsent(); }
 }
 // ── TABS ──────────────────────────────────────────────────────────────────
 const TABS=['home','log','lb','feed','global','admin'];
 function showTab(t){
   if(t==='admin'&&!adminUnlocked){
     const pin=prompt('Enter admin PIN:');
-    if(pin!==ADMIN_PIN){alert('Wrong PIN');return;}
+    if(pin!==ADMIN_PIN){toast('Wrong PIN','error');return;}
     adminUnlocked=true;
   }
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
