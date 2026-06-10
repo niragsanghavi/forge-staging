@@ -18,6 +18,7 @@
   --green:#16a34a;--green-l:#dcfce7;--orange:#ea580c;--orange-l:#ffedd5;
   --purple:#7c3aed;--purple-l:#ede9fe;--pink:#db2777;--pink-l:#fce7f3;
   --A:#dc2626;--Al:#fee2e2;--B:#2563eb;--Bl:#dbeafe;--C:#16a34a;--Cl:#dcfce7;
+  --bg-card:#ffffff;--bg-card-2:#f3f3f5;--text-muted:#6b7280;--accent:#d97706;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh;overflow-x:hidden;overscroll-behavior-y:none;transition:background .25s,color .25s}
@@ -140,7 +141,7 @@ label{font-size:12px;color:var(--muted);margin-bottom:4px;display:block}
 .lbrank{font-size:16px;font-weight:800;color:var(--muted);width:24px;text-align:center;flex-shrink:0}
 .r1{color:#FFD700}.r2{color:#C0C0C0}.r3{color:#CD7F32}
 .lbinfo{flex:1}
-.lbname{font-size:14px;font-weight:600}
+.lbname{font-size:14px;font-weight:600;color:var(--text)}
 .lbmeta{font-size:11px;color:var(--muted);margin-top:2px}
 .tcard{border-radius:var(--r);padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;border:1px solid var(--border);background:var(--bg-card)}
 .tcard.A{border-left:4px solid var(--A);border-color:var(--border)}.tcard.B{border-left:4px solid var(--B);border-color:var(--border)}.tcard.C{border-left:4px solid var(--C);border-color:var(--border)}
@@ -283,13 +284,14 @@ label{font-size:12px;color:var(--muted);margin-bottom:4px;display:block}
 .consent-tap-card:active{transform:scale(.98)}
 .consent-tap-card.selected{border-color:var(--accent);background:rgba(201,168,76,0.08);box-shadow:0 0 0 2px var(--accent),0 0 12px rgba(201,168,76,0.3)}
 
-/* ── DAY STRIP (Part 4a) ── */
-.day-strip{display:flex;gap:6px;overflow-x:auto;padding:4px 0 8px;-webkit-overflow-scrolling:touch;margin-bottom:6px;scrollbar-width:none}
-.day-strip::-webkit-scrollbar{display:none}
-.day-bubble{flex-shrink:0;width:50px;padding:8px 4px;border-radius:10px;text-align:center;border:2px solid var(--border);background:var(--bg-card);cursor:pointer;transition:all .15s;user-select:none}
-.day-bubble:active{transform:scale(.94)}
-.day-bubble.today{border-color:var(--accent);background:rgba(201,168,76,0.08)}
-.day-bubble.disabled{opacity:.38;cursor:default;pointer-events:none}
+/* ── DAY LIST (vertical, Part 4a) ── */
+.day-row{display:flex;align-items:center;gap:14px;padding:11px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-card);cursor:pointer;transition:all .15s;user-select:none;margin-bottom:6px}
+.day-row:active{transform:scale(.98)}
+.day-row.today{border-color:var(--accent);background:rgba(201,168,76,0.06)}
+.day-row.disabled{opacity:.38;cursor:default;pointer-events:none}
+.day-row-dow{font-size:12px;font-weight:600;color:var(--text-muted);width:30px;flex-shrink:0}
+.day-row-num{font-size:22px;font-weight:800;color:var(--text);width:34px;flex-shrink:0;text-align:right}
+.day-row.today .day-row-dow,.day-row.today .day-row-num{color:var(--accent)}
 
 /* ── FEATURED WORKOUT CHIPS (Part 4b) ── */
 .workout-chip-wrap{margin-bottom:12px}
