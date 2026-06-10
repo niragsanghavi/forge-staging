@@ -1376,7 +1376,7 @@ function renderLB(){
   // 1st = fixed 140px; 2nd/3rd = 60 + (score/firstScore)*80, min 60px
   const firstS = ts[0]?.s || 1;
   const slots = [ts[1]||null, ts[0]||null, ts[2]||null]; // 2nd, 1st, 3rd
-  const medals = ['🥈','🥇','🥉'];
+  const ranks = ['2nd','1st','3rd'];
   const ptsCols = ['#C0C0C0','#FFD700','#CD7F32'];   // silver, gold, bronze
   const ptsSizes = ['18px','22px','15px'];             // 2nd, 1st, 3rd
   const podiumBlocks = slots.map((t,pos)=>{
@@ -1386,7 +1386,7 @@ function renderLB(){
     const bg = t.t==='A'?'var(--Al)':t.t==='B'?'var(--Bl)':'var(--Cl)';
     const names = players.filter(p=>p.team===t.t).map(p=>esc(p.name)).join(', ');
     return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
-      <div style="font-size:${pos===1?'22':'16'}px">${medals[pos]}</div>
+      <div style="font-size:${pos===1?'15':'12'}px;font-weight:800;color:${ptsCols[pos]};letter-spacing:.04em">${ranks[pos]}</div>
       <div style="font-size:${ptsSizes[pos]};font-weight:800;color:${ptsCols[pos]}">${t.s}<span style="font-size:9px;font-weight:600;color:var(--muted)"> pts</span></div>
       <div style="height:${baseH}px;width:100%;background:${bg};border:1.5px solid ${col};border-bottom:none;border-radius:8px 8px 0 0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:10px 6px 0;overflow:hidden">
         <div style="font-size:14px;font-weight:800;color:${col}">Team ${t.t}</div>
