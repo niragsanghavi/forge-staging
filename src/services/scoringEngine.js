@@ -54,16 +54,16 @@ function score(playerName, ctx){
   const sb = 0;
 
   // ── PERFECT WEEK ──
-  const firstDate = new Date(year, month-1, 1);
-  const firstDOW = firstDate.getDay()===0 ? 6 : firstDate.getDay()-1;
-  const fullWeeks = [];
-  let weekStart = 1 + (7-firstDOW)%7;
-  while(weekStart+6<=DAYS){ fullWeeks.push([weekStart,weekStart+6]); weekStart+=7; }
+  // Rolling non-overlapping 7-day windows within the month.
+  // Slides forward one day at a time; when a complete window is found,
+  // awards +10 and jumps 7 days so no day counts toward two windows.
   let wb = 0;
-  fullWeeks.forEach(([s,e])=>{
-    for(let d=s;d<=e;d++){ if(!days.has(d)) return; }
-    wb += 10;
-  });
+  let winStart = 1;
+  while(winStart <= DAYS - 6){
+    let complete = true;
+    for(let i = 0; i < 7; i++){ if(!days.has(winStart + i)){ complete = false; break; } }
+    if(complete){ wb += 10; winStart += 7; } else { winStart += 1; }
+  }
 
   // ── TEAM STREAK ──
   const teamMembers = roster.filter(x=>x.team===p.team);
@@ -138,7 +138,7 @@ function score(playerName, ctx){
     .reduce((sum,b)=> sum + (b.type==='double' ? +b.rawPoints : -b.rawPoints), 0);
 
   const total = Math.max(0, base+sb+wb+rb+tb+b30+bossBonus+pen+dayBonuses+underdogBonus+jackBonus+ipBonus);
-  return {wo,base,sb,wb,rb,tb,b30,pen,bossBonus,dayBonuses,underdogBonus,jackBonus,ipBonus,total,streak,days,fullWeeks};
+  return {wo,base,sb,wb,rb,tb,b30,pen,bossBonus,dayBonuses,underdogBonus,jackBonus,ipBonus,total,streak,days};
 }
 
 function teamTotal(team){

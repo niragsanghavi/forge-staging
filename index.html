@@ -911,7 +911,7 @@ function subscribe(){
       .onSnapshot(s=>{ bets={}; s.docs.forEach(d=>{ bets[d.id]=d.data(); }); renderPledgeStatusCard(); renderIronPledgePage(); renderIronPledgeAdmin(); })
   );
   unsub.push(
-    db.collection('bonuses_iron_pledge').where('groupCode','==',groupCode)
+    db.collection('bonuses_iron_pledge').where('groupCode','==',groupCode).where('month','==',season.month).where('year','==',season.year)
       .onSnapshot(s=>{ ironPledgeBonuses=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); })
   );
 }
@@ -1421,7 +1421,7 @@ function renderLB(){
     <div class="card-title">Your breakdown — ${esc(me.name)}</div>
     ${[
       ['Base points',my.base,`${my.wo} workouts × 5${activeTwists['boss_week']?.enabled?' (×2 Boss Week)':''}`],
-      ['Perfect week',my.wb,'+10 per complete Mon–Sun week'],
+      ['Perfect week',my.wb,'+10 per any 7 consecutive days'],
       ['Team streak',my.tb,'Cumulative +1/+2/+3 (proportional threshold)'],
       ['Role bonus',my.rb,pl.role+' — applied on last day'],
       ['30-day bonus',my.b30,'All days logged'],
@@ -1946,6 +1946,7 @@ async function startNewSeason(code){
 
   try {
     await batch.commit();
+    globalDataCache = null;
     toast(`${cur.month}/${cur.year} archived. ${month}/${year} is now live. Adjust teams in Admin if needed.`,'success');
     loadSuperAdmin();
   } catch(e){ console.error(e); toast('Rollover failed: '+e.message,'error'); }
@@ -2065,6 +2066,7 @@ async function createGroup(){
     endedAt: null
   });
   await batch.commit();
+  globalDataCache = null;
 
   const res=document.getElementById('newGroupResult');
   res.className='warn-box warn-green';
@@ -2124,6 +2126,10 @@ function toggleTheme(){
   document.documentElement.setAttribute('data-theme', saved);
 })();
 
+let globalDataCache = null;
+let globalDataCacheTime = 0;
+const GLOBAL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 // ── GLOBAL LEADERBOARD (cross-group, opt-in) ───────────────────────────────
 // One-shot read (not a live listener). Points use the SAME scoring engine as
 // in-app, passing each group's data as ctx. Only players who opted in appear.
@@ -2136,70 +2142,83 @@ async function loadGlobal(){
   const grpEl=document.getElementById('globalGroups');
   const ptsEl=document.getElementById('globalPoints');
   if(!actEl||!grpEl||!ptsEl) return;
+  const now=Date.now();
+  if(globalDataCache && (now-globalDataCacheTime)<GLOBAL_CACHE_TTL){
+    renderGlobalFromCache(globalDataCache);
+    return;
+  }
   actEl.innerHTML=grpEl.innerHTML=ptsEl.innerHTML='<div class="tmuted">Loading…</div>';
   try{
     const gSnap=await db.collection('groups').get();
     const groups=gSnap.docs.map(d=>({code:d.id,...d.data()}));
     const logsSnap=await db.collection('logs').get();
-    const allLogsArr=logsSnap.docs.map(d=>({id:d.id,...d.data()}));
+    const logs=logsSnap.docs.map(d=>({id:d.id,...d.data()}));
     const bonusSnap=await db.collection('bonuses_30day').get();
-    const allBonuses=bonusSnap.docs.map(d=>d.data());
-
-    // Most active groups today
-    const now=new Date();
-    const startOfDay=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-    const perGroup={};
-    allLogsArr.forEach(l=>{
-      const ts=l.timestamp?.seconds?new Date(l.timestamp.seconds*1000):null;
-      if(ts&&ts>=startOfDay) perGroup[l.groupCode]=(perGroup[l.groupCode]||0)+1;
-    });
-    const activeRanked=Object.entries(perGroup)
-      .map(([code,count])=>({name:groups.find(g=>g.code===code)?.name||code,count}))
-      .sort((a,b)=>b.count-a.count).slice(0,5);
-    actEl.innerHTML = activeRanked.length===0
-      ? '<div class="tmuted">No workouts logged anywhere yet today.</div>'
-      : activeRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(g.name)}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--green)">${g.count}</div><div style="font-size:10px;color:var(--muted)">logs today</div></div></div>`).join('');
-
-    // Score every group's active season once → group aggregates + consented players
-    const groupAgg=[];
-    const playerEntries=[];
+    const bonuses=bonusSnap.docs.map(d=>d.data());
+    const groupSeasons={};
     for(const g of groups){
       const sid=g.currentSeasonId; if(!sid) continue;
       const sSnap=await db.collection('groups').doc(g.code).collection('seasons').doc(sid).get();
       if(!sSnap.exists) continue;
       const sData=sSnap.data();
-      const roster=sData.roster||[];
-      if(roster.length===0) continue;
+      if(!(sData.roster||[]).length) continue;
       const twSnap=await db.collection('groups').doc(g.code).collection('seasons').doc(sid).collection('twists').get();
       const twists={}; twSnap.docs.forEach(t=>{twists[t.id]=t.data();});
-      const ctx={
-        season:sData,
-        logs:allLogsArr.filter(l=>l.groupCode===g.code&&l.month===sData.month&&l.year===sData.year),
-        twists,
-        bonuses:allBonuses.filter(b=>b.groupCode===g.code&&b.month===sData.month&&b.year===sData.year)
-      };
-      let groupTotal=0;
-      roster.forEach(p=>{
-        const t=score(p.name, ctx).total;
-        groupTotal+=t;
-        if(p.globalConsent===true) playerEntries.push({name:p.name, group:g.name, points:t});
-      });
-      groupAgg.push({name:g.name, total:groupTotal, count:roster.length, avg:Math.round(groupTotal/roster.length)});
+      groupSeasons[g.code]={sData,twists};
     }
-
-    // Top groups by avg points / player (total shown alongside)
-    const grpRanked=groupAgg.sort((a,b)=>b.avg-a.avg).slice(0,5);
-    grpEl.innerHTML = grpRanked.length===0
-      ? '<div class="tmuted">No groups yet.</div>'
-      : grpRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(g.name)}</div><div class="lbmeta">${g.count} players · ${g.total} total pts</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${g.avg}</div><div style="font-size:10px;color:var(--muted)">avg/player</div></div></div>`).join('');
-
-    // Individual points — opt-in only
-    playerEntries.sort((a,b)=>b.points-a.points);
-    const top=playerEntries.slice(0,5);
-    ptsEl.innerHTML = top.length===0
-      ? '<div class="tmuted">No one has opted in yet. Turn on "Show me on the global leaderboard" on your Home screen to appear here.</div>'
-      : top.map((e,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(e.name)}</div><div class="lbmeta">${esc(e.group)}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${e.points}</div><div style="font-size:10px;color:var(--muted)">pts</div></div></div>`).join('');
+    globalDataCache={groups,logs,bonuses,groupSeasons};
+    globalDataCacheTime=Date.now();
+    renderGlobalFromCache(globalDataCache);
   }catch(e){ console.error('loadGlobal failed:',e); actEl.innerHTML='<div class="tmuted">Could not load global stats. Check connection.</div>'; grpEl.innerHTML=''; ptsEl.innerHTML=''; }
+}
+
+function renderGlobalFromCache({groups,logs,bonuses,groupSeasons}){
+  const actEl=document.getElementById('globalActive');
+  const grpEl=document.getElementById('globalGroups');
+  const ptsEl=document.getElementById('globalPoints');
+  if(!actEl||!grpEl||!ptsEl) return;
+  const now=new Date();
+  const startOfDay=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const perGroup={};
+  logs.forEach(l=>{
+    const ts=l.timestamp?.seconds?new Date(l.timestamp.seconds*1000):null;
+    if(ts&&ts>=startOfDay) perGroup[l.groupCode]=(perGroup[l.groupCode]||0)+1;
+  });
+  const activeRanked=Object.entries(perGroup)
+    .map(([code,count])=>({name:groups.find(g=>g.code===code)?.name||code,count}))
+    .sort((a,b)=>b.count-a.count).slice(0,5);
+  actEl.innerHTML=activeRanked.length===0
+    ?'<div class="tmuted">No workouts logged anywhere yet today.</div>'
+    :activeRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(g.name)}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--green)">${g.count}</div><div style="font-size:10px;color:var(--muted)">logs today</div></div></div>`).join('');
+  const groupAgg=[];
+  const playerEntries=[];
+  for(const g of groups){
+    const gs=groupSeasons[g.code]; if(!gs) continue;
+    const {sData,twists}=gs;
+    const roster=sData.roster||[];
+    const ctx={
+      season:sData,
+      logs:logs.filter(l=>l.groupCode===g.code&&l.month===sData.month&&l.year===sData.year),
+      twists,
+      bonuses:bonuses.filter(b=>b.groupCode===g.code&&b.month===sData.month&&b.year===sData.year)
+    };
+    let groupTotal=0;
+    roster.forEach(p=>{
+      const t=score(p.name,ctx).total;
+      groupTotal+=t;
+      if(p.globalConsent===true) playerEntries.push({name:p.name,group:g.name,points:t});
+    });
+    groupAgg.push({name:g.name,total:groupTotal,count:roster.length,avg:Math.round(groupTotal/roster.length)});
+  }
+  const grpRanked=groupAgg.sort((a,b)=>b.avg-a.avg).slice(0,5);
+  grpEl.innerHTML=grpRanked.length===0
+    ?'<div class="tmuted">No groups yet.</div>'
+    :grpRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(g.name)}</div><div class="lbmeta">${g.count} players · ${g.total} total pts</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${g.avg}</div><div style="font-size:10px;color:var(--muted)">avg/player</div></div></div>`).join('');
+  playerEntries.sort((a,b)=>b.points-a.points);
+  const top=playerEntries.slice(0,5);
+  ptsEl.innerHTML=top.length===0
+    ?'<div class="tmuted">No one has opted in yet. Turn on "Show me on the global leaderboard" on your Home screen to appear here.</div>'
+    :top.map((e,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(e.name)}</div><div class="lbmeta">${esc(e.group)}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${e.points}</div><div style="font-size:10px;color:var(--muted)">pts</div></div></div>`).join('');
 }
 
 // Self-serve opt-in for the global points board. Default OFF (privacy-first).
@@ -2446,7 +2465,7 @@ async function calculateIronPledgeResults(){
       const type=daysLogged>=betData.pledge?'double':'zero';
       batch.set(db.collection('bonuses_iron_pledge').doc(),{
         player:playerName, pledge:betData.pledge, actual:daysLogged,
-        week:weekStr, groupCode, type, rawPoints,
+        week:weekStr, groupCode, month:season.month, year:season.year, type, rawPoints,
         calculatedAt:firebase.firestore.FieldValue.serverTimestamp()
       });
     }
