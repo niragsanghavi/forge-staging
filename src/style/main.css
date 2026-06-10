@@ -1,11 +1,13 @@
 /* ── DARK THEME (default) ── */
 :root, :root[data-theme="dark"] {
-  --bg:#0c0c11;--surface:#15151c;--card:#1b1b23;--border:rgba(255,255,255,0.08);
-  --text:#f2f0ee;--muted:#8d877e;--gold:#d4af37;--gold-l:#1a1505;
-  --red:#ef4444;--red-l:#1c0707;--blue:#3b82f6;--blue-l:#070f1c;
-  --green:#22c55e;--green-l:#071a0d;--orange:#ff5a1f;--orange-l:#1f0c04;
+  --bg:#0f0f0f;--bg-card:#1a1a1a;--bg-card-2:#222222;
+  --surface:#222222;--card:#1a1a1a;--border:#2a2a2a;
+  --text:#f0f0f0;--text-muted:#888888;--muted:#888888;
+  --accent:#c9a84c;--gold:#c9a84c;--gold-l:#1a1505;
+  --red:#e05555;--red-l:#1c0707;--blue:#4c8fe0;--blue-l:#070f1c;
+  --green:#4caf7d;--green-l:#071a0d;--orange:#ff5a1f;--orange-l:#1f0c04;
   --purple:#a855f7;--purple-l:#130a1c;--pink:#ec4899;--pink-l:#1c0710;
-  --A:#ef4444;--Al:#1c0707;--B:#3b82f6;--Bl:#070f1c;--C:#22c55e;--Cl:#071a0d;
+  --A:#e05555;--Al:#1c0707;--B:#4c8fe0;--Bl:#070f1c;--C:#4caf7d;--Cl:#071a0d;
   --r:12px;--font:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
 }
 /* ── LIGHT THEME ── */
@@ -61,7 +63,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:1
 @keyframes pageIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
 /* ── CARDS ── */
-.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:14px;box-shadow:0 2px 16px rgba(0,0,0,0.35)}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:14px;box-shadow:0 2px 16px rgba(0,0,0,0.35)}
 .card-title{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px}
 
 /* ── BUTTONS ── */
@@ -117,14 +119,14 @@ label{font-size:12px;color:var(--muted);margin-bottom:4px;display:block}
 .nudge-text strong{color:var(--green)}
 
 /* ── STREAK CARD ── */
-.streak-card-highlight{background:var(--gold-l);border:1.5px solid var(--gold);border-radius:var(--r);padding:14px;margin-bottom:12px;text-align:center}
+.streak-card-highlight{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:12px;text-align:center}
 .streak-num{font-size:32px;font-weight:900;color:var(--orange);margin-bottom:4px}
 .streak-msg{font-size:13px;color:var(--text);font-weight:600;line-height:1.4}
 
 /* ── FACT CARD ── */
-.fact-card{background:var(--purple-l);border:1px solid var(--purple);border-radius:var(--r);padding:13px 14px;margin-bottom:12px;display:flex;gap:10px;align-items:flex-start}
-.fact-icon{font-size:18px;flex-shrink:0}
-.fact-text{font-size:12px;color:var(--purple);font-weight:500;line-height:1.5}
+.fact-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;margin-bottom:12px;display:flex;gap:10px;align-items:flex-start}
+.fact-icon{font-size:14px;flex-shrink:0}
+.fact-text{font-size:0.8rem;color:var(--text-muted);font-weight:500;line-height:1.5}
 
 /* ── STATS ── */
 .srow{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
@@ -140,16 +142,16 @@ label{font-size:12px;color:var(--muted);margin-bottom:4px;display:block}
 .lbinfo{flex:1}
 .lbname{font-size:14px;font-weight:600}
 .lbmeta{font-size:11px;color:var(--muted);margin-top:2px}
-.tcard{border-radius:var(--r);padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;border:1px solid var(--border)}
-.tcard.A{background:var(--Al);border-color:var(--A)}.tcard.B{background:var(--Bl);border-color:var(--B)}.tcard.C{background:var(--Cl);border-color:var(--C)}
+.tcard{border-radius:var(--r);padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;border:1px solid var(--border);background:var(--bg-card)}
+.tcard.A{border-left:4px solid var(--A);border-color:var(--border)}.tcard.B{border-left:4px solid var(--B);border-color:var(--border)}.tcard.C{border-left:4px solid var(--C);border-color:var(--border)}
 .tcname{font-size:15px;font-weight:700}
 .tcard.A .tcname{color:var(--A)}.tcard.B .tcname{color:var(--B)}.tcard.C .tcname{color:var(--C)}
 
 /* ── CALENDAR ── */
-.cg{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.cg{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
 .cdh{font-size:10px;color:var(--muted);text-align:center;padding:4px 0}
 .cd{aspect-ratio:1;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;background:var(--surface);border:1px solid var(--border);cursor:default;position:relative}
-.cd.logged{background:var(--green-l);border-color:var(--green);color:var(--green);cursor:pointer}
+.cd.logged{background:var(--green-l);border-color:var(--green);color:var(--green);cursor:pointer;box-shadow:inset 0 2px 4px rgba(0,0,0,0.4)}
 .cd.today{border-color:var(--gold);color:var(--gold);font-weight:700}
 .cd.empty{background:transparent;border-color:transparent}
 .cal-tip{position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#1a1a2e;color:#fff;font-size:10px;font-weight:600;padding:5px 8px;border-radius:7px;z-index:99;max-width:160px;white-space:normal;line-height:1.4;text-align:center;pointer-events:none}
@@ -227,11 +229,11 @@ label{font-size:12px;color:var(--muted);margin-bottom:4px;display:block}
 /* ════════════════ FOUNDRY ════════════════ */
 
 /* — THE STEEL (personal hero) — */
-.steel-hero{position:relative;background:linear-gradient(160deg,#1b1b23 0%,#15151c 100%);border:1px solid var(--border);border-radius:20px;padding:22px 20px 20px;overflow:hidden;margin-bottom:14px}
+.steel-hero{position:relative;background:linear-gradient(160deg,#1b1b23 0%,#15151c 100%);border:1px solid var(--border);border-radius:20px;padding:28px 24px 26px;overflow:hidden;margin-bottom:14px}
 .steel-hero::before{content:'';position:absolute;inset:0;background:radial-gradient(120% 80% at 50% -10%,rgba(212,175,55,0.10),transparent 60%);pointer-events:none}
 .steel-rank{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--gold);background:var(--gold-l);border:1px solid rgba(212,175,55,.25);padding:5px 11px;border-radius:999px;position:relative}
 .steel-label{font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:16px 0 2px}
-.steel-pts{font-size:60px;line-height:1;font-weight:800;letter-spacing:-.02em;color:var(--text);font-variant-numeric:tabular-nums}
+.steel-pts{font-size:78px;line-height:1;font-weight:800;letter-spacing:-.02em;color:var(--text);font-variant-numeric:tabular-nums}
 .steel-pts .u{font-size:20px;font-weight:600;color:var(--muted);margin-left:6px;letter-spacing:0}
 .steel-behind{margin-top:14px;font-size:13.5px;color:var(--text);background:var(--orange-l);border:1px solid rgba(255,90,31,.22);border-radius:12px;padding:10px 13px;line-height:1.45}
 .steel-behind strong{color:var(--orange)}
@@ -276,6 +278,39 @@ label{font-size:12px;color:var(--muted);margin-bottom:4px;display:block}
 .spark{position:fixed;top:0;left:0;width:7px;height:7px;border-radius:50%;pointer-events:none;z-index:9999;animation:sparkFly var(--sdur,.9s) ease-out forwards}
 .cu{font-variant-numeric:tabular-nums}
 
-/* ── LOG BUTTON PRESS SPRING ── */
-#subBtn{transition:transform .18s cubic-bezier(.34,1.56,.64,1)}
-#subBtn:active{transform:scale(.95)!important}
+/* ── CONSENT TAP CARD (Part 2b) ── */
+.consent-tap-card{display:flex;align-items:center;gap:12px;padding:14px;border-radius:var(--r);border:1.5px solid var(--border);background:var(--bg-card-2);transition:all .2s;cursor:pointer}
+.consent-tap-card:active{transform:scale(.98)}
+.consent-tap-card.selected{border-color:var(--accent);background:rgba(201,168,76,0.08);box-shadow:0 0 0 2px var(--accent),0 0 12px rgba(201,168,76,0.3)}
+
+/* ── DAY STRIP (Part 4a) ── */
+.day-strip{display:flex;gap:6px;overflow-x:auto;padding:4px 0 8px;-webkit-overflow-scrolling:touch;margin-bottom:6px;scrollbar-width:none}
+.day-strip::-webkit-scrollbar{display:none}
+.day-bubble{flex-shrink:0;width:50px;padding:8px 4px;border-radius:10px;text-align:center;border:2px solid var(--border);background:var(--bg-card);cursor:pointer;transition:all .15s;user-select:none}
+.day-bubble:active{transform:scale(.94)}
+.day-bubble.today{border-color:var(--accent);background:rgba(201,168,76,0.08)}
+.day-bubble.disabled{opacity:.38;cursor:default;pointer-events:none}
+
+/* ── FEATURED WORKOUT CHIPS (Part 4b) ── */
+.workout-chip-wrap{margin-bottom:12px}
+.workout-feat-grid{display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:10px}
+.workout-feat-card{padding:12px 14px;border-radius:12px;font-size:14px;font-weight:600;background:var(--bg-card-2);border:1.5px solid var(--border);cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:8px;user-select:none;color:var(--text)}
+.workout-feat-card:active{transform:scale(.97)}
+.workout-feat-card.sel{background:var(--blue-l);border-color:var(--blue);color:var(--blue)}
+.workout-feat-card.mine{border-color:var(--accent)}
+.chip svg,.workout-feat-card svg{stroke:var(--text-muted);flex-shrink:0;transition:stroke .15s}
+.chip.sel svg{stroke:var(--blue)}
+.workout-feat-card.sel svg{stroke:var(--blue)}
+
+/* ── LOG BUTTON (sticky FAB) ── */
+#subBtn{
+  position:fixed;bottom:calc(70px + env(safe-area-inset-bottom));
+  left:50%;transform:translateX(-50%);
+  width:calc(100% - 48px);max-width:400px;
+  z-index:100;border-radius:14px;margin:0;
+  transition:transform .18s cubic-bezier(.34,1.56,.64,1);
+}
+#subBtn:active{transform:translateX(-50%) scale(.95)!important}
+/* gradient backdrop — only visible while ls2 is shown */
+#ls2::after{content:'';position:fixed;bottom:0;left:0;right:0;height:130px;background:linear-gradient(to bottom,transparent,var(--bg) 65%);pointer-events:none;z-index:99}
+#ls2{padding-bottom:90px}

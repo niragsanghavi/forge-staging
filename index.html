@@ -95,11 +95,11 @@
       <div style="font-size:22px;font-weight:800" id="hGreet"></div>
       <div style="font-size:13px;color:var(--muted);margin-top:3px" id="hDate"></div>
     </div>
-    <div id="factCard"></div>
     <div id="heroCard"></div>
     <div id="pledgeStatusCard"></div>
     <div id="goalRingCard"></div>
     <div id="nudgeCard"></div>
+    <div id="factCard"></div>
     <div id="streakCardHighlight"></div>
     <div id="roleBar"></div>
     <div class="srow" id="hStats"></div>
@@ -120,10 +120,12 @@
   <div class="page" id="page-log">
     <div style="padding:8px 0 14px;font-size:20px;font-weight:800">Log Workout</div>
     <div id="ls1">
-      <div class="card-title">Which day?</div>
-      <button class="btn btn-gold" onclick="pickDay('today')">Today</button>
-      <button class="btn btn-surface" onclick="showPicker()">Another day</button>
-      <div id="pickerWrap" class="hidden" style="margin-top:8px">
+      <div class="card-title" style="margin-bottom:10px">Which day?</div>
+      <div id="dayStrip" class="day-strip"></div>
+      <div style="text-align:center;margin-top:2px">
+        <span onclick="showPicker()" style="font-size:12px;color:var(--accent);cursor:pointer;opacity:.8">Earlier date?</span>
+      </div>
+      <div id="pickerWrap" class="hidden" style="margin-top:10px">
         <input type="date" id="dpick" onchange="pickDayFromInput()">
       </div>
     </div>
@@ -136,7 +138,7 @@
         <button class="btn btn-surface btn-sm" onclick="backToS1()">Change</button>
       </div>
       <div class="card-title">What did you do? <span style="color:var(--muted);text-transform:none;font-weight:400;font-size:11px">tap multiple</span></div>
-      <div class="chips" id="wChips"></div>
+      <div id="wChips"></div>
       <input type="text" id="custInp" placeholder="Type something new..." onkeydown="if(event.key==='Enter')addCustom()">
       <button class="btn btn-surface btn-sm" onclick="addCustom()" style="margin-bottom:16px">Add</button>
       <div id="selPrev" class="hidden">
@@ -1222,6 +1224,26 @@ function pickDay(t){
 }
 function showPicker(){ document.getElementById('pickerWrap').classList.remove('hidden'); }
 function pickDayFromInput(){ const v=document.getElementById('dpick').value; if(!v) return; selDay=new Date(v).getDate(); goS2(); }
+function pickDayFromStrip(day){ selDay=day; goS2(); }
+function buildDayStrip(){
+  const el=document.getElementById('dayStrip');
+  if(!el) return;
+  if(!season){ el.innerHTML=''; return; }
+  const today=new Date();
+  const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const bubbles=[];
+  for(let i=6;i>=0;i--){
+    const d=new Date(today); d.setDate(today.getDate()-i);
+    const dayNum=d.getDate();
+    const inSeason=d.getMonth()+1===season.month&&d.getFullYear()===season.year;
+    const isToday=i===0;
+    bubbles.push(`<div class="day-bubble${isToday?' today':''}${!inSeason?' disabled':''}" onclick="${inSeason?`pickDayFromStrip(${dayNum})`:''}">
+      <div style="font-size:10px;font-weight:600;color:${isToday?'var(--accent)':'var(--text-muted)'}">${DOW[d.getDay()]}</div>
+      <div style="font-size:18px;font-weight:800;color:${isToday?'var(--accent)':'var(--text)'}">${dayNum}</div>
+    </div>`);
+  }
+  el.innerHTML=bubbles.join('');
+}
 function goS2(){
   document.getElementById('ls1').classList.add('hidden');
   document.getElementById('ls2').classList.remove('hidden');
@@ -1232,10 +1254,42 @@ function goS2(){
   document.getElementById('lExisting').textContent=ex.length?`Already logged: ${ex.join(', ')}`:'';
   buildChips(); selW=[]; updateSel(); updBtn();
 }
+const _WO_ICONS={
+  'Gym':`<path d="M4 12h16M6 9v6M18 9v6" stroke-linecap="round"/><rect x="2" y="11" width="4" height="2" rx="1" fill="currentColor" stroke="none"/><rect x="18" y="11" width="4" height="2" rx="1" fill="currentColor" stroke="none"/>`,
+  'Weight training':`<path d="M4 12h16M6 9v6M18 9v6" stroke-linecap="round"/><rect x="2" y="11" width="4" height="2" rx="1" fill="currentColor" stroke="none"/><rect x="18" y="11" width="4" height="2" rx="1" fill="currentColor" stroke="none"/>`,
+  'Strength training':`<path d="M4 12h16M6 9v6M18 9v6" stroke-linecap="round"/><rect x="2" y="11" width="4" height="2" rx="1" fill="currentColor" stroke="none"/><rect x="18" y="11" width="4" height="2" rx="1" fill="currentColor" stroke="none"/>`,
+  'Run':`<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>`,
+  'Walk':`<circle cx="12" cy="5" r="2" fill="currentColor" stroke="none"/><path d="M9 22l2-7 1.5 3 1.5-3 2 7M8 13l4-6 4 6" stroke-linecap="round" stroke-linejoin="round"/>`,
+  'Padel':`<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>`,
+  'Tennis':`<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>`,
+  'Yoga':`<circle cx="12" cy="5" r="2" fill="currentColor" stroke="none"/><path d="M7 13h10M9 10l-2 3M15 10l2 3M9 10h6" stroke-linecap="round" stroke-linejoin="round"/>`,
+  'Cycling':`<circle cx="6" cy="15" r="4"/><circle cx="18" cy="15" r="4"/><path d="M7 9h5l3 6" stroke-linecap="round"/>`,
+  'Spinning':`<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3" stroke-linecap="round"/>`,
+  'Swimming':`<path d="M2 10c2-2 4-2 6 0 2 2 4 2 6 0 2-2 4-2 6 0M2 16c2-2 4-2 6 0 2 2 4 2 6 0 2-2 4-2 6 0" stroke-linecap="round"/>`,
+};
+function _woIcon(w){
+  const c=_WO_ICONS[w]; if(!c) return '';
+  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">${c}</svg>`;
+}
 function buildChips(){
-  const mine=[...new Set(allLogs.filter(l=>l.player===me.name).flatMap(l=>l.workouts||[l.workout]).filter(Boolean))];
-  const all=[...new Set([...mine,...COMMON_WORKOUTS])];
-  document.getElementById('wChips').innerHTML=all.map(w=>`<div class="chip${mine.includes(w)?' mine':''}" onclick="toggleChip(this,'${w.replace(/'/g,"\\'")}')">${esc(w)}</div>`).join('');
+  const playerLogs=allLogs.filter(l=>l.player===me.name);
+  const freq={};
+  playerLogs.forEach(l=>{ (l.workouts||[l.workout]||[]).filter(Boolean).forEach(w=>{freq[w]=(freq[w]||0)+1;}); });
+  const mine=[...new Set(playerLogs.flatMap(l=>l.workouts||[l.workout]).filter(Boolean))];
+  const hasHistory=Object.keys(freq).length>0;
+  let all=[...new Set([...mine,...COMMON_WORKOUTS])];
+  let featured=[], regular=all;
+  if(hasHistory){
+    all.sort((a,b)=>(freq[b]||0)-(freq[a]||0));
+    const topN=Math.min(3,all.filter(w=>(freq[w]||0)>0).length);
+    featured=all.slice(0,topN);
+    regular=all.slice(topN);
+  }
+  const mkFeat=w=>{const s=w.replace(/'/g,"\\'");return `<div class="workout-feat-card${mine.includes(w)?' mine':''}" onclick="toggleChip(this,'${s}')">${_woIcon(w)}<span>${esc(w)}</span></div>`;};
+  const mkChip=w=>{const s=w.replace(/'/g,"\\'");return `<div class="chip${mine.includes(w)?' mine':''}" onclick="toggleChip(this,'${s}')" style="display:flex;align-items:center;gap:5px">${_woIcon(w)}<span>${esc(w)}</span></div>`;};
+  const featHTML=featured.length?`<div class="workout-feat-grid">${featured.map(mkFeat).join('')}</div>`:'';
+  const chipHTML=`<div class="chips" style="margin-bottom:0">${regular.map(mkChip).join('')}</div>`;
+  document.getElementById('wChips').innerHTML=featHTML+chipHTML;
 }
 function toggleChip(el,w){ el.classList.toggle('sel'); if(el.classList.contains('sel')){if(!selW.includes(w))selW.push(w);}else{selW=selW.filter(x=>x!==w);} updateSel(); updBtn(); }
 function addCustom(){
@@ -1383,12 +1437,11 @@ function renderLB(){
     if(!t) return `<div style="flex:1"></div>`;
     const baseH = pos===1 ? 140 : Math.max(60, Math.round(60 + (t.s/firstS)*80));
     const col = tcol(t.t);
-    const bg = t.t==='A'?'var(--Al)':t.t==='B'?'var(--Bl)':'var(--Cl)';
     const names = players.filter(p=>p.team===t.t).map(p=>esc(p.name)).join(', ');
     return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
       <div style="font-size:${pos===1?'15':'12'}px;font-weight:800;color:${ptsCols[pos]};letter-spacing:.04em">${ranks[pos]}</div>
       <div style="font-size:${ptsSizes[pos]};font-weight:800;color:${ptsCols[pos]}">${t.s}<span style="font-size:9px;font-weight:600;color:var(--muted)"> pts</span></div>
-      <div style="height:${baseH}px;width:100%;background:${bg};border:1.5px solid ${col};border-bottom:none;border-radius:8px 8px 0 0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:10px 6px 0;overflow:hidden">
+      <div style="height:${baseH}px;width:100%;background:var(--bg-card);border:1px solid var(--border);border-left:4px solid ${col};border-bottom:none;border-radius:8px 8px 0 0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:10px 6px 0;overflow:hidden">
         <div style="font-size:14px;font-weight:800;color:${col}">Team ${t.t}</div>
         <div style="font-size:9px;color:var(--muted);text-align:center;margin-top:5px;line-height:1.35;word-break:break-word">${names}</div>
         <div style="font-size:9px;color:var(--muted);margin-top:4px">${t.count} members</div>
@@ -1399,11 +1452,17 @@ function renderLB(){
     <div style="display:flex;align-items:flex-end;gap:3px">${podiumBlocks}</div>
     <div style="height:3px;background:linear-gradient(90deg,var(--B),var(--gold),var(--A));border-radius:0 0 6px 6px;margin-bottom:16px"></div>`;
 
+  const _rankBadge=i=>{
+    if(i===0) return `<svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="9" fill="none" stroke="#FFD700" stroke-width="2"/><text x="10" y="14" text-anchor="middle" fill="#FFD700" font-size="10" font-family="sans-serif">1</text></svg>`;
+    if(i===1) return `<svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="9" fill="none" stroke="#C0C0C0" stroke-width="2"/><text x="10" y="14" text-anchor="middle" fill="#C0C0C0" font-size="10" font-family="sans-serif">2</text></svg>`;
+    if(i===2) return `<svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="9" fill="none" stroke="#CD7F32" stroke-width="2"/><text x="10" y="14" text-anchor="middle" fill="#CD7F32" font-size="10" font-family="sans-serif">3</text></svg>`;
+    return `<div class="lbrank" style="color:var(--text-muted)">${i+1}</div>`;
+  };
   const ind=players.map(p=>({...p,sc:score(p.name)})).sort((a,b)=>b.sc.total-a.sc.total);
   const myName=me.name;
   document.getElementById('indLb').innerHTML=ind.map((p,i)=>`
-    <div class="lbrow" style="${p.name===myName?'background:rgba(245,158,11,0.06);margin:0 -16px;padding:12px 16px;border-radius:8px':''}">
-      <div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div>
+    <div class="lbrow" style="${p.name===myName?'background:rgba(201,168,76,0.06);margin:0 -16px;padding:12px 16px;border-radius:8px':''}">
+      ${_rankBadge(i)}
       <div style="width:34px;height:34px;border-radius:50%;background:${p.team==='A'?'var(--Al)':p.team==='B'?'var(--Bl)':'var(--Cl)'};border:1.5px solid ${tcol(p.team)};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:${tcol(p.team)};flex-shrink:0">${esc(p.name[0])}</div>
       <div class="lbinfo">
         <div class="lbname">${esc(p.name)}${p.name===myName?' <span style="font-size:10px;color:var(--green);font-weight:700">· you</span>':''} <span class="rbadge ${p.role==='Captain'?'rCaptain':p.role==='Vice Captain'?'rVC':'rPlayer'}">${p.role}</span></div>
@@ -2226,9 +2285,12 @@ function renderGlobalConsent(){
   const el=document.getElementById('globalConsentCard');
   if(!el||!me) return;
   const on = !!me.globalConsent;
-  el.innerHTML=`<div class="row">
-    <div style="flex:1;margin-right:12px"><div style="font-size:14px;font-weight:600">Show me on the global leaderboard</div><div class="tmuted" style="font-size:12px">Your name, group and points become visible to every Forge group. Off by default.</div></div>
-    <div class="toggle${on?' on':''}" onclick="toggleGlobalConsent(${!on})"></div>
+  el.innerHTML=`<div class="consent-tap-card${on?' selected':''}" onclick="toggleGlobalConsent(${!on})">
+    <div style="flex:1">
+      <div style="font-size:14px;font-weight:600;color:${on?'var(--text)':'var(--text-muted)'}">${on?'Visible on global leaderboard':'Show me on the global leaderboard'}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:3px">Your name, group and points become visible to every Forge group.</div>
+    </div>
+    <div style="font-size:12px;font-weight:800;letter-spacing:.06em;color:${on?'var(--accent)':'var(--text-muted)'}">${on?'ON':'OFF'}</div>
   </div>`;
 }
 async function toggleGlobalConsent(val){
@@ -2515,6 +2577,7 @@ function showTab(t){
   window.scrollTo(0,0);
   if(t==='global') loadGlobal();
   if(t==='pledge') renderIronPledgePage();
+  if(t==='log') buildDayStrip();
   trackTabClick(t); // fire-and-forget — no await
 }
 
