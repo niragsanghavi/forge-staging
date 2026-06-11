@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <title>Forge</title>
 <link rel="stylesheet" href="src/style/main.css">
-<meta name="theme-color" content="#0a0a0f">
+<meta name="theme-color" content="#0a0a0d">
 <link rel="manifest" href="manifest.json">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Forge">
 <link rel="apple-touch-icon" href="icon-180.png">
 </head>
@@ -91,9 +91,9 @@
 
   <!-- HOME -->
   <div class="page active" id="page-home">
-    <div style="padding:8px 0 14px">
-      <div style="font-size:22px;font-weight:800" id="hGreet"></div>
-      <div style="font-size:13px;color:var(--muted);margin-top:3px" id="hDate"></div>
+    <div style="padding:12px 0 16px">
+      <div style="font-size:28px;font-weight:800;letter-spacing:-.022em;line-height:1.15" id="hGreet"></div>
+      <div style="font-size:13px;color:var(--muted);margin-top:4px" id="hDate"></div>
     </div>
     <div id="heroCard"></div>
     <div id="pledgeStatusCard"></div>
@@ -118,7 +118,7 @@
 
   <!-- LOG -->
   <div class="page" id="page-log">
-    <div style="padding:8px 0 14px;font-size:20px;font-weight:800">Log Workout</div>
+    <div class="page-title">Log Workout</div>
     <div id="ls1">
       <div class="card-title" style="margin-bottom:10px">Which day?</div>
       <div id="dayStrip"></div>
@@ -161,7 +161,7 @@
 
   <!-- LEADERBOARD -->
   <div class="page" id="page-lb">
-    <div style="padding:8px 0 14px;font-size:20px;font-weight:800">Leaderboard</div>
+    <div class="page-title">Leaderboard</div>
     <div class="shdr">Team Standings</div>
     <div id="teamStand"></div>
     <div class="shdr">Individual Rankings</div>
@@ -172,13 +172,13 @@
 
   <!-- FEED -->
   <div class="page" id="page-feed">
-    <div style="padding:8px 0 14px;font-size:20px;font-weight:800">Activity Feed</div>
+    <div class="page-title">Activity Feed</div>
     <div class="card" id="feedList"></div>
   </div>
 
   <!-- GLOBAL -->
   <div class="page" id="page-global">
-    <div style="padding:8px 0 4px;font-size:20px;font-weight:800">Global</div>
+    <div class="page-title" style="padding-bottom:4px">Global</div>
     <div class="tmuted" style="margin-bottom:16px;font-size:12px">Across every Forge group</div>
     <div class="shdr">Most Active Groups Today</div>
     <div class="card" id="globalActive"><div class="tmuted">Open this tab to load…</div></div>
@@ -190,7 +190,7 @@
 
   <!-- ADMIN -->
   <div class="page" id="page-admin">
-    <div style="padding:8px 0 4px;font-size:20px;font-weight:800">Admin</div>
+    <div class="page-title" style="padding-bottom:4px">Admin</div>
     <div class="tmuted" style="margin-bottom:16px;font-size:12px">Group admin controls</div>
     <div class="card" id="roleGuideCard">
       <div class="card-title">Role Guide</div>
@@ -254,7 +254,7 @@
 
   <!-- IRON PLEDGE -->
   <div class="page" id="page-pledge">
-    <div style="padding:8px 0 14px;font-size:20px;font-weight:800">The Iron Pledge</div>
+    <div class="page-title">The Iron Pledge</div>
     <div id="pledgeContent"></div>
   </div>
 
@@ -937,10 +937,10 @@ function renderHome(){
   document.getElementById('factCard').innerHTML=`<div class="fact-card"><div class="fact-icon">🧠</div><div class="fact-text"><strong>Did you know?</strong> ${getDailyFact()}</div></div>`;
 
   // ── THE STEEL: personal rank + points + competitive sting ──
-  const rank=getRank(me.name);
   const rosterN=(season.roster||[]).length;
   const sorted=(season.roster||[]).map(p=>({name:p.name,pts:score(p.name).total})).sort((a,b)=>b.pts-a.pts);
   const myIdx=sorted.findIndex(p=>p.name===me.name);
+  const rank=myIdx+1;
   let behindHTML='';
   if(myIdx>0){
     const ahead=sorted[myIdx-1];
@@ -1427,31 +1427,28 @@ function renderLB(){
   const teams=[...new Set(players.map(p=>p.team))];
   const tcol=t=>t==='A'?'var(--A)':t==='B'?'var(--B)':'var(--C)';
   const ts=teams.map(t=>({t,s:teamTotal(t),count:players.filter(p=>p.team===t).length})).sort((a,b)=>b.s-a.s);
-  // Podium: 2nd | 1st | 3rd (left-centre-right), heights proportional to score
-  // 1st = fixed 140px; 2nd/3rd = 60 + (score/firstScore)*80, min 60px
+  // Ranked standings cards: medal rank, team name, members, avg pts,
+  // and a relative bar showing each team's score vs the leader.
   const firstS = ts[0]?.s || 1;
-  const slots = [ts[1]||null, ts[0]||null, ts[2]||null]; // 2nd, 1st, 3rd
-  const ranks = ['2nd','1st','3rd'];
-  const ptsCols = ['#C0C0C0','#FFD700','#CD7F32'];   // silver, gold, bronze
-  const ptsSizes = ['18px','22px','15px'];             // 2nd, 1st, 3rd
-  const podiumBlocks = slots.map((t,pos)=>{
-    if(!t) return `<div style="flex:1"></div>`;
-    const baseH = pos===1 ? 140 : Math.max(60, Math.round(60 + (t.s/firstS)*80));
+  const medalCols = ['#FFD700','#C0C0C0','#CD7F32'];   // gold, silver, bronze
+  document.getElementById('teamStand').innerHTML=ts.map((t,i)=>{
     const col = tcol(t.t);
-    const names = players.filter(p=>p.team===t.t).map(p=>esc(p.name)).join(', ');
-    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
-      <div style="font-size:${pos===1?'15':'12'}px;font-weight:800;color:${ptsCols[pos]};letter-spacing:.04em">${ranks[pos]}</div>
-      <div style="font-size:${ptsSizes[pos]};font-weight:800;color:${ptsCols[pos]}">${t.s}<span style="font-size:9px;font-weight:600;color:var(--muted)"> pts</span></div>
-      <div style="height:${baseH}px;width:100%;background:var(--bg-card);border:1px solid var(--border);border-left:4px solid ${col};border-bottom:none;border-radius:8px 8px 0 0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:10px 6px 0;overflow:hidden">
-        <div style="font-size:14px;font-weight:800;color:${col}">Team ${t.t}</div>
-        <div style="font-size:9px;color:var(--muted);text-align:center;margin-top:5px;line-height:1.35;word-break:break-word">${names}</div>
-        <div style="font-size:9px;color:var(--muted);margin-top:4px">${t.count} members</div>
+    const names = players.filter(p=>p.team===t.t).map(p=>esc(p.name)).join(' · ');
+    const pct = Math.max(6, Math.round((t.s/firstS)*100));
+    const lead = i===0;
+    return `<div class="tstand${lead?' lead':''}">
+      <div class="tstand-rank" style="color:${medalCols[i]||'var(--muted)'}">${i+1}</div>
+      <div class="tstand-body">
+        <div class="tstand-top">
+          <span class="tstand-name" style="color:${col}">Team ${t.t}</span>
+          ${lead?'<span class="tstand-crown">Leading</span>':''}
+          <span class="tstand-pts">${t.s}<i>avg pts</i></span>
+        </div>
+        <div class="tstand-bar"><div class="tstand-fill" style="width:${pct}%;background:${col}"></div></div>
+        <div class="tstand-meta">${t.count} member${t.count===1?'':'s'} · ${names}</div>
       </div>
     </div>`;
   }).join('');
-  document.getElementById('teamStand').innerHTML=`
-    <div style="display:flex;align-items:flex-end;gap:3px">${podiumBlocks}</div>
-    <div style="height:3px;background:var(--bg-card-2);border-radius:0 0 6px 6px;margin-bottom:16px"></div>`;
 
   const _rankBadge=i=>{
     if(i===0) return `<svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="9" fill="none" stroke="#FFD700" stroke-width="2"/><text x="10" y="14" text-anchor="middle" fill="#FFD700" font-size="10" font-family="sans-serif">1</text></svg>`;
@@ -2258,6 +2255,7 @@ function renderGlobalFromCache({groups,logs,bonuses,groupSeasons}){
     const roster=sData.roster||[];
     const ctx={
       season:sData,
+      groupCode:g.code,
       logs:logs.filter(l=>l.groupCode===g.code&&l.month===sData.month&&l.year===sData.year),
       twists,
       bonuses:bonuses.filter(b=>b.groupCode===g.code&&b.month===sData.month&&b.year===sData.year)
@@ -2576,6 +2574,7 @@ function showTab(t){
   document.querySelectorAll('.tab')[TABS.indexOf(t)]?.classList.add('active');
   updateTabPill(t);
   window.scrollTo(0,0);
+  if(navigator.vibrate) navigator.vibrate(8);
   if(t==='global') loadGlobal();
   if(t==='pledge') renderIronPledgePage();
   if(t==='log') buildDayStrip();
