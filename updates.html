@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<!--
+  ════════════════════════════════════════════════════════════════════════
+  FORGE — updates.html  (standalone changelog / landing page)
+  Does NOT touch index.html, main.css, or any app logic.
+  Reuses design tokens from src/style/main.css (linked in <head>).
+
+  ────────────────────────────────────────────────────────────────────────
+  MEDIA CHECKLIST — drop all of these into an `updates/` folder in the repo root.
+  Filenames are referenced exactly as listed below.
+
+  WHAT'S NEW media:
+    updates/iron-pledge.jpg
+        → The Iron Pledge tab: the pledge lock-in screen (number input + "Lock It In").
+    updates/weekly-twists.jpg
+        → Admin → Monthly Twists: the list of twist toggles (Boss Week, Freaky Fridays, etc.).
+    updates/visual-overhaul.jpg
+        → Home tab hero ("Your Steel") + Leaderboard podium, showing the native redesign.
+    updates/monthly-goals.jpg
+        → Home tab monthly goal ring with the "Tap to set a goal" / progress ring state.
+
+  HOW-TO-USE media:
+    updates/step-join-group.jpg
+        → Onboarding: the "Enter your group code" screen.
+    updates/step-log-workout.jpg
+        → Log tab: day selector + workout chips selected, ready to submit.
+    updates/step-leaderboard.jpg
+        → Leaderboard tab: team standings cards + individual rankings.
+    updates/step-monthly-goal.jpg
+        → Home tab: setting the monthly goal (input open or ring filled).
+    updates/step-iron-pledge.jpg
+        → Pledge tab: an active pledge showing the weekly progress ring.
+    updates/step-admin.jpg
+        → Admin tab: team/role assignment + twist toggles (admin-only view).
+
+  Optional: any .jpg above can be swapped for an .mp4 — see the commented
+  <video> alternative left beside the first entry as a template.
+  ════════════════════════════════════════════════════════════════════════
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Forge — What's New</title>
+<meta name="theme-color" content="#0a0a0d">
+<!-- Reuse the app's design tokens + base styles -->
+<link rel="stylesheet" href="src/style/main.css">
+<style>
+/* ── updates.html — page-specific layout (tokens come from main.css) ── */
+body{background:var(--bg);color:var(--text);font-family:var(--font);
+  -webkit-font-smoothing:antialiased;min-height:100vh}
+.up-wrap{max-width:560px;margin:0 auto;padding:0 16px calc(48px + env(safe-area-inset-bottom));width:100%}
+
+/* HERO */
+.up-hero{text-align:center;padding:calc(40px + env(safe-area-inset-top)) 8px 30px}
+.up-logo{font-size:46px;font-weight:900;letter-spacing:.16em;margin-bottom:12px;
+  background:linear-gradient(180deg,#f2d384 10%,#c9962f 90%);-webkit-background-clip:text;
+  background-clip:text;-webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 8px 28px rgba(212,168,67,.28))}
+.up-tag{font-size:15px;color:var(--muted);line-height:1.5;max-width:340px;margin:0 auto 22px}
+.up-cta{display:inline-flex;align-items:center;gap:7px;text-decoration:none;
+  font-size:14px;font-weight:700;letter-spacing:-.01em;color:#221804;
+  background:linear-gradient(180deg,#e7bf58,#c69d35);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 8px 22px -8px rgba(212,168,67,.5);
+  padding:12px 22px;border-radius:13px;transition:transform .16s,filter .16s}
+.up-cta:active{transform:scale(.97);filter:brightness(.9)}
+
+/* SECTION HEADERS */
+.up-shdr{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.09em;margin:34px 2px 14px;display:flex;align-items:center;gap:10px}
+.up-shdr::after{content:'';flex:1;height:1px;background:var(--hairline)}
+
+/* UPDATE CARD — same depth treatment as .card in main.css */
+.up-card{background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,0) 38%),var(--bg-card);
+  border:1px solid var(--hairline);border-radius:var(--r);padding:18px;margin-bottom:16px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 12px 32px -14px rgba(0,0,0,.6)}
+.up-date{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold)}
+.up-title{font-size:19px;font-weight:800;letter-spacing:-.02em;line-height:1.25;margin:7px 0 8px}
+.up-desc{font-size:14px;color:var(--text-muted);line-height:1.55;margin-bottom:14px}
+.up-media{display:block;width:100%;border-radius:13px;border:1px solid var(--hairline);
+  background:var(--bg-card-2);aspect-ratio:9/16;max-height:520px;object-fit:cover;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
+/* graceful state before the real asset is dropped in */
+.up-media[alt]{color:var(--muted);font-size:12px;text-align:center}
+
+/* STEP CARD */
+.up-step{display:flex;gap:14px;align-items:flex-start;
+  background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,0) 50%),var(--bg-card);
+  border:1px solid var(--hairline);border-radius:var(--r);padding:16px;margin-bottom:12px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.03),0 10px 26px -14px rgba(0,0,0,.55)}
+.up-stepnum{flex-shrink:0;width:34px;height:34px;border-radius:50%;
+  background:var(--gold-l);border:1.5px solid var(--gold);color:var(--gold);
+  display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;
+  font-variant-numeric:tabular-nums}
+.up-stepbody{flex:1;min-width:0}
+.up-steptitle{font-size:15.5px;font-weight:700;letter-spacing:-.01em;margin-bottom:3px}
+.up-stepdesc{font-size:13px;color:var(--text-muted);line-height:1.5;margin-bottom:12px}
+.up-stepmedia{display:block;width:100%;border-radius:11px;border:1px solid var(--hairline);
+  background:var(--bg-card-2);aspect-ratio:9/16;max-height:400px;object-fit:cover}
+
+/* FOOTER */
+.up-foot{text-align:center;padding:36px 8px 8px;color:var(--muted);font-size:12px;line-height:1.6}
+.up-foot a{color:var(--gold);text-decoration:none;font-weight:600}
+</style>
+</head>
+<body>
+
+<div class="up-wrap">
+
+  <!-- ══ HERO ══ -->
+  <header class="up-hero">
+    <div class="up-logo">FORGE</div>
+    <div class="up-tag">A competitive fitness tracker for your friend group. Skip a day, and the whole group will know.</div>
+    <a class="up-cta" href="index.html">Open the app →</a>
+  </header>
+
+  <!-- ══ WHAT'S NEW ══ -->
+  <section>
+    <div class="up-shdr">What's New</div>
+
+    <!-- ── Entry 1: The Iron Pledge ── -->
+    <article class="up-card">
+      <div class="up-date">June 2026</div>
+      <h2 class="up-title">The Iron Pledge — High Stakes Mode</h2>
+      <p class="up-desc">Put your points where your mouth is. Pledge a number of workouts for the week: hit it and your base points <strong style="color:var(--green)">double</strong>, miss it and they go to <strong style="color:var(--red)">zero</strong>. No take-backs, no mercy.</p>
+      <!-- SCREENSHOT NEEDED: updates/iron-pledge.jpg — The Iron Pledge tab showing the pledge lock-in screen (number input + "Lock It In" button) -->
+      <img class="up-media" src="updates/iron-pledge.jpg" alt="The Iron Pledge lock-in screen">
+      <!-- VIDEO ALTERNATIVE (swap the <img> above for this if you record a clip instead):
+      <!-- VIDEO NEEDED: updates/iron-pledge.mp4 — short clip of locking in a weekly pledge -->
+      <!--
+      <video class="up-media" src="updates/iron-pledge.mp4" autoplay muted loop playsinline></video>
+      -->
+    </article>
+
+    <!-- ── Entry 2: New Weekly Twists ── -->
+    <article class="up-card">
+      <div class="up-date">June 2026</div>
+      <h2 class="up-title">New Weekly Twists</h2>
+      <p class="up-desc">The rules now change on you. <strong>Boss Week</strong> doubles everything, <strong>Freaky Fridays</strong> and <strong>Monday Motivation</strong> reward you for showing up on the worst days, <strong>Underdog Week</strong> hands last place a 2x lifeline, and <strong>Jack of All Trades</strong> drops +20 for logging four different workout types in a week.</p>
+      <!-- SCREENSHOT NEEDED: updates/weekly-twists.jpg — Admin → Monthly Twists section showing the list of twist toggles (Boss Week, Freaky Fridays, Monday Motivation, Underdog Week, Jack of All Trades) -->
+      <img class="up-media" src="updates/weekly-twists.jpg" alt="Monthly Twists toggle list in Admin">
+    </article>
+
+    <!-- ── Entry 3: Visual overhaul ── -->
+    <article class="up-card">
+      <div class="up-date">June 2026</div>
+      <h2 class="up-title">A Whole New Forge</h2>
+      <p class="up-desc">We rebuilt the look from the studs up to feel like a real app, not a web page. Ranked team standings, a goal ring on your home screen, a sticky log button that follows you down the page, frosted tab bar, and a fresh set of icons throughout.</p>
+      <!-- SCREENSHOT NEEDED: updates/visual-overhaul.jpg — Home tab hero ("Your Steel" points card) and/or the Leaderboard team standings, showing the native redesign -->
+      <img class="up-media" src="updates/visual-overhaul.jpg" alt="Redesigned home and leaderboard">
+    </article>
+
+    <!-- ── Entry 4: Personal monthly goals ── -->
+    <article class="up-card">
+      <div class="up-date">June 2026</div>
+      <h2 class="up-title">Personal Monthly Goals</h2>
+      <p class="up-desc">Set the bar yourself. Tap the ring on your home screen, pick how many workouts you're aiming for this month, and watch it fill. It's between you and the ring — no one else has to know how low you set it.</p>
+      <!-- SCREENSHOT NEEDED: updates/monthly-goals.jpg — Home tab monthly goal ring, either the "Tap to set a goal" prompt or a partly-filled progress ring -->
+      <img class="up-media" src="updates/monthly-goals.jpg" alt="Monthly goal ring on the home screen">
+    </article>
+  </section>
+
+  <!-- ══ HOW TO USE FORGE ══ -->
+  <section>
+    <div class="up-shdr">How to Use Forge</div>
+
+    <!-- Step 1 -->
+    <div class="up-step">
+      <div class="up-stepnum">1</div>
+      <div class="up-stepbody">
+        <div class="up-steptitle">Join your group</div>
+        <p class="up-stepdesc">Get the 6-character code from your group's organiser, punch it in, and pick your name from the roster.</p>
+        <!-- SCREENSHOT NEEDED: updates/step-join-group.jpg — Onboarding screen "Enter your group code" -->
+        <img class="up-stepmedia" src="updates/step-join-group.jpg" alt="Enter your group code screen">
+      </div>
+    </div>
+
+    <!-- Step 2 -->
+    <div class="up-step">
+      <div class="up-stepnum">2</div>
+      <div class="up-stepbody">
+        <div class="up-steptitle">Log a workout</div>
+        <p class="up-stepdesc">Hit the Log tab, pick the day, tap what you did (or type your own), and lock it in. That's it — five seconds, done.</p>
+        <!-- SCREENSHOT NEEDED: updates/step-log-workout.jpg — Log tab with day selector and workout chips selected, ready to submit -->
+        <img class="up-stepmedia" src="updates/step-log-workout.jpg" alt="Logging a workout">
+      </div>
+    </div>
+
+    <!-- Step 3 -->
+    <div class="up-step">
+      <div class="up-stepnum">3</div>
+      <div class="up-stepbody">
+        <div class="up-steptitle">Check the leaderboard</div>
+        <p class="up-stepdesc">See where your team stands and where you rank against everyone else. Use it as motivation, or as a reason to text the group some trash talk.</p>
+        <!-- SCREENSHOT NEEDED: updates/step-leaderboard.jpg — Leaderboard tab showing team standings cards and individual rankings -->
+        <img class="up-stepmedia" src="updates/step-leaderboard.jpg" alt="Leaderboard with team standings">
+      </div>
+    </div>
+
+    <!-- Step 4 -->
+    <div class="up-step">
+      <div class="up-stepnum">4</div>
+      <div class="up-stepbody">
+        <div class="up-steptitle">Set your monthly goal</div>
+        <p class="up-stepdesc">Tap the ring on your home screen and commit to a number of workouts for the month. A target beats a vibe.</p>
+        <!-- SCREENSHOT NEEDED: updates/step-monthly-goal.jpg — Home tab setting the monthly goal (input open or ring filled) -->
+        <img class="up-stepmedia" src="updates/step-monthly-goal.jpg" alt="Setting a monthly goal">
+      </div>
+    </div>
+
+    <!-- Step 5 -->
+    <div class="up-step">
+      <div class="up-stepnum">5</div>
+      <div class="up-stepbody">
+        <div class="up-steptitle">Take The Iron Pledge</div>
+        <p class="up-stepdesc">Feeling brave? Opt in, pledge your weekly target, and play for double-or-nothing. Glory if you hit it, a zeroed week if you don't.</p>
+        <!-- SCREENSHOT NEEDED: updates/step-iron-pledge.jpg — Pledge tab showing an active pledge with the weekly progress ring -->
+        <img class="up-stepmedia" src="updates/step-iron-pledge.jpg" alt="An active Iron Pledge">
+      </div>
+    </div>
+
+    <!-- Step 6 -->
+    <div class="up-step">
+      <div class="up-stepnum">6</div>
+      <div class="up-stepbody">
+        <div class="up-steptitle">Running the group? Visit Admin</div>
+        <p class="up-stepdesc">If you're the admin, the Admin tab is your control room — assign teams and roles, flip on monthly twists, and manage the season.</p>
+        <!-- SCREENSHOT NEEDED: updates/step-admin.jpg — Admin tab showing team/role assignment and twist toggles (admin-only view) -->
+        <img class="up-stepmedia" src="updates/step-admin.jpg" alt="Admin settings">
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ FOOTER ══ -->
+  <footer class="up-foot">
+    Forged by the group.<br>
+    <a href="index.html">Open Forge →</a>
+  </footer>
+
+</div>
+
+</body>
+</html>
