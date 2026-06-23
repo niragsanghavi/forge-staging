@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:#0a0a0d}
+  ::-webkit-scrollbar{width:0;height:0}
+  @keyframes upRise{from{transform:translateY(12px)}to{transform:none}}
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:var(--bg);color:var(--text);font-family:var(--font);-webkit-font-smoothing:antialiased;display:flex;justify-content:center;--bg:#0a0a0d;--bg-card:#16161b;--hairline:rgba(255,255,255,.09);--text:#ECEDEF;--text-muted:#A6A8AE;--muted:#71737B;--gold:#C9A84C;--gold-soft:rgba(201,168,76,.12);--green:#62D08A;--red:#E36B62;--font:'Hanken Grotesk',sans-serif;--display:'Archivo',sans-serif">
+
+  <div style="width:100%;max-width:480px;display:flex;flex-direction:column;min-height:100vh;position:relative">
+
+    <!-- ═══ STICKY FROSTED HEADER ═══ -->
+    <header style="position:sticky;top:0;z-index:20;background:rgba(10,10,13,.72);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);border-bottom:1px solid var(--hairline);padding:calc(env(safe-area-inset-top) + 16px) 20px 14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div style="font-family:var(--display);font-weight:900;font-size:22px;letter-spacing:.05em;color:var(--text)">FORGE</div>
+        <div style="font-size:11px;font-weight:700;letter-spacing:.16em;color:var(--muted)">JUNE 2026</div>
+      </div>
+      <div style="position:relative;display:flex;background:var(--bg-card);border:1px solid var(--hairline);border-radius:14px;padding:4px">
+        <div style="position:absolute;top:4px;bottom:4px;left:4px;width:calc(50% - 4px);border-radius:10px;background:linear-gradient(180deg,rgba(201,168,76,.22),rgba(201,168,76,.07));border:1px solid rgba(201,168,76,.42);box-shadow:0 2px 10px -2px rgba(201,168,76,.3);transform:translateX({{ thumbBX }});transition:transform .36s cubic-bezier(.32,.72,0,1)"></div>
+        <div onClick="{{ tabWhatsNew }}" style="position:relative;flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 0;font-weight:700;font-size:14px;cursor:pointer;transition:color .3s;color:{{ bTabNewColor }}">What's New<span style="font-size:10px;font-weight:800;color:var(--gold);background:var(--gold-soft);border:1px solid rgba(201,168,76,.35);border-radius:999px;min-width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px">5</span></div>
+        <div onClick="{{ tabGuide }}" style="position:relative;flex:1;text-align:center;padding:11px 0;font-weight:700;font-size:14px;cursor:pointer;transition:color .3s;color:{{ bTabGuideColor }}">Get Started</div>
+      </div>
+    </header>
+
+    <!-- ═══ CONTENT ═══ -->
+    <main style="flex:1;padding:22px 20px 8px">
+
+      <!-- ── WHAT'S NEW (feed) ── -->
+      <sc-if value="{{ bFeed }}" hint-placeholder-val="{{ true }}">
+      <div style="animation:upRise .4s cubic-bezier(.32,.72,0,1)">
+        <sc-if value="{{ heroIntro }}" hint-placeholder-val="{{ true }}">
+        <p style="font-size:15px;line-height:1.5;color:var(--text-muted);margin:0 0 26px;max-width:340px">Five things we shipped this month. Tap any clip to watch it in action.</p>
+        </sc-if>
+        <sc-for list="{{ updates }}" as="u" hint-placeholder-count="3">
+          <article style="margin-bottom:34px">
+            <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:8px">{{ u.date }}</div>
+            <h2 style="font-family:var(--display);font-weight:800;font-size:22px;line-height:1.18;letter-spacing:-.025em;color:var(--text);margin:0 0 10px">{{ u.title }}</h2>
+            <p style="font-size:14.5px;line-height:1.6;color:var(--text-muted);margin:0 0 16px"><sc-for list="{{ u.runs }}" as="r" hint-placeholder-count="1"><sc-if value="{{ r.green }}"><strong style="color:var(--green);font-weight:700">{{ r.t }}</strong></sc-if><sc-if value="{{ r.red }}"><strong style="color:var(--red);font-weight:700">{{ r.t }}</strong></sc-if><sc-if value="{{ r.bold }}"><strong style="color:var(--text);font-weight:700">{{ r.t }}</strong></sc-if><sc-if value="{{ r.plain }}">{{ r.t }}</sc-if></sc-for></p>
+
+            <!-- CINEMATIC media -->
+            <sc-if value="{{ cinematic }}" hint-placeholder-val="{{ true }}">
+            <div style="position:relative;width:100%;aspect-ratio:4/5;border-radius:18px;overflow:hidden;background:radial-gradient(125% 75% at 50% 0%,#1d1d24,#0a0a0d);border:1px solid var(--hairline);cursor:pointer;box-shadow:0 18px 40px -22px rgba(0,0,0,.7)" style-active="transform:scale(.99)">
+              <div style="position:absolute;top:12px;right:12px;font-size:11px;font-weight:700;color:#fff;background:rgba(0,0,0,.5);backdrop-filter:blur(6px);padding:4px 9px;border-radius:999px">{{ u.dur }}</div>
+              <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">
+                <div style="width:66px;height:66px;border-radius:50%;background:rgba(201,168,76,.16);border:1.5px solid rgba(201,168,76,.65);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:transform .2s" style-hover="transform:scale(1.07)"><svg width="23" height="23" viewBox="0 0 24 24" fill="var(--gold)"><path d="M8 5v14l11-7z"/></svg></div>
+              </div>
+              <div style="position:absolute;left:0;right:0;bottom:0;padding:38px 16px 15px;background:linear-gradient(transparent,rgba(0,0,0,.8));font-size:12.5px;font-weight:600;color:#e9e9ec">{{ u.media }}</div>
+            </div>
+            </sc-if>
+
+            <!-- COMPACT media -->
+            <sc-if value="{{ compact }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;gap:13px;align-items:center;background:rgba(255,255,255,.02);border:1px solid var(--hairline);border-radius:14px;padding:11px;cursor:pointer" style-active="transform:scale(.99)">
+              <div style="flex:none;position:relative;width:64px;aspect-ratio:9/16;border-radius:10px;overflow:hidden;background:radial-gradient(130% 80% at 50% 0%,#1c1c22,#0b0b0e);display:flex;align-items:center;justify-content:center">
+                <div style="width:30px;height:30px;border-radius:50%;background:var(--gold-soft);border:1px solid rgba(201,168,76,.5);display:flex;align-items:center;justify-content:center"><svg width="12" height="12" viewBox="0 0 24 24" fill="var(--gold)"><path d="M8 5v14l11-7z"/></svg></div>
+              </div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">Watch · {{ u.dur }}</div>
+                <div style="font-size:13.5px;color:var(--text-muted);line-height:1.4;margin-top:3px">{{ u.media }}</div>
+              </div>
+            </div>
+            </sc-if>
+          </article>
+        </sc-for>
+      </div>
+      </sc-if>
+
+      <!-- ── GET STARTED (guide) ── -->
+      <sc-if value="{{ bGuide }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:upRise .4s cubic-bezier(.32,.72,0,1)">
+        <sc-if value="{{ heroIntro }}" hint-placeholder-val="{{ false }}">
+        <p style="font-size:15px;line-height:1.5;color:var(--text-muted);margin:0 0 26px;max-width:340px">Five steps from group code to logging your first workout.</p>
+        </sc-if>
+        <sc-for list="{{ steps }}" as="s" hint-placeholder-count="3">
+          <div style="margin-bottom:30px">
+            <div style="display:flex;align-items:center;gap:13px;margin-bottom:12px">
+              <div style="flex:none;width:34px;height:34px;border-radius:50%;background:var(--gold-soft);border:1.5px solid rgba(201,168,76,.55);color:var(--gold);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;font-size:16px">{{ s.n }}</div>
+              <div style="font-family:var(--display);font-weight:700;font-size:19px;letter-spacing:-.015em;color:var(--text)">{{ s.title }}</div>
+            </div>
+            <p style="font-size:14px;line-height:1.55;color:var(--text-muted);margin:0 0 14px;padding-left:47px">{{ s.desc }}</p>
+            <div style="margin-left:47px;display:flex;gap:13px;align-items:center;background:rgba(255,255,255,.02);border:1px solid var(--hairline);border-radius:14px;padding:11px;cursor:pointer" style-active="transform:scale(.99)">
+              <div style="flex:none;position:relative;width:64px;aspect-ratio:9/16;border-radius:10px;overflow:hidden;background:radial-gradient(130% 80% at 50% 0%,#1c1c22,#0b0b0e);display:flex;align-items:center;justify-content:center">
+                <div style="width:30px;height:30px;border-radius:50%;background:var(--gold-soft);border:1px solid rgba(201,168,76,.5);display:flex;align-items:center;justify-content:center"><svg width="12" height="12" viewBox="0 0 24 24" fill="var(--gold)"><path d="M8 5v14l11-7z"/></svg></div>
+              </div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">Watch · {{ s.dur }}</div>
+                <div style="font-size:13.5px;color:var(--text-muted);line-height:1.4;margin-top:3px">{{ s.media }}</div>
+              </div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      </sc-if>
+
+    </main>
+
+    <!-- ═══ FOOTER ═══ -->
+    <footer style="text-align:center;padding:30px 20px calc(env(safe-area-inset-bottom) + 36px);color:var(--muted);font-size:12px;line-height:1.7;border-top:1px solid var(--hairline);margin-top:8px">
+      Forged by the group.<br>
+      <span style="color:var(--gold);font-weight:600">Open Forge →</span>
+    </footer>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:390,&quot;height&quot;:844},&quot;defaultTab&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;What's New&quot;,&quot;Get Started&quot;],&quot;default&quot;:&quot;Get Started&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;heroIntro&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;compactMedia&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { tab: null };
+
+  renderVals() {
+    const updates = [
+      { date: 'June 2026', title: 'Install Forge on Your Phone', dur: '0:16', media: 'Add to Home Screen',
+        runs: [{ t: 'Forge lives on your home screen. Tap the share icon in your browser and select \u201CAdd to Home Screen\u201D \u2014 it installs like a native app, no App Store needed.', plain: true }] },
+      { date: 'June 2026', title: 'The Iron Pledge \u2014 High Stakes Mode', dur: '0:22', media: 'Locking in a weekly pledge',
+        runs: [
+          { t: 'Put your points where your mouth is. Pledge a number of workouts for the week: hit it and your base points ', plain: true },
+          { t: 'double', green: true },
+          { t: ', miss it and they go to ', plain: true },
+          { t: 'zero', red: true },
+          { t: '. No take-backs, no mercy.', plain: true },
+        ] },
+      { date: 'June 2026', title: 'New Weekly Twists', dur: '0:19', media: 'Toggling the monthly twists',
+        runs: [
+          { t: 'The rules now change on you. ', plain: true },
+          { t: 'Boss Week', bold: true },
+          { t: ' doubles everything, ', plain: true },
+          { t: 'Freaky Fridays', bold: true },
+          { t: ' and ', plain: true },
+          { t: 'Monday Motivation', bold: true },
+          { t: ' reward you for showing up on the worst days, ', plain: true },
+          { t: 'Underdog Week', bold: true },
+          { t: ' hands last place a 2\u00D7 lifeline, and ', plain: true },
+          { t: 'Jack of All Trades', bold: true },
+          { t: ' drops +20 for logging four different workout types in a week.', plain: true },
+        ] },
+      { date: 'June 2026', title: 'A Whole New Forge', dur: '0:24', media: 'The redesigned home & board',
+        runs: [{ t: 'We rebuilt the look from the studs up to feel like a real app, not a web page. Ranked team standings, a goal ring on your home screen, a sticky log button that follows you down the page, frosted tab bar, and a fresh set of icons throughout.', plain: true }] },
+      { date: 'June 2026', title: 'Personal Monthly Goals', dur: '0:15', media: 'Setting a monthly target',
+        runs: [{ t: 'Set the bar yourself. Tap the ring on your home screen, pick how many workouts you\u2019re aiming for this month, and watch it fill. It\u2019s between you and the ring \u2014 no one else has to know how low you set it.', plain: true }] },
+    ];
+
+    const steps = [
+      { n: '1', title: 'Join your group', dur: '0:12', media: 'Entering a group code', desc: 'Get the 6-character code from your group\u2019s organiser, punch it in, and pick your name from the roster.' },
+      { n: '2', title: 'Log a workout', dur: '0:10', media: 'Logging today\u2019s workout', desc: 'Hit the Log tab, pick the day, tap what you did (or type your own), and lock it in. That\u2019s it \u2014 five seconds, done.' },
+      { n: '3', title: 'Check the leaderboard', dur: '0:14', media: 'Podium & rankings', desc: 'See where your team stands and where you rank against everyone else. Use it as motivation, or as a reason to text the group some trash talk.' },
+      { n: '4', title: 'Running the group? Visit Admin', dur: '0:18', media: 'Twist toggles & roles', desc: 'If you\u2019re the admin, the Admin tab is your control room \u2014 assign teams and roles, flip on monthly twists, and manage the season.' },
+      { n: '5', title: 'Install Forge on your phone', dur: '0:13', media: 'Add to Home Screen', desc: 'Add Forge to your home screen so it opens like a native app \u2014 tap the browser share icon, then \u201CAdd to Home Screen.\u201D' },
+    ];
+
+    const defaultTab = this.props.defaultTab === 'Get Started' ? 'guide' : 'whatsnew';
+    const tab = this.state.tab || defaultTab;
+    const compactMedia = this.props.compactMedia ?? false;
+
+    return {
+      updates, steps,
+      heroIntro: this.props.heroIntro ?? true,
+      bFeed: tab === 'whatsnew',
+      bGuide: tab === 'guide',
+      cinematic: !compactMedia,
+      compact: compactMedia,
+      thumbBX: tab === 'whatsnew' ? '0%' : '100%',
+      bTabNewColor: tab === 'whatsnew' ? 'var(--gold)' : 'var(--muted)',
+      bTabGuideColor: tab === 'guide' ? 'var(--gold)' : 'var(--muted)',
+      tabWhatsNew: () => this.setState({ tab: 'whatsnew' }),
+      tabGuide: () => this.setState({ tab: 'guide' }),
+    };
+  }
+}
+</script>
+</body>
+</html>

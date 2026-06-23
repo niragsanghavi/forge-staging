@@ -1,40 +1,37 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════════
-  FORGE — updates.html  (standalone changelog / landing page)
-  Does NOT touch index.html, main.css, or any app logic.
-  Reuses design tokens from src/style/main.css (linked in <head>).
+  FORGE — updates.html  (standalone two-path landing / changelog page)
+  Reuses design tokens from src/style/main.css and the existing Firebase
+  `db` instance from src/config/firebase.js (NO second Firebase init).
+
+  Visual design adapted from the Claude Design reference (Direction A —
+  "The Foundry Hero"): hero wordmark landing → two cards → content sheet →
+  back, with cinematic 9/16 media tiles. Fonts use the app's system stack
+  (no external Google Fonts dependency); typographic intent preserved via
+  weight + tracking. All original functionality is intact.
 
   ────────────────────────────────────────────────────────────────────────
-  MEDIA CHECKLIST — drop all of these into an `updates/` folder in the repo root.
-  Filenames are referenced exactly as listed below.
+  VIDEO SHOOTING LIST — drop all of these into an `updates/` folder.
+  Each <video> degrades to a gold "Coming soon" tile if the .mp4 is missing.
+  Each video also wants a poster thumbnail: updates/{name}-thumb.jpg
 
-  WHAT'S NEW media:
-    updates/iron-pledge.jpg
-        → The Iron Pledge tab: the pledge lock-in screen (number input + "Lock It In").
-    updates/weekly-twists.jpg
-        → Admin → Monthly Twists: the list of twist toggles (Boss Week, Freaky Fridays, etc.).
-    updates/visual-overhaul.jpg
-        → Home tab hero ("Your Steel") + Leaderboard podium, showing the native redesign.
-    updates/monthly-goals.jpg
-        → Home tab monthly goal ring with the "Tap to set a goal" / progress ring state.
+  INTRO:
+    updates/forge-loading.gif        → 1.5s intro loader; if missing, skip to landing.
 
-  HOW-TO-USE media:
-    updates/step-join-group.jpg
-        → Onboarding: the "Enter your group code" screen.
-    updates/step-log-workout.jpg
-        → Log tab: day selector + workout chips selected, ready to submit.
-    updates/step-leaderboard.jpg
-        → Leaderboard tab: team standings cards + individual rankings.
-    updates/step-monthly-goal.jpg
-        → Home tab: setting the monthly goal (input open or ring filled).
-    updates/step-iron-pledge.jpg
-        → Pledge tab: an active pledge showing the weekly progress ring.
-    updates/step-admin.jpg
-        → Admin tab: team/role assignment + twist toggles (admin-only view).
+  WHAT'S NEW videos (in order):
+    updates/install-homescreen.mp4   → iPhone Add-to-Home-Screen flow.
+    updates/iron-pledge.mp4          → locking in a weekly pledge + progress ring.
+    updates/weekly-twists.mp4        → admin toggling the monthly twists on.
+    updates/visual-overhaul.mp4      → scrolling the redesigned home + board.
+    updates/monthly-goals.mp4        → tapping the goal ring and setting a target.
 
-  Optional: any .jpg above can be swapped for an .mp4 — see the commented
-  <video> alternative left beside the first entry as a template.
+  GET STARTED (guide) videos (in order):
+    updates/step-join-group.mp4      → entering a group code and joining.
+    updates/step-log-workout.mp4     → date → workout chips → FAB submit.
+    updates/step-leaderboard.mp4     → podium + individual rankings.
+    updates/step-admin.mp4           → twist toggles + role assignment.
+    updates/step-install.mp4         → Add-to-Home-Screen flow.
   ════════════════════════════════════════════════════════════════════════
 -->
 <html lang="en">
@@ -49,195 +46,459 @@
 /* ── updates.html — page-specific layout (tokens come from main.css) ── */
 body{background:var(--bg);color:var(--text);font-family:var(--font);
   -webkit-font-smoothing:antialiased;min-height:100vh}
-.up-wrap{max-width:560px;margin:0 auto;padding:0 16px calc(48px + env(safe-area-inset-bottom));width:100%}
+/* page-local helper aliases mapped onto the app's tokens */
+#appRoot,#loadingScreen{--gold-soft:var(--gold-l)}
 
-/* HERO */
-.up-hero{text-align:center;padding:calc(40px + env(safe-area-inset-top)) 8px 30px}
-.up-logo{font-size:46px;font-weight:900;letter-spacing:.16em;margin-bottom:12px;
-  background:linear-gradient(180deg,#f2d384 10%,#c9962f 90%);-webkit-background-clip:text;
-  background-clip:text;-webkit-text-fill-color:transparent;
-  filter:drop-shadow(0 8px 28px rgba(212,168,67,.28))}
-.up-tag{font-size:15px;color:var(--muted);line-height:1.5;max-width:340px;margin:0 auto 22px}
-.up-cta{display:inline-flex;align-items:center;gap:7px;text-decoration:none;
-  font-size:14px;font-weight:700;letter-spacing:-.01em;color:#221804;
-  background:linear-gradient(180deg,#e7bf58,#c69d35);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 8px 22px -8px rgba(212,168,67,.5);
-  padding:12px 22px;border-radius:13px;transition:transform .16s,filter .16s}
-.up-cta:active{transform:scale(.97);filter:brightness(.9)}
+/* ── INTRO LOADER ── */
+#loadingScreen{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;
+  background:var(--bg);transition:opacity .4s ease}
+#loadingScreen img{max-width:160px;width:55%;height:auto}
+#appRoot{opacity:0;transition:opacity .5s ease}
 
-/* SECTION HEADERS */
-.up-shdr{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;
-  letter-spacing:.09em;margin:34px 2px 14px;display:flex;align-items:center;gap:10px}
-.up-shdr::after{content:'';flex:1;height:1px;background:var(--hairline)}
+/* ════ LANDING (hero wordmark + two cards) ════ */
+#landing{min-height:100vh;min-height:100dvh;max-width:480px;margin:0 auto;width:100%;
+  display:flex;flex-direction:column;position:relative;overflow:hidden;transition:opacity .35s ease}
+#landing.fade-out{opacity:0;pointer-events:none}
+#landing::before{content:'';position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(120% 52% at 50% 114%,rgba(212,168,67,.14),transparent 68%)}
+.hero{flex:1;display:flex;flex-direction:column;justify-content:flex-end;
+  padding:calc(env(safe-area-inset-top) + 24px) 30px 6px;position:relative}
+.hero-eyebrow{font-size:11px;font-weight:700;letter-spacing:.22em;color:var(--gold);margin-bottom:18px}
+.hero-word{font-weight:900;font-size:76px;line-height:.9;letter-spacing:-.045em;color:var(--gold)}
+.hero-sub{font-size:16px;color:var(--text);margin-top:16px;max-width:240px;line-height:1.45}
+.landing-cards{flex:none;position:relative;display:flex;flex-direction:column;gap:12px;
+  padding:26px 22px calc(32px + env(safe-area-inset-bottom))}
+/* matte raised cards — flat dark surface, top highlight + drop shadow = "out of the page" */
+.path-card{display:flex;align-items:center;gap:14px;border-radius:18px;cursor:pointer;user-select:none;
+  background:var(--bg-card);border:1px solid var(--hairline);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 18px 34px -18px rgba(0,0,0,.92),0 3px 8px -3px rgba(0,0,0,.55);
+  transition:transform .16s cubic-bezier(.34,1.56,.64,1)}
+.path-card:active{transform:scale(.985)}
+.path-card.whats-new{justify-content:space-between;gap:16px;padding:20px;border-color:rgba(212,168,67,.42)}
+.path-card.new-to-forge{padding:16px 20px}
+.path-title{font-weight:800;font-size:21px;letter-spacing:-.02em;color:var(--gold)}
+.path-sub{font-size:13px;color:var(--text);margin-top:3px}
+.path-arrow{flex:none;width:42px;height:42px;border-radius:50%;background:var(--gold);
+  display:flex;align-items:center;justify-content:center}
+.path-door{flex:none;color:var(--text-muted)}
+.ntf-mid{flex:1;min-width:0}
+.ntf-title{font-weight:700;font-size:15px;color:var(--gold)}
+.ntf-sub{font-size:12.5px;color:var(--text);margin-top:2px}
+.ntf-chev{flex:none;color:var(--muted)}
 
-/* UPDATE CARD — same depth treatment as .card in main.css */
-.up-card{background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,0) 38%),var(--bg-card);
-  border:1px solid var(--hairline);border-radius:var(--r);padding:18px;margin-bottom:16px;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 12px 32px -14px rgba(0,0,0,.6)}
-.up-date{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold)}
-.up-title{font-size:19px;font-weight:800;letter-spacing:-.02em;line-height:1.25;margin:7px 0 8px}
-.up-desc{font-size:14px;color:var(--text-muted);line-height:1.55;margin-bottom:14px}
-.up-media{display:block;width:100%;border-radius:13px;border:1px solid var(--hairline);
-  background:var(--bg-card-2);aspect-ratio:9/16;max-height:520px;object-fit:cover;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
-/* graceful state before the real asset is dropped in */
-.up-media[alt]{color:var(--muted);font-size:12px;text-align:center}
+/* ════ CONTENT SHEET ════ */
+#contentView{display:none;max-width:480px;margin:0 auto;width:100%}
+#backBar{position:sticky;top:0;z-index:30;padding:calc(env(safe-area-inset-top) + 8px) 14px 10px;
+  background:linear-gradient(var(--bg) 30%,rgba(10,10,13,.7));
+  backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4)}
+#backBar.hidden{display:none}
+.back-btn{display:inline-flex;align-items:center;gap:4px;color:var(--gold);font-weight:600;font-size:15px;
+  cursor:pointer;padding:8px;background:none;border:none;font-family:inherit;letter-spacing:-.01em}
+.back-btn:active{opacity:.6}
+.sec-main{padding:4px 22px calc(44px + env(safe-area-inset-bottom))}
+.sec-title{font-weight:800;font-size:30px;letter-spacing:-.03em;color:var(--gold)}
+.sec-divider{height:1px;background:var(--hairline);margin:16px 0 22px}
+.sec-intro{font-size:14.5px;line-height:1.55;color:var(--text);margin:-8px 0 26px;max-width:340px}
 
-/* STEP CARD */
-.up-step{display:flex;gap:14px;align-items:flex-start;
-  background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,0) 50%),var(--bg-card);
-  border:1px solid var(--hairline);border-radius:var(--r);padding:16px;margin-bottom:12px;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.03),0 10px 26px -14px rgba(0,0,0,.55)}
-.up-stepnum{flex-shrink:0;width:34px;height:34px;border-radius:50%;
-  background:var(--gold-l);border:1.5px solid var(--gold);color:var(--gold);
-  display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;
-  font-variant-numeric:tabular-nums}
-.up-stepbody{flex:1;min-width:0}
-.up-steptitle{font-size:15.5px;font-weight:700;letter-spacing:-.01em;margin-bottom:3px}
-.up-stepdesc{font-size:13px;color:var(--text-muted);line-height:1.5;margin-bottom:12px}
-.up-stepmedia{display:block;width:100%;border-radius:11px;border:1px solid var(--hairline);
-  background:var(--bg-card-2);aspect-ratio:9/16;max-height:400px;object-fit:cover}
+/* ── FEED ENTRY (matte raised box) ── */
+.up-card{background:var(--bg-card);border:1px solid var(--hairline);border-radius:16px;padding:18px;margin-bottom:18px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 18px 34px -18px rgba(0,0,0,.92),0 3px 8px -3px rgba(0,0,0,.55)}
+.up-date{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:7px}
+.up-title{font-weight:800;font-size:20px;line-height:1.2;letter-spacing:-.02em;color:var(--gold);margin:0 0 9px}
+.up-desc{font-size:14px;line-height:1.6;color:var(--text);margin:0 0 16px}
+.up-desc strong{font-weight:700;color:var(--text)}
+.up-desc strong.g{color:var(--green)}
+.up-desc strong.r{color:var(--red)}
 
-/* FOOTER */
-.up-foot{text-align:center;padding:36px 8px 8px;color:var(--muted);font-size:12px;line-height:1.6}
-.up-foot a{color:var(--gold);text-decoration:none;font-weight:600}
+/* ── CINEMATIC 9/16 MEDIA TILE ── */
+.media-wrap{display:flex;flex-direction:column;align-items:center;gap:9px}
+.media-tile{position:relative;width:174px;max-width:64%;aspect-ratio:9/16;border-radius:16px;overflow:hidden;
+  background:radial-gradient(130% 80% at 50% 0%,#1c1c22,#0b0b0e);border:1px solid var(--hairline);
+  display:flex;align-items:center;justify-content:center}
+.media-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;background:transparent;border:none}
+.media-dur{position:absolute;top:9px;right:9px;font-size:10px;font-weight:700;color:var(--text-muted);
+  background:rgba(0,0,0,.55);padding:3px 7px;border-radius:999px;z-index:2;pointer-events:none;transition:opacity .2s}
+.media-tile.playing .media-dur{opacity:0}
+.media-ph{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
+.media-play{width:50px;height:50px;border-radius:50%;background:var(--gold-soft);border:1px solid rgba(212,168,67,.5);
+  color:var(--gold);display:flex;align-items:center;justify-content:center}
+.media-soon{font-size:11px;font-weight:600;letter-spacing:.02em;color:var(--text)}
+.media-cap{font-size:12px;color:var(--text);text-align:center}
+
+/* ── GUIDE STEP (matte raised box) ── */
+.up-step{background:var(--bg-card);border:1px solid var(--hairline);border-radius:16px;padding:18px;margin-bottom:18px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 18px 34px -18px rgba(0,0,0,.92),0 3px 8px -3px rgba(0,0,0,.55)}
+.up-step-head{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.up-stepnum{flex:none;width:32px;height:32px;border-radius:50%;background:var(--gold-soft);
+  border:1.5px solid rgba(212,168,67,.55);color:var(--gold);display:flex;align-items:center;justify-content:center;
+  font-weight:800;font-size:15px;font-variant-numeric:tabular-nums}
+.up-steptitle{font-weight:700;font-size:18px;letter-spacing:-.01em;color:var(--gold)}
+.up-stepdesc{font-size:13.5px;line-height:1.55;color:var(--text);margin:0 0 14px;padding-left:44px}
+.up-step .media-wrap{padding-left:44px}
+.up-step .media-tile{width:158px}
+
+/* ── FOOTER ── */
+.up-foot{text-align:center;padding:26px 8px 8px;color:var(--text);font-size:13px;line-height:1.7}
+.up-foot a{display:inline-block;margin-top:14px;background:linear-gradient(180deg,#e7c45c,var(--gold));
+  color:#0a0a0d;text-decoration:none;font-weight:800;font-size:18px;letter-spacing:-.01em;padding:15px 32px;border-radius:14px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 14px 28px -12px rgba(212,168,67,.55);transition:transform .16s}
+.up-foot a:active{transform:scale(.97)}
+
+/* ── ANIMATIONS ── */
+@keyframes upSheet{from{opacity:.4;transform:translateY(22px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
 </style>
 </head>
 <body>
 
-<div class="up-wrap">
-
-  <!-- ══ HERO ══ -->
-  <header class="up-hero">
-    <div class="up-logo">FORGE</div>
-    <div class="up-tag">A competitive fitness tracker for your friend group. Skip a day, and the whole group will know.</div>
-    <a class="up-cta" href="index.html">Open the app →</a>
-  </header>
-
-  <!-- ══ WHAT'S NEW ══ -->
-  <section>
-    <div class="up-shdr">What's New</div>
-
-    <!-- ── Entry 1: The Iron Pledge ── -->
-    <article class="up-card">
-      <div class="up-date">June 2026</div>
-      <h2 class="up-title">The Iron Pledge — High Stakes Mode</h2>
-      <p class="up-desc">Put your points where your mouth is. Pledge a number of workouts for the week: hit it and your base points <strong style="color:var(--green)">double</strong>, miss it and they go to <strong style="color:var(--red)">zero</strong>. No take-backs, no mercy.</p>
-      <!-- SCREENSHOT NEEDED: updates/iron-pledge.jpg — The Iron Pledge tab showing the pledge lock-in screen (number input + "Lock It In" button) -->
-      <img class="up-media" src="updates/iron-pledge.jpg" alt="The Iron Pledge lock-in screen">
-      <!-- VIDEO ALTERNATIVE (swap the <img> above for this if you record a clip instead):
-      <!-- VIDEO NEEDED: updates/iron-pledge.mp4 — short clip of locking in a weekly pledge -->
-      <!--
-      <video class="up-media" src="updates/iron-pledge.mp4" autoplay muted loop playsinline></video>
-      -->
-    </article>
-
-    <!-- ── Entry 2: New Weekly Twists ── -->
-    <article class="up-card">
-      <div class="up-date">June 2026</div>
-      <h2 class="up-title">New Weekly Twists</h2>
-      <p class="up-desc">The rules now change on you. <strong>Boss Week</strong> doubles everything, <strong>Freaky Fridays</strong> and <strong>Monday Motivation</strong> reward you for showing up on the worst days, <strong>Underdog Week</strong> hands last place a 2x lifeline, and <strong>Jack of All Trades</strong> drops +20 for logging four different workout types in a week.</p>
-      <!-- SCREENSHOT NEEDED: updates/weekly-twists.jpg — Admin → Monthly Twists section showing the list of twist toggles (Boss Week, Freaky Fridays, Monday Motivation, Underdog Week, Jack of All Trades) -->
-      <img class="up-media" src="updates/weekly-twists.jpg" alt="Monthly Twists toggle list in Admin">
-    </article>
-
-    <!-- ── Entry 3: Visual overhaul ── -->
-    <article class="up-card">
-      <div class="up-date">June 2026</div>
-      <h2 class="up-title">A Whole New Forge</h2>
-      <p class="up-desc">We rebuilt the look from the studs up to feel like a real app, not a web page. Ranked team standings, a goal ring on your home screen, a sticky log button that follows you down the page, frosted tab bar, and a fresh set of icons throughout.</p>
-      <!-- SCREENSHOT NEEDED: updates/visual-overhaul.jpg — Home tab hero ("Your Steel" points card) and/or the Leaderboard team standings, showing the native redesign -->
-      <img class="up-media" src="updates/visual-overhaul.jpg" alt="Redesigned home and leaderboard">
-    </article>
-
-    <!-- ── Entry 4: Personal monthly goals ── -->
-    <article class="up-card">
-      <div class="up-date">June 2026</div>
-      <h2 class="up-title">Personal Monthly Goals</h2>
-      <p class="up-desc">Set the bar yourself. Tap the ring on your home screen, pick how many workouts you're aiming for this month, and watch it fill. It's between you and the ring — no one else has to know how low you set it.</p>
-      <!-- SCREENSHOT NEEDED: updates/monthly-goals.jpg — Home tab monthly goal ring, either the "Tap to set a goal" prompt or a partly-filled progress ring -->
-      <img class="up-media" src="updates/monthly-goals.jpg" alt="Monthly goal ring on the home screen">
-    </article>
-  </section>
-
-  <!-- ══ HOW TO USE FORGE ══ -->
-  <section>
-    <div class="up-shdr">How to Use Forge</div>
-
-    <!-- Step 1 -->
-    <div class="up-step">
-      <div class="up-stepnum">1</div>
-      <div class="up-stepbody">
-        <div class="up-steptitle">Join your group</div>
-        <p class="up-stepdesc">Get the 6-character code from your group's organiser, punch it in, and pick your name from the roster.</p>
-        <!-- SCREENSHOT NEEDED: updates/step-join-group.jpg — Onboarding screen "Enter your group code" -->
-        <img class="up-stepmedia" src="updates/step-join-group.jpg" alt="Enter your group code screen">
-      </div>
-    </div>
-
-    <!-- Step 2 -->
-    <div class="up-step">
-      <div class="up-stepnum">2</div>
-      <div class="up-stepbody">
-        <div class="up-steptitle">Log a workout</div>
-        <p class="up-stepdesc">Hit the Log tab, pick the day, tap what you did (or type your own), and lock it in. That's it — five seconds, done.</p>
-        <!-- SCREENSHOT NEEDED: updates/step-log-workout.jpg — Log tab with day selector and workout chips selected, ready to submit -->
-        <img class="up-stepmedia" src="updates/step-log-workout.jpg" alt="Logging a workout">
-      </div>
-    </div>
-
-    <!-- Step 3 -->
-    <div class="up-step">
-      <div class="up-stepnum">3</div>
-      <div class="up-stepbody">
-        <div class="up-steptitle">Check the leaderboard</div>
-        <p class="up-stepdesc">See where your team stands and where you rank against everyone else. Use it as motivation, or as a reason to text the group some trash talk.</p>
-        <!-- SCREENSHOT NEEDED: updates/step-leaderboard.jpg — Leaderboard tab showing team standings cards and individual rankings -->
-        <img class="up-stepmedia" src="updates/step-leaderboard.jpg" alt="Leaderboard with team standings">
-      </div>
-    </div>
-
-    <!-- Step 4 -->
-    <div class="up-step">
-      <div class="up-stepnum">4</div>
-      <div class="up-stepbody">
-        <div class="up-steptitle">Set your monthly goal</div>
-        <p class="up-stepdesc">Tap the ring on your home screen and commit to a number of workouts for the month. A target beats a vibe.</p>
-        <!-- SCREENSHOT NEEDED: updates/step-monthly-goal.jpg — Home tab setting the monthly goal (input open or ring filled) -->
-        <img class="up-stepmedia" src="updates/step-monthly-goal.jpg" alt="Setting a monthly goal">
-      </div>
-    </div>
-
-    <!-- Step 5 -->
-    <div class="up-step">
-      <div class="up-stepnum">5</div>
-      <div class="up-stepbody">
-        <div class="up-steptitle">Take The Iron Pledge</div>
-        <p class="up-stepdesc">Feeling brave? Opt in, pledge your weekly target, and play for double-or-nothing. Glory if you hit it, a zeroed week if you don't.</p>
-        <!-- SCREENSHOT NEEDED: updates/step-iron-pledge.jpg — Pledge tab showing an active pledge with the weekly progress ring -->
-        <img class="up-stepmedia" src="updates/step-iron-pledge.jpg" alt="An active Iron Pledge">
-      </div>
-    </div>
-
-    <!-- Step 6 -->
-    <div class="up-step">
-      <div class="up-stepnum">6</div>
-      <div class="up-stepbody">
-        <div class="up-steptitle">Running the group? Visit Admin</div>
-        <p class="up-stepdesc">If you're the admin, the Admin tab is your control room — assign teams and roles, flip on monthly twists, and manage the season.</p>
-        <!-- SCREENSHOT NEEDED: updates/step-admin.jpg — Admin tab showing team/role assignment and twist toggles (admin-only view) -->
-        <img class="up-stepmedia" src="updates/step-admin.jpg" alt="Admin settings">
-      </div>
-    </div>
-  </section>
-
-  <!-- ══ FOOTER ══ -->
-  <footer class="up-foot">
-    Forged by the group.<br>
-    <a href="index.html">Open Forge →</a>
-  </footer>
-
+<!-- ══ INTRO LOADER — shows forge-loading.gif for 1.5s, then fades to landing.
+     If the gif is missing, onerror calls skipLoading() → straight to landing. ══ -->
+<div id="loadingScreen">
+  <img src="updates/forge-loading.gif" alt="" onerror="skipLoading()">
 </div>
+
+<div id="appRoot">
+
+  <!-- ════ LANDING — hero wordmark + two cards (What's New primary, New to Forge? below) ════ -->
+  <div id="landing">
+    <div class="hero">
+      <div class="hero-eyebrow">WHAT'S NEW · JUNE 2026</div>
+      <div class="hero-word">Forge</div>
+      <div class="hero-sub">The latest on the app your group competes in.</div>
+    </div>
+
+    <div class="landing-cards">
+      <!-- What's New (primary, gold) → opens the changelog feed -->
+      <div class="path-card whats-new" onclick="openSection('whatsnew', this)">
+        <div>
+          <div class="path-title">What's New</div>
+          <div class="path-sub">5 updates this month</div>
+        </div>
+        <div class="path-arrow" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0a0a0d" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </div>
+      </div>
+
+      <!-- New to Forge? (secondary) → opens the step-by-step guide -->
+      <div class="path-card new-to-forge" onclick="openSection('guide', this)">
+        <svg class="path-door" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16M14 12h.01"/></svg>
+        <div class="ntf-mid">
+          <div class="ntf-title">New to Forge?</div>
+          <div class="ntf-sub">Get started in 5 steps</div>
+        </div>
+        <svg class="ntf-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════ CONTENT SHEET — hidden until a card is tapped ════ -->
+  <div id="contentView">
+
+    <div id="backBar" class="hidden">
+      <button class="back-btn" onclick="backToLanding()" type="button">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>Back
+      </button>
+    </div>
+
+    <div class="sec-main">
+
+      <!-- ── SECTION: What's New (changelog feed, newest first) ── -->
+      <div id="section-whatsnew" class="content-section">
+        <div class="sec-title">What's New</div>
+        <div class="sec-divider"></div>
+        <p class="sec-intro">Five things we shipped this month. Tap any clip to watch it in action.</p>
+
+        <!-- Entry 1: Install on home screen -->
+        <article class="up-card">
+          <div class="up-date">June 2026</div>
+          <h2 class="up-title">Install Forge on Your Phone</h2>
+          <p class="up-desc">Forge lives on your home screen. Tap the share icon in your browser and select "Add to Home Screen" — it installs like a native app, no App Store needed.</p>
+          <!-- VIDEO: Add to Home Screen flow on iPhone. updates/install-homescreen.mp4 -->
+          <div class="media-wrap">
+            <div class="media-tile">
+              <video data-vid="install-homescreen" class="media-video" controls playsinline poster="updates/install-homescreen-thumb.jpg">
+                <source src="updates/install-homescreen.mp4" type="video/mp4" onerror="videoFallback(this)">
+              </video>
+              <span class="media-dur">0:16</span>
+            </div>
+            <div class="media-cap">Add to Home Screen</div>
+          </div>
+        </article>
+
+        <!-- Entry 2: The Iron Pledge -->
+        <article class="up-card">
+          <div class="up-date">June 2026</div>
+          <h2 class="up-title">The Iron Pledge — High Stakes Mode</h2>
+          <p class="up-desc">Put your points where your mouth is. Pledge a number of workouts for the week: hit it and your base points <strong class="g">double</strong>, miss it and they go to <strong class="r">zero</strong>. No take-backs, no mercy.</p>
+          <!-- VIDEO: locking in a weekly pledge + progress ring. updates/iron-pledge.mp4 -->
+          <div class="media-wrap">
+            <div class="media-tile">
+              <video data-vid="iron-pledge" class="media-video" controls playsinline poster="updates/iron-pledge-thumb.jpg">
+                <source src="updates/iron-pledge.mp4" type="video/mp4" onerror="videoFallback(this)">
+              </video>
+              <span class="media-dur">0:22</span>
+            </div>
+            <div class="media-cap">Locking in a weekly pledge</div>
+          </div>
+        </article>
+
+        <!-- Entry 3: New Weekly Twists -->
+        <article class="up-card">
+          <div class="up-date">June 2026</div>
+          <h2 class="up-title">New Weekly Twists</h2>
+          <p class="up-desc">The rules now change on you. <strong>Boss Week</strong> doubles everything, <strong>Freaky Fridays</strong> and <strong>Monday Motivation</strong> reward you for showing up on the worst days, <strong>Underdog Week</strong> hands last place a 2× lifeline, and <strong>Jack of All Trades</strong> drops +20 for logging four different workout types in a week.</p>
+          <!-- VIDEO: admin toggling the monthly twists on. updates/weekly-twists.mp4 -->
+          <div class="media-wrap">
+            <div class="media-tile">
+              <video data-vid="weekly-twists" class="media-video" controls playsinline poster="updates/weekly-twists-thumb.jpg">
+                <source src="updates/weekly-twists.mp4" type="video/mp4" onerror="videoFallback(this)">
+              </video>
+              <span class="media-dur">0:19</span>
+            </div>
+            <div class="media-cap">Toggling the monthly twists</div>
+          </div>
+        </article>
+
+        <!-- Entry 4: Visual overhaul -->
+        <article class="up-card">
+          <div class="up-date">June 2026</div>
+          <h2 class="up-title">A Whole New Forge</h2>
+          <p class="up-desc">We rebuilt the look from the studs up to feel like a real app, not a web page. Ranked team standings, a goal ring on your home screen, a sticky log button that follows you down the page, frosted tab bar, and a fresh set of icons throughout.</p>
+          <!-- VIDEO: scrolling the redesigned home + board. updates/visual-overhaul.mp4 -->
+          <div class="media-wrap">
+            <div class="media-tile">
+              <video data-vid="visual-overhaul" class="media-video" controls playsinline poster="updates/visual-overhaul-thumb.jpg">
+                <source src="updates/visual-overhaul.mp4" type="video/mp4" onerror="videoFallback(this)">
+              </video>
+              <span class="media-dur">0:24</span>
+            </div>
+            <div class="media-cap">The redesigned home &amp; board</div>
+          </div>
+        </article>
+
+        <!-- Entry 5: Personal monthly goals -->
+        <article class="up-card">
+          <div class="up-date">June 2026</div>
+          <h2 class="up-title">Personal Monthly Goals</h2>
+          <p class="up-desc">Set the bar yourself. Tap the ring on your home screen, pick how many workouts you're aiming for this month, and watch it fill. It's between you and the ring — no one else has to know how low you set it.</p>
+          <!-- VIDEO: tapping the goal ring and setting a target. updates/monthly-goals.mp4 -->
+          <div class="media-wrap">
+            <div class="media-tile">
+              <video data-vid="monthly-goals" class="media-video" controls playsinline poster="updates/monthly-goals-thumb.jpg">
+                <source src="updates/monthly-goals.mp4" type="video/mp4" onerror="videoFallback(this)">
+              </video>
+              <span class="media-dur">0:15</span>
+            </div>
+            <div class="media-cap">Setting a monthly target</div>
+          </div>
+        </article>
+
+        <footer class="up-foot">Forged by the group.<br><a href="index.html">Open Forge →</a></footer>
+      </div>
+
+      <!-- ── SECTION: Get Started (step-by-step guide) ── -->
+      <div id="section-guide" class="content-section">
+        <div class="sec-title">Get Started</div>
+        <div class="sec-divider"></div>
+        <p class="sec-intro">Five steps from group code to logging your first workout.</p>
+
+        <!-- Step 1 -->
+        <div class="up-step">
+          <div class="up-step-head">
+            <div class="up-stepnum">1</div>
+            <div class="up-steptitle">Join your group</div>
+          </div>
+          <p class="up-stepdesc">Get the 6-character code from your group's organiser, punch it in, and pick your name from the roster.</p>
+          <!-- VIDEO: entering a group code and joining. updates/step-join-group.mp4 -->
+          <div class="media-wrap">
+            <div class="media-tile">
+              <video data-vid="step-join-group" class="media-video" controls playsinline poster="updates/step-join-group-thumb.jpg">
+                <source src="updates/step-join-group.mp4" type="video/mp4" onerror="videoFallback(this)">
+              </video>
+              <span class="media-dur">0:12</span>
+            </div>
+            <div class="media-cap">Entering a group code</div>
+          </div>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="up-step">
+          <div class="up-step-head">
+            <div class="up-stepnum">2</div>
+            <div class="up-steptitle">Log a workout</div>
+          </div>
+          <p class="up-stepdesc">Hit the Log tab, pick the day, tap what you did (or type your own), and lock it in. That's it — five seconds, done.</p>
+          <!-- VIDEO: date → workout chips → FAB submit. updates/step-log-workout.mp4 -->
+          <div class="media-wrap">
+            <div class="media-tile">
+              <video data-vid="step-log-workout" class="media-video" controls playsinline poster="updates/step-log-workout-thumb.jpg">
+                <source src="updates/step-log-workout.mp4" type="video/mp4" onerror="videoFallback(this)">
+              </video>
+              <span class="media-dur">0:10</span>
+            </div>
+            <div class="media-cap">Logging today's workout</div>
+          </div>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="up-step">
+          <div class="up-step-head">
+            <div class="up-stepnum">3</div>
+            <div class="up-steptitle">Check the leaderboard</div>
+          </div>
+          <p class="up-stepdesc">See where your team stands and where you rank against everyone else. Use it as motivation, or as a reason to text the group some trash talk.</p>
+          <!-- VIDEO: podium + individual rankings. updates/step-leaderboard.mp4 -->
+          <div class="media-wrap">
+            <div class="media-tile">
+              <video data-vid="step-leaderboard" class="media-video" controls playsinline poster="updates/step-leaderboard-thumb.jpg">
+                <source src="updates/step-leaderboard.mp4" type="video/mp4" onerror="videoFallback(this)">
+              </video>
+              <span class="media-dur">0:14</span>
+            </div>
+            <div class="media-cap">Podium &amp; rankings</div>
+          </div>
+        </div>
+
+        <!-- Step 4 -->
+        <div class="up-step">
+          <div class="up-step-head">
+            <div class="up-stepnum">4</div>
+            <div class="up-steptitle">Running the group? Visit Admin</div>
+          </div>
+          <p class="up-stepdesc">If you're the admin, the Admin tab is your control room — assign teams and roles, flip on monthly twists, and manage the season.</p>
+          <!-- VIDEO: twist toggles + role assignment. updates/step-admin.mp4 -->
+          <div class="media-wrap">
+            <div class="media-tile">
+              <video data-vid="step-admin" class="media-video" controls playsinline poster="updates/step-admin-thumb.jpg">
+                <source src="updates/step-admin.mp4" type="video/mp4" onerror="videoFallback(this)">
+              </video>
+              <span class="media-dur">0:18</span>
+            </div>
+            <div class="media-cap">Twist toggles &amp; roles</div>
+          </div>
+        </div>
+
+        <!-- Step 5 -->
+        <div class="up-step">
+          <div class="up-step-head">
+            <div class="up-stepnum">5</div>
+            <div class="up-steptitle">Install Forge on your phone</div>
+          </div>
+          <p class="up-stepdesc">Add Forge to your home screen so it opens like a native app — tap the browser share icon, then "Add to Home Screen."</p>
+          <!-- VIDEO: Add to Home Screen flow. updates/step-install.mp4 -->
+          <div class="media-wrap">
+            <div class="media-tile">
+              <video data-vid="step-install" class="media-video" controls playsinline poster="updates/step-install-thumb.jpg">
+                <source src="updates/step-install.mp4" type="video/mp4" onerror="videoFallback(this)">
+              </video>
+              <span class="media-dur">0:13</span>
+            </div>
+            <div class="media-cap">Add to Home Screen</div>
+          </div>
+        </div>
+
+        <footer class="up-foot">Forged by the group.<br><a href="index.html">Open Forge →</a></footer>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══ FIREBASE — reuse the single init + `db` instance from firebase.js (no second init) ══ -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="src/config/firebase.js"></script>
+
+<script>
+// ── ANALYTICS — fire-and-forget counters; never break the page ──
+// Writes increment counters to analytics/updates-page/events/{YYYY-MM}.
+// Reuses window.db from firebase.js. Unauthenticated writes are allowed by
+// the matching firestore.rules (public landing page).
+function trackEvent(key){
+  try{
+    if(!window.db || !window.firebase) return;
+    var d = new Date();
+    var month = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    window.db.collection('analytics').doc('updates-page').collection('events').doc(month)
+      .set({ [key]: firebase.firestore.FieldValue.increment(1) }, { merge: true })
+      .catch(function(){ /* swallow async rejection (e.g. perms before rules deploy) */ });
+    // no await — fire and forget
+  }catch(e){ /* swallow — analytics must never break the page */ }
+}
+
+// ── VIDEO missing-file fallback ──
+// <source onerror> (404 on GitHub Pages) and a video-level 'error' listener
+// both route here. The <video> is swapped for a gold "Coming soon" tile inner;
+// the surrounding cinematic tile (gradient + duration badge + caption) stays.
+function videoFallback(node){
+  try{
+    var v = (node && node.tagName === 'VIDEO') ? node : (node && node.parentElement);
+    if(!v || v.tagName !== 'VIDEO' || v._fellback) return;
+    v._fellback = true;
+    var ph = document.createElement('div');
+    ph.className = 'media-ph';
+    ph.innerHTML = '<div class="media-play"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div><div class="media-soon">Coming soon</div>';
+    v.replaceWith(ph);
+  }catch(e){ /* never break the page over a missing video */ }
+}
+
+// ── INTRO LOADER ──
+var _loadingDone = false;
+function revealLanding(){
+  if(_loadingDone) return;
+  _loadingDone = true;
+  var ls = document.getElementById('loadingScreen');
+  if(ls){ ls.style.opacity = '0'; setTimeout(function(){ ls.style.display = 'none'; }, 400); }
+  document.getElementById('appRoot').style.opacity = '1';
+}
+function skipLoading(){ revealLanding(); }           // gif missing → straight to landing
+window.addEventListener('DOMContentLoaded', function(){
+  setTimeout(revealLanding, 1500);
+  // Track every video's play event; degrade missing files to a placeholder.
+  document.querySelectorAll('video[data-vid]').forEach(function(v){
+    v.addEventListener('play', function(){
+      trackEvent('video_' + this.dataset.vid + '_play');
+      var tile = this.closest('.media-tile'); if(tile) tile.classList.add('playing');
+    });
+    v.addEventListener('error', function(){ videoFallback(this); }, true);  // decode/format failure
+    if(v.querySelector('source')){ v.load(); }   // kick a load so a missing source errors promptly
+  });
+});
+
+// ── TWO-PATH NAVIGATION (landing → content sheet → back) ──
+function openSection(which, cardEl){
+  trackEvent(which === 'whatsnew' ? 'landing_whats_new_tap' : 'landing_new_to_forge_tap');
+  var landing = document.getElementById('landing');
+  landing.classList.add('fade-out');               // landing fades out
+  setTimeout(function(){
+    landing.style.display = 'none';
+    document.getElementById('contentView').style.display = 'block';
+    document.getElementById('backBar').classList.remove('hidden');
+    var showId = which === 'whatsnew' ? 'section-whatsnew' : 'section-guide';
+    var hideId = which === 'whatsnew' ? 'section-guide' : 'section-whatsnew';
+    document.getElementById(hideId).style.display = 'none';
+    var sec = document.getElementById(showId);
+    sec.style.display = 'block';
+    sec.style.animation = 'none'; void sec.offsetWidth;   // restart the sheet-up animation
+    sec.style.animation = 'upSheet .44s cubic-bezier(.32,.72,0,1)';
+    window.scrollTo(0, 0);
+  }, 280);
+}
+function backToLanding(){
+  trackEvent('back_button_tap');
+  document.getElementById('contentView').style.display = 'none';
+  document.getElementById('backBar').classList.add('hidden');
+  var landing = document.getElementById('landing');
+  landing.style.display = 'flex';
+  landing.classList.remove('fade-out');
+  landing.style.animation = 'none'; void landing.offsetWidth;
+  landing.style.animation = 'upSheet .4s cubic-bezier(.32,.72,0,1)';
+  window.scrollTo(0, 0);
+}
+</script>
 
 </body>
 </html>

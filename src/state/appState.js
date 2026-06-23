@@ -98,6 +98,7 @@ window.activeTwists = {};
 window.jackAwards = [];         // groups/{CODE}/seasons/{ID}/jackAwards subcollection
 window.bets = {};               // groups/{CODE}/seasons/{ID}/bets — keyed by playerName
 window.ironPledgeBonuses = [];  // bonuses_iron_pledge top-level collection
+window.twistWindows = [];       // groups/{CODE}/seasons/{ID}/twistWindows — permanent week-bound twist docs
 window.selDay = null;
 window.selW = [];
 window.adminUnlocked = false;

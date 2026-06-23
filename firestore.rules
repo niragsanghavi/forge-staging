@@ -34,6 +34,14 @@ service cloud.firestore {
           allow write: if isAuthed();
           allow delete: if false;
         }
+
+        // Week-bound twist windows (Boss Week / Underdog Week) — immutable once written
+        match /twistWindows/{windowId} {
+          allow read:   if isAuthed();
+          allow create: if isAuthed();
+          allow update: if false;
+          allow delete: if false;
+        }
       }
     }
 
@@ -86,6 +94,15 @@ service cloud.firestore {
         allow read:  if isAuthed();
         allow write: if false;
       }
+    }
+
+    // Updates page analytics — public landing page, so writes are unauthenticated
+    // (visitors may not have Firebase anonymous auth initialized yet). Reads stay gated.
+    match /analytics/updates-page/events/{month} {
+      allow read:   if isAuthed();
+      allow create: if true;
+      allow update: if true;
+      allow delete: if false;
     }
 
     // ── DEFAULT DENY ──────────────────────────────────────────────────────

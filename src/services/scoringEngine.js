@@ -9,6 +9,7 @@ function _bonusesOf(ctx){ return (ctx && ctx.bonuses) || (typeof bonus30!=='unde
 function _rosterOf(ctx){ const s=_seasonOf(ctx); return (s && Array.isArray(s.roster)) ? s.roster : []; }
 function _jackAwardsOf(ctx){ return (ctx&&ctx.jackAwards)||(typeof jackAwards!=='undefined'?jackAwards:[])||[]; }
 function _ironPledgeBonusesOf(ctx){ return (ctx&&ctx.ironPledgeBonuses)||(typeof ironPledgeBonuses!=='undefined'?ironPledgeBonuses:[])||[]; }
+function _twistWindowsOf(ctx){ return (ctx&&ctx.twistWindows)||(typeof twistWindows!=='undefined'?twistWindows:[])||[]; }
 function _activeGroupCode(ctx){ return (ctx&&ctx.groupCode)||groupCode||''; }
 
 const _EMPTY_SET = new Set();
@@ -27,13 +28,14 @@ function _ctxEntry(ctx){
   const cfg=_seasonOf(ctx), logs=_logsOf(ctx), roster=_rosterOf(ctx);
   const twists=_twistsOf(ctx), bonuses=_bonusesOf(ctx);
   const jacks=_jackAwardsOf(ctx), ips=_ironPledgeBonusesOf(ctx);
+  const tw=_twistWindowsOf(ctx);
   const myGC=_activeGroupCode(ctx);
   const today=new Date();
   const stamp=[cfg.month,cfg.year,cfg.days,cfg.capTarget,cfg.vcTarget,cfg.minWorkouts,
                cfg.rolesEnabled,cfg.teamStreakThreshold,myGC,today.toDateString()].join('|');
   const hit=_scoreCache.get(logs);
   if(hit && hit.cfg===cfg && hit.rosterRef===roster && hit.twists===twists &&
-     hit.bonuses===bonuses && hit.jacks===jacks && hit.ips===ips && hit.stamp===stamp) return hit;
+     hit.bonuses===bonuses && hit.jacks===jacks && hit.ips===ips && hit.tw===tw && hit.stamp===stamp) return hit;
 
   const {month, year} = cfg;
   const DAYS = cfg.days ?? 31;
@@ -76,14 +78,24 @@ function _ctxEntry(ctx){
   // Twist + bonus lookups.
   const bonusWT=twists['bonus_workout'];
   const bonusWord=bonusWT?.enabled ? (bonusWT.workout||'').toLowerCase() : null;
-  const bossOn=!!twists['boss_week']?.enabled;
   const friOn=!!twists['freaky_fridays']?.enabled;
   const monOn=!!twists['monday_motivation']?.enabled;
-  const underdogOn=!!twists['underdog_week']?.enabled;
-  let minWO=Infinity;
-  if(underdogOn && roster.length>1){
-    for(const p of roster) minWO=Math.min(minWO,(daysByPlayer.get(p.name)||_EMPTY_SET).size);
+
+  // ── WEEK-BOUND WINDOWS (Boss Week + Underdog Week) ──
+  // Scoring reads PERMANENT window docs, never the live toggle — so toggling a
+  // twist on/off can never retroactively change a past window's effect.
+  const seasonWindows=tw.filter(w=>w && w.month===month && w.year===year);
+  // Boss Week: any day-of-month inside a boss_week window's [monDate,sunDate] is doubled.
+  const bossDays=new Set();
+  for(const w of seasonWindows){
+    if(w.twist!=='boss_week') continue;
+    for(let d=w.monDate; d<=w.sunDate; d++) bossDays.add(d);   // spanning weeks (mon>sun) add nothing — safe
   }
+  // Underdog Week: each window froze its last-place players at activation time.
+  const underdogWindows=seasonWindows
+    .filter(w=>w.twist==='underdog_week')
+    .map(w=>({monDate:w.monDate, sunDate:w.sunDate, frozen:new Set(w.frozenPlayers||[])}));
+
   const b30Set=new Set(bonuses.map(b=>b.player));
   const jackCnt=new Map();
   jacks.forEach(a=>{ if(!a.groupCode||a.groupCode===myGC) jackCnt.set(a.player,(jackCnt.get(a.player)||0)+1); });
@@ -98,11 +110,11 @@ function _ctxEntry(ctx){
   const isEnd=seasonPast || (todayInSeason && today.getDate()===DAYS);
 
   const entry={
-    cfg, rosterRef:roster, twists, bonuses, jacks, ips, stamp,
+    cfg, rosterRef:roster, twists, bonuses, jacks, ips, tw, stamp,
     DAYS, capTarget:cfg.capTarget??16, vcTarget:cfg.vcTarget??20, minWorkouts:cfg.minWorkouts??12,
     rolesEnabled:cfg.rolesEnabled!==false,
     rosterByName, logsByPlayer, daysByPlayer, qualByTeam,
-    bonusWord, bossOn, friOn, monOn, underdogOn, minWO,
+    bonusWord, friOn, monOn, bossDays, underdogWindows,
     b30Set, jackCnt, ipSum,
     dowBase, todayDay, isEnd, rosterLen:roster.length,
     results:new Map()
@@ -127,17 +139,19 @@ function score(playerName, ctx){
   const days=E.daysByPlayer.get(playerName)||_EMPTY_SET;
   const wo=days.size;
 
-  // ── BASE (bonus_workout and boss_week applied here) ──
-  let base=wo*5;
+  // ── BASE (per logged day: +5, or +6 on a bonus_workout day, ×2 inside a Boss Week window) ──
+  const bonusDaySet=new Set();
   if(E.bonusWord!==null){
-    const bonusDaySet=new Set();
     for(const l of ownLogs){
       if(Array.isArray(l.workouts) && l.workouts.some(w=>w.toLowerCase().includes(E.bonusWord))) bonusDaySet.add(l.day);
     }
-    base=(wo-bonusDaySet.size)*5 + bonusDaySet.size*6;
   }
-  // Boss Week: ×2 all base points for the entire month
-  if(E.bossOn) base=base*2;
+  // Boss Week doubles a day's base when that day-of-month falls inside a boss_week
+  // window. Because scoring keys off the log's `day` integer (never its timestamp),
+  // a backlogged workout dated inside a window automatically earns the bonus.
+  const dayBaseOf = d => (bonusDaySet.has(d)?6:5) * (E.bossDays.has(d)?2:1);
+  let base=0;
+  for(const d of days) base += dayBaseOf(d);
 
   // ── STREAK (display only) ── consecutive run ending today (or yesterday)
   const checkUpTo=days.has(E.todayDay) ? E.todayDay : E.todayDay-1;
@@ -187,11 +201,17 @@ function score(playerName, ctx){
     }
   }
 
-  // ── UNDERDOG WEEK ──
-  // Last place = fewest unique logged days across the whole roster.
-  // All players tied at the minimum qualify. Non-circular: uses raw log counts.
+  // ── UNDERDOG WEEK (week-bound, frozen identity, capped at first 3 workouts) ──
+  // A player frozen in a window doubles the base of their FIRST 3 logged days
+  // inside that window's Mon–Sun range (by day-of-month, ascending); workouts 4+
+  // score normally. Identity was frozen at activation — never recomputed here, so
+  // toggling the twist later can't change who qualified. Cap is per window.
   let underdogBonus=0;
-  if(E.underdogOn && E.rosterLen>1 && wo<=E.minWO) underdogBonus=base;
+  for(const w of E.underdogWindows){
+    if(!w.frozen.has(playerName)) continue;
+    const inWin=[...days].filter(d=>d>=w.monDate && d<=w.sunDate).sort((a,b)=>a-b).slice(0,3);
+    for(const d of inWin) underdogBonus += dayBaseOf(d);   // +1 extra copy of the (Boss-aware) day base = doubled
+  }
 
   // ── JACK OF ALL TRADES (+20 per awarded week, scoped to this group) ──
   const jackBonus=(E.jackCnt.get(playerName)||0)*20;

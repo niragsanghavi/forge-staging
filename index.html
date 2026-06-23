@@ -354,6 +354,11 @@
           <button class="btn btn-surface btn-sm" style="margin:0" onclick="loadTabAnalytics()">Load</button>
         </div>
         <div id="tabAnalyticsResult"><div class="tmuted">Enter a group code to load analytics.</div></div>
+        <div class="divider"></div>
+        <div class="card-title">Updates Page Analytics</div>
+        <div class="tmuted" style="margin-bottom:10px">Global (not per-group) — taps and video plays on the public updates page.</div>
+        <button class="btn btn-surface btn-sm" style="margin:0 0 12px" onclick="loadUpdatesAnalytics()">Load Updates Analytics</button>
+        <div id="updatesAnalyticsResult"><div class="tmuted">Tap Load to fetch updates-page analytics.</div></div>
       </div>
     </div>
   </div>
@@ -744,7 +749,7 @@ function promptSwitch(){
     const remaining = removeSession(groupCode);
     const next = remaining[0];
     groupCode = next.code; me = next.player; setActiveCode(next.code);
-    allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; jackAwards=[]; bets={}; ironPledgeBonuses=[]; adminUnlocked=false;
+    allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; jackAwards=[]; bets={}; ironPledgeBonuses=[]; twistWindows=[]; adminUnlocked=false;
     showTab('home');
     loadGroup(groupCode, true);
   } else {
@@ -797,7 +802,7 @@ function handleDeadGroup(code, msg){
   if(remaining.length){
     const next = remaining[0];
     groupCode = next.code; me = next.player; setActiveCode(next.code);
-    allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; jackAwards=[]; bets={}; ironPledgeBonuses=[]; adminUnlocked=false;
+    allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; jackAwards=[]; bets={}; ironPledgeBonuses=[]; twistWindows=[]; adminUnlocked=false;
     loadGroup(groupCode, true);
   } else {
     showScreen('onboard'); showObStep(1);
@@ -858,7 +863,7 @@ function switchGroup(code){
   season = null; seasonId = null;
   setActiveCode(code);
   groupCode = s.code; me = s.player;
-  allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; jackAwards=[]; bets={}; ironPledgeBonuses=[]; adminUnlocked=false;
+  allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; jackAwards=[]; bets={}; ironPledgeBonuses=[]; twistWindows=[]; adminUnlocked=false;
   ['heroCard','nudgeCard','streakCardHighlight','roleBar','hStats','twistBanner','calGrid','streakCard','teamStand','indLb','ptsBk','feedList','globalConsentCard'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=''; });
   showTab('home');
   loadGroup(groupCode, true);
@@ -901,6 +906,12 @@ function subscribe(){
   unsub.push(
     db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('twists')
       .onSnapshot(s=>{ activeTwists={}; s.docs.forEach(d=>{ activeTwists[d.id]=d.data(); }); renderTwistToggles(); refresh(); })
+  );
+  // Week-bound twist windows (Boss Week / Underdog Week) — permanent, immutable docs.
+  // Scoring reads THESE, not the toggle state, so toggling never retro-changes scores.
+  unsub.push(
+    db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('twistWindows')
+      .onSnapshot(s=>{ twistWindows=s.docs.map(d=>({id:d.id,...d.data()})); renderTwistToggles(); refresh(); })
   );
   // Jack of All Trades awards
   unsub.push(
@@ -1032,8 +1043,8 @@ function renderHome(){
   }
   document.getElementById('roleBar').innerHTML=rHTML;
 
-  // Twist banner
-  const activeTwistList=TWIST_LIBRARY.filter(t=>activeTwists[t.id]?.enabled);
+  // Twist banner (Boss/Underdog are window-bound now — not surfaced via the toggle list)
+  const activeTwistList=TWIST_LIBRARY.filter(t=>t.id!=='boss_week'&&t.id!=='underdog_week'&&activeTwists[t.id]?.enabled);
   document.getElementById('twistBanner').innerHTML=activeTwistList.length===0?'':
     `<div class="card" style="border-color:var(--purple)">
       <div style="font-size:12px;font-weight:600;color:var(--purple);margin-bottom:8px">⚡ ACTIVE TWISTS THIS MONTH</div>
@@ -1477,13 +1488,13 @@ function renderLB(){
   document.getElementById('ptsBk').innerHTML=`
     <div class="card-title">Your breakdown — ${esc(me.name)}</div>
     ${[
-      ['Base points',my.base,`${my.wo} workouts × 5${activeTwists['boss_week']?.enabled?' (×2 Boss Week)':''}`],
+      ['Base points',my.base,`${my.wo} workouts × 5 — Boss Week doubles days inside its window`],
       ['Perfect week',my.wb,'+10 per any 7 consecutive days'],
       ['Team streak',my.tb,'Cumulative +1/+2/+3 (proportional threshold)'],
       ['Role bonus',my.rb,pl.role+' — applied on last day'],
       ['30-day bonus',my.b30,'All days logged'],
       ...(my.dayBonuses?[['Day bonuses',my.dayBonuses,'Freaky Fridays / Monday Motivation']]:[] ),
-      ...(my.underdogBonus?[['Underdog bonus',my.underdogBonus,'Last place ×2 on base points']]:[] ),
+      ...(my.underdogBonus?[['Underdog bonus',my.underdogBonus,'Underdog Week — first 3 workouts ×2']]:[] ),
       ...(my.jackBonus?[['Jack of All Trades',my.jackBonus,`${Math.round(my.jackBonus/20)} award(s) × +20 pts`]]:[] ),
       ...(my.ipBonus?[['Iron Pledge',my.ipBonus,my.ipBonus>0?'Pledge met — base pts doubled':'Pledge missed — base pts zeroed']]:[] ),
       ['Penalty',my.pen,'If under min workouts (last day)'],
@@ -1647,9 +1658,65 @@ function renderTwistToggles(){
       <div class="toggle${isOn?' on':''}" onclick="toggleTwist('${t.id}',${!isOn})"></div>
     </div>`;
   };
+  // Boss Week / Underdog Week: status display + Sunday-only "Activate" button.
+  // Reads PERMANENT window docs (twistWindows), never a live toggle.
+  const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const renderWindowRow = t => {
+    const now=new Date();
+    const inSeason=now.getMonth()+1===season.month && now.getFullYear()===season.year;
+    const seasonPast=now.getFullYear()>season.year || (now.getFullYear()===season.year && now.getMonth()+1>season.month);
+    const D=inSeason?now.getDate():(seasonPast?99:0);
+    const isSunday=now.getDay()===0;
+    const mn=MN[season.month-1];
+    const fmt=w=>`${mn} ${w.monDate}–${w.sunDate}`;
+    const wins=twistWindows.filter(w=>w.twist===t.id && w.month===season.month && w.year===season.year).sort((a,b)=>a.monDate-b.monDate);
+    const past=wins.filter(w=>w.sunDate<D);
+    const current=wins.filter(w=>w.monDate<=D && D<=w.sunDate);
+    const upcoming=wins.filter(w=>w.monDate>D);
+    let status;
+    if(current.length) status=`<span style="color:var(--green);font-weight:600">Active: ${esc(current.map(fmt).join(', '))}</span>`;
+    else if(upcoming.length) status=`<span style="color:var(--gold);font-weight:600">Upcoming: ${esc(upcoming.map(fmt).join(', '))}</span>`;
+    else status=`<span style="color:var(--muted)">No ${t.name} set this month</span>`;
+    let frozen='';
+    if(t.id==='underdog_week'){
+      const live=current[0]||upcoming[0];
+      if(live&&Array.isArray(live.frozenPlayers)&&live.frozenPlayers.length) frozen=`<div style="font-size:11px;color:var(--orange);margin-top:3px">Underdog this week: ${live.frozenPlayers.map(esc).join(', ')}</div>`;
+    }
+    const pastHTML=past.length?`<div style="font-size:11px;color:var(--muted);margin-top:4px">Past: ${past.map(w=>esc(fmt(w))+' ✓').join(', ')}</div>`:'';
+    const btn=isSunday
+      ? `<button class="btn btn-surface btn-sm" style="margin:0" onclick="activateTwistWindow('${t.id}')">Activate for next week</button>`
+      : `<button class="btn btn-surface btn-sm" style="margin:0;opacity:.4;pointer-events:none">Available Sundays only</button>`;
+    return `<div class="twist-row" style="flex-direction:column;align-items:stretch;gap:8px">
+      <div>
+        <div style="font-size:13px;font-weight:600">${t.name}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${t.desc}</div>
+        <div style="font-size:12px;margin-top:6px">${status}</div>${frozen}${pastHTML}
+      </div>
+      ${btn}
+    </div>`;
+  };
+  // Freaky Fridays / Monday Motivation: month-long, day-1-only enable, then locked.
+  const renderDay1Row = t => {
+    const isOn=activeTwists[t.id]?.enabled||false;
+    const now=new Date();
+    const inSeason=now.getMonth()+1===season.month && now.getFullYear()===season.year;
+    const isDay1=inSeason && now.getDate()===1;
+    const locked=isOn||!isDay1;   // can't enable after day 1; can't turn off once on (runs all month)
+    return `<div class="twist-row">
+      <div style="flex:1;margin-right:12px">
+        <div style="font-size:13px;font-weight:600">${t.name}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${t.desc}</div>
+        <div style="font-size:11px;color:var(--gold);margin-top:4px">Enable on day 1 only — runs all month</div>
+      </div>
+      <div class="toggle${isOn?' on':''}" ${locked?'style="opacity:.45;pointer-events:none"':''} onclick="toggleTwist('${t.id}',${!isOn})"></div>
+    </div>`;
+  };
+  const WINDOW=new Set(['boss_week','underdog_week']);
+  const DAY1=new Set(['freaky_fridays','monday_motivation']);
+  const pick = t => WINDOW.has(t.id)?renderWindowRow(t):DAY1.has(t.id)?renderDay1Row(t):renderRow(t);
   const standard = TWIST_LIBRARY.filter(t=>t.id!=='double_or_nothing');
   const highStakes = TWIST_LIBRARY.find(t=>t.id==='double_or_nothing');
-  let html = standard.map(renderRow).join('');
+  let html = standard.map(pick).join('');
   if(highStakes){
     html += `<div style="margin:16px 0 8px;padding:8px 0;border-top:1px solid var(--border);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--orange)">⚔️ High Stakes</div>`;
     html += renderRow(highStakes);
@@ -1659,10 +1726,61 @@ function renderTwistToggles(){
   renderIronPledgeAdmin();
 }
 async function toggleTwist(id,enable){
+  // Freaky Fridays / Monday Motivation: enable on day 1 of the season month only; runs all month.
+  if((id==='freaky_fridays'||id==='monday_motivation') && enable){
+    const label=id==='freaky_fridays'?'Freaky Fridays':'Monday Motivation';
+    if(activeTwists[id]?.enabled){ toast(`${label} is already active for this month`); return; }
+    const now=new Date();
+    const inSeason=now.getMonth()+1===season.month && now.getFullYear()===season.year;
+    if(!(inSeason && now.getDate()===1)){ toast(`${label} must be enabled on day 1 of the month — it runs all month.`,'error'); return; }
+  }
   const twist=TWIST_LIBRARY.find(t=>t.id===id);
   const data={enabled:enable};
   if(enable&&twist.configKey) data[twist.configKey]=activeTwists[id]?.[twist.configKey]||twist.configDefault||'';
   await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('twists').doc(id).set(data);
+}
+// ── WEEK-BOUND TWIST ACTIVATION (Boss Week / Underdog Week) ────────────────
+// Sunday-only. Writes a PERMANENT window doc for the next Mon–Sun. Deterministic
+// doc id + create-only rules mean a double-tap can never overwrite a past window.
+async function activateTwistWindow(twistId){
+  if(!season||!seasonId){ toast('Group still loading — try again in a second.','error'); return; }
+  const label=twistId==='boss_week'?'Boss Week':'Underdog Week';
+  const now=new Date();
+  if(now.getDay()!==0){   // 0 = Sunday
+    toast(`${label} can only be activated on a Sunday — it runs the following Mon–Sun.`,'error');
+    return;
+  }
+  const mon=new Date(now); mon.setDate(now.getDate()+1);   // tomorrow = Monday
+  const sun=new Date(mon); sun.setDate(mon.getDate()+6);   // following Sunday
+  const weekStr=getISOWeek(mon);
+  const monDate=mon.getDate(), sunDate=sun.getDate();
+  if(twistWindows.some(w=>w.twist===twistId && w.week===weekStr)){
+    toast(`${label} is already set for this week`); return;
+  }
+  const docData={
+    twist:twistId, week:weekStr, monDate, sunDate,
+    month:mon.getMonth()+1, year:mon.getFullYear(),
+    activatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+    activatedBy:(me&&me.name)||'admin'
+  };
+  if(twistId==='underdog_week'){
+    // Freeze current last place by fewest unique logged days — uses already-loaded
+    // allLogs/roster, no new Firestore read.
+    const roster=season.roster||[];
+    if(roster.length){
+      const counts=roster.map(p=>({name:p.name, wo:new Set(allLogs.filter(l=>l.player===p.name).map(l=>l.day)).size}));
+      const minWO=Math.min(...counts.map(c=>c.wo));
+      docData.frozenPlayers=counts.filter(c=>c.wo===minWO).map(c=>c.name);
+    } else { docData.frozenPlayers=[]; }
+  }
+  try{
+    await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId)
+      .collection('twistWindows').doc(`${twistId}_${weekStr}`).set(docData);
+    const range=`${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][mon.getMonth()]} ${monDate}–${sunDate}`;
+    toast(twistId==='underdog_week' && docData.frozenPlayers && docData.frozenPlayers.length
+      ? `${label} set for next week (${range}). Underdog: ${docData.frozenPlayers.join(', ')}`
+      : `${label} set for next week (${range}).`,'success');
+  }catch(e){ logErr('activateTwistWindow '+twistId, e); toast(`Could not set ${label} — it may already be set, or check your connection.`,'error'); }
 }
 async function saveTwistConfig(id,key,value){
   await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('twists').doc(id).update({[key]:value});
@@ -2164,6 +2282,35 @@ async function loadTabAnalytics(){
   }catch(e){ logErr('loadTabAnalytics',e); el.innerHTML='<div class="tmuted" style="color:var(--red)">Failed to load — check connection.</div>'; }
 }
 
+// ── UPDATES PAGE ANALYTICS VIEW (super admin) ───────────────────────────────
+// Global counters from analytics/updates-page/events/{YYYY-MM} — landing card
+// taps, back taps, and video plays written by the public updates.html page.
+async function loadUpdatesAnalytics(){
+  const el=document.getElementById('updatesAnalyticsResult');
+  if(!el) return;
+  el.innerHTML='<div class="tmuted">Loading…</div>';
+  try{
+    const snap=await db.collection('analytics').doc('updates-page').collection('events').get();
+    if(snap.empty){ el.innerHTML='<div class="tmuted">No updates-page analytics yet.</div>'; return; }
+    const docs=snap.docs.map(d=>({month:d.id,...d.data()})).sort((a,b)=>b.month.localeCompare(a.month));
+    const eventNames=[...new Set(docs.flatMap(d=>Object.keys(d).filter(k=>k!=='month')))].sort();
+    el.innerHTML=`
+      <div style="overflow-x:auto">
+        <table style="width:100%;font-size:12px;border-collapse:collapse;margin-bottom:4px">
+          <tr style="border-bottom:1px solid var(--border)">
+            <th style="text-align:left;padding:6px 4px;color:var(--muted);font-weight:600">Month</th>
+            ${eventNames.map(t=>`<th style="text-align:center;padding:6px 4px;color:var(--muted);font-weight:600;white-space:nowrap">${esc(t)}</th>`).join('')}
+          </tr>
+          ${docs.map(d=>`
+            <tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:8px 4px;font-weight:600;white-space:nowrap">${esc(d.month)}</td>
+              ${eventNames.map(t=>`<td style="padding:8px 4px;text-align:center;color:${(d[t]||0)>0?'var(--text)':'var(--muted)'}">${d[t]||0}</td>`).join('')}
+            </tr>`).join('')}
+        </table>
+      </div>`;
+  }catch(e){ logErr('loadUpdatesAnalytics',e); el.innerHTML='<div class="tmuted" style="color:var(--red)">Failed to load — check connection.</div>'; }
+}
+
 // ── THEME (light/dark) ─────────────────────────────────────────────────────
 // Persisted in localStorage. Applied to <html data-theme="...">. CSS vars do
 // the rest. Default is dark (no attribute = dark via the :root default).
@@ -2221,7 +2368,9 @@ async function loadGlobal(){
       if(!(sData.roster||[]).length) continue;
       const twSnap=await db.collection('groups').doc(g.code).collection('seasons').doc(sid).collection('twists').get();
       const twists={}; twSnap.docs.forEach(t=>{twists[t.id]=t.data();});
-      groupSeasons[g.code]={sData,twists};
+      const twwSnap=await db.collection('groups').doc(g.code).collection('seasons').doc(sid).collection('twistWindows').get();
+      const twistWindows=twwSnap.docs.map(d=>({id:d.id,...d.data()}));
+      groupSeasons[g.code]={sData,twists,twistWindows};
     }
     globalDataCache={groups,logs,bonuses,groupSeasons};
     globalDataCacheTime=Date.now();
@@ -2251,13 +2400,14 @@ function renderGlobalFromCache({groups,logs,bonuses,groupSeasons}){
   const playerEntries=[];
   for(const g of groups){
     const gs=groupSeasons[g.code]; if(!gs) continue;
-    const {sData,twists}=gs;
+    const {sData,twists,twistWindows}=gs;
     const roster=sData.roster||[];
     const ctx={
       season:sData,
       groupCode:g.code,
       logs:logs.filter(l=>l.groupCode===g.code&&l.month===sData.month&&l.year===sData.year),
       twists,
+      twistWindows:(twistWindows||[]).filter(w=>w.month===sData.month&&w.year===sData.year),
       bonuses:bonuses.filter(b=>b.groupCode===g.code&&b.month===sData.month&&b.year===sData.year)
     };
     let groupTotal=0;
