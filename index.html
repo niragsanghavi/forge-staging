@@ -905,6 +905,24 @@ function subscribe(){
   unsub = [];
   const {month, year} = season;
 
+  // Watch the group doc so a live client follows a season rollover instead of
+  // silently writing logs into the archived month. loadGroup() re-runs
+  // subscribe(), which tears this listener down and registers a fresh one
+  // bound to the new season. seasonId is read at fire time (live global).
+  // Residual risk accepted: a log submitted in the seconds between the
+  // rollover write and this snapshot arriving still lands in the old month.
+  let seasonSwitchHandled=false;
+  unsub.push(db.collection('groups').doc(groupCode).onSnapshot(s=>{
+    if(seasonSwitchHandled) return;
+    if(!s.exists){ seasonSwitchHandled=true; handleDeadGroup(groupCode,'That group no longer exists.'); return; }
+    const sid=s.data().currentSeasonId;
+    if(sid && sid!==seasonId){
+      seasonSwitchHandled=true;
+      toast('New season started — reloading');
+      loadGroup(groupCode, true);
+    }
+  }));
+
   unsub.push(db.collection('logs').where('groupCode','==',groupCode).where('month','==',month).where('year','==',year).onSnapshot(s=>{ allLogs=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }));
   unsub.push(db.collection('bonuses_30day').where('groupCode','==',groupCode).where('month','==',month).where('year','==',year).onSnapshot(s=>{ bonus30=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }));
   unsub.push(db.collection('flags').where('groupCode','==',groupCode).where('month','==',month).where('year','==',year).onSnapshot(s=>{ flags=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }));
