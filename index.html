@@ -281,6 +281,8 @@
       <div class="card" style="border:1px solid var(--gold)">
         <div class="card-title" style="color:var(--gold)">Manage <span id="editGroupName"></span></div>
         <div class="tmuted" style="margin-bottom:12px">Edits apply to the current active season only.</div>
+        <label>Group name</label>
+        <input id="editGroupNameInput" type="text" maxlength="40" placeholder="Group name" style="margin-bottom:12px">
         <label>Days in month</label>
         <input id="editDays" type="number" min="28" max="31">
         <label>Captain workout target</label>
@@ -433,13 +435,10 @@ function esc(s){
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
-// Hashes a string to a lowercase hex SHA-256 digest using the browser's built-in
-// SubtleCrypto API (HTTPS-only, available on all modern browsers / GitHub Pages).
 async function sha256hex(str){
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
-
 function getDailyFact(){ return DAILY_FACTS[(new Date().getDate()-1)%DAILY_FACTS.length]; }
 function getStreakMsg(s){ const keys=Object.keys(STREAK_MSGS).map(Number).sort((a,b)=>b-a); for(const k of keys){if(s>=k)return STREAK_MSGS[k];} return null; }
 function getRandomComeback(){ return COMEBACK_MSGS[Math.floor(Math.random()*COMEBACK_MSGS.length)]; }
@@ -2008,6 +2007,7 @@ async function openEditGroup(code){
     window._editSeasonId=sid;
     window._editRoster=s.roster||[];
 
+    document.getElementById('editGroupNameInput').value = g.name || '';
     document.getElementById('editGroupName').textContent=`${g.name} (${sid})`;
     document.getElementById('editDays').value=s.days ?? 30;
     document.getElementById('editCapTarget').value=s.capTarget ?? 16;
@@ -2033,6 +2033,8 @@ async function saveEditGroup(){
   if(!code||!sid){ return; }
   const status=document.getElementById('editGroupStatus');
 
+  const newGroupName=document.getElementById('editGroupNameInput').value.trim();
+  if(!newGroupName){ status.textContent='Group name cannot be empty.'; return; }
   const days=parseInt(document.getElementById('editDays').value)||30;
   const capTarget=parseInt(document.getElementById('editCapTarget').value)||16;
   const vcTarget=parseInt(document.getElementById('editVCTarget').value)||20;
@@ -2052,15 +2054,21 @@ async function saveEditGroup(){
 
   status.textContent='Saving…';
   try{
-    await db.collection('groups').doc(code).collection('seasons').doc(sid).update({
-      days, capTarget, vcTarget, minWorkouts, numTeams,
-      teamStreakThreshold: thresholdPct/100,
-      rolesEnabled
-    });
-    // If we're editing the group we're currently viewing in-app, refresh local state.
+    await Promise.all([
+      db.collection('groups').doc(code).update({ name: newGroupName }),
+      db.collection('groups').doc(code).collection('seasons').doc(sid).update({
+        days, capTarget, vcTarget, minWorkouts, numTeams,
+        teamStreakThreshold: thresholdPct/100,
+        rolesEnabled
+      })
+    ]);
+    // Update panel title immediately so it reflects the new name before loadSuperAdmin reloads.
+    document.getElementById('editGroupName').textContent=`${newGroupName} (${sid})`;
+    // If we're editing the group we're currently viewing in-app, refresh local in-memory state.
     if(window.season && window.seasonId===sid && window.groupCode===code){
       Object.assign(window.season,{days,capTarget,vcTarget,minWorkouts,numTeams,teamStreakThreshold:thresholdPct/100,rolesEnabled});
     }
+    if(window.groupData && window.groupCode===code) window.groupData.name=newGroupName;
     status.textContent='✅ Saved.';
     setTimeout(()=>{ closeEditGroup(); loadSuperAdmin(); }, 700);
   }catch(e){ console.error(e); status.textContent='❌ Save failed: '+e.message; }
@@ -2760,6 +2768,497 @@ if('serviceWorker' in navigator){
     navigator.serviceWorker.register('sw.js').catch(e=>console.warn('[Forge] SW registration failed', e));
   });
 }
+</script>
+<script>
+/* ════════════════════════════════════════════════════════════════════════
+   SEASON RECAP — 100% ADDITIVE, READ-ONLY FEATURE (new code only)
+
+   • Touches NO existing function (startNewSeason / submitLog / score /
+     subscribe / onboarding / any write path are all untouched).
+   • NO new Firestore reads or writes. Computes everything from in-memory
+     globals already loaded by the app: window.allLogs, window.season,
+     season.roster — via the existing window.score()/window.teamTotal().
+   • The ENTIRE computation + render is wrapped in try/catch. On ANY failure
+     it skips silently and the normal app proceeds untouched.
+   • Runs only AFTER launchApp()/subscribe()/renderHome() have completed
+     (a passive watcher waits for the home card to be painted). It never
+     calls or delays them. Never shows on onboarding/super screens.
+   ════════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+
+  // Team A/B/C → hex (mirror of main.css --A/--B/--C dark tokens; canvas needs hex)
+  var TEAM_HEX = { A:'#ff5f57', B:'#4f9cf7', C:'#3fcf8e' };
+  function teamHex(t){ return TEAM_HEX[t] || '#d4a843'; }
+  var MONTHS = ['January','February','March','April','May','June','July',
+                'August','September','October','November','December'];
+  var MEDAL = ['#FFD700','#C0C0C0','#CD7F32'];
+
+  // Self-contained escaper (never assume the app's esc() exists at call time)
+  function rEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  // Ordinal: 1→1st, 2→2nd, 3→3rd, 4→4th … (for team-rank messaging)
+  function ordinal(n){ var s=['th','st','nd','rd'], v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); }
+
+  // No localStorage tracking — button is a repeatable manual action, not a one-shot pop-up.
+
+  // ── COMPUTE — purely from in-memory data, no I/O ───────────────────────────
+  function computeRecap(){
+    var season = window.season, me = window.me;
+    var roster = (season && Array.isArray(season.roster)) ? season.roster : [];
+    var logs = Array.isArray(window.allLogs) ? window.allLogs : [];
+    if(!season || !me || !roster.length) return null;     // nothing to recap
+    if(!logs.length) return null;                         // empty season (e.g. fresh rollover) → skip
+    if(typeof window.score !== 'function') return null;
+
+    // Winning team — highest existing teamTotal()
+    var teams = [];
+    roster.forEach(function(p){ if(p.team && teams.indexOf(p.team)<0) teams.push(p.team); });
+    var teamScores = teams.map(function(t){
+      return { team:t,
+        total:(typeof window.teamTotal==='function')?(window.teamTotal(t)||0):0,
+        count:roster.filter(function(p){return p.team===t;}).length };
+    }).sort(function(a,b){ return b.total-a.total; });
+    var winningTeam = teamScores[0] || null;
+
+    // Final individual scores + ranks
+    var ind = roster.map(function(p){
+      var sc = window.score(p.name) || {};
+      return { name:p.name, team:p.team, total:sc.total||0, wo:sc.wo||0, streak:sc.streak||0 };
+    }).sort(function(a,b){ return b.total-a.total; });
+    var top3 = ind.slice(0,3);
+
+    // Longest current streak
+    var longest = ind.slice().sort(function(a,b){ return b.streak-a.streak; })[0] || null;
+    if(longest && longest.streak<=0) longest = null;
+
+    // Biggest climber — rank from logs day<=7 (filtered ctx) vs final rank.
+    // Uses the existing engine via a throwaway ctx; never mutates globals.
+    var climber = null;
+    try{
+      var earlyLogs = logs.filter(function(l){ return typeof l.day==='number' && l.day<=7; });
+      if(earlyLogs.length){
+        var ctxEarly = {
+          season: season, logs: earlyLogs,
+          twists: window.activeTwists, bonuses: window.bonus30,
+          jackAwards: window.jackAwards, ironPledgeBonuses: window.ironPledgeBonuses,
+          twistWindows: window.twistWindows, groupCode: window.groupCode
+        };
+        var early = roster.map(function(p){
+          var sc = window.score(p.name, ctxEarly) || {};
+          return { name:p.name, total:sc.total||0 };
+        }).sort(function(a,b){ return b.total-a.total; });
+        var earlyPos = {}; early.forEach(function(p,i){ earlyPos[p.name]=i; });
+        var finalPos = {}; ind.forEach(function(p,i){ finalPos[p.name]=i; });
+        var best = null;
+        roster.forEach(function(p){
+          if(!(p.name in earlyPos) || !(p.name in finalPos)) return;
+          var delta = earlyPos[p.name] - finalPos[p.name];   // positive = climbed
+          if(delta>0 && (!best || delta>best.delta))
+            best = { name:p.name, delta:delta, from:earlyPos[p.name]+1, to:finalPos[p.name]+1 };
+        });
+        climber = best;
+      }
+    }catch(e){ climber = null; }
+
+    // Group totals + most-popular workout
+    var totalWorkouts = 0, woCount = {};
+    logs.forEach(function(l){
+      var ws = Array.isArray(l.workouts) ? l.workouts : [];
+      ws.forEach(function(w){
+        totalWorkouts++;
+        var label = String(w==null?'':w).trim(); if(!label) return;
+        var norm = label.toLowerCase();
+        if(!woCount[norm]) woCount[norm] = { label:label, n:0 };
+        woCount[norm].n++;
+      });
+    });
+    var topWorkout = null;
+    Object.keys(woCount).forEach(function(k){ if(!topWorkout || woCount[k].n>topWorkout.n) topWorkout = woCount[k]; });
+
+    var mySc = window.score(me.name) || {};
+
+    // ── CHANGE 2: viewing player's OWN top-3 workout types this month ──
+    // Counts only this player's own logs (l.player===me.name).
+    var myWoCount = {};
+    logs.forEach(function(l){
+      if(l.player !== me.name) return;
+      var ws = Array.isArray(l.workouts) ? l.workouts : [];
+      ws.forEach(function(w){
+        var label = String(w==null?'':w).trim(); if(!label) return;
+        var norm = label.toLowerCase();
+        if(!myWoCount[norm]) myWoCount[norm] = { label:label, n:0 };
+        myWoCount[norm].n++;
+      });
+    });
+    var myTopWorkouts = Object.keys(myWoCount).map(function(k){ return myWoCount[k]; })
+      .sort(function(a,b){ return b.n-a.n; }).slice(0,3);   // ≤3; fewer if not enough distinct types
+
+    // ── CHANGE 3: viewing player's team + this team's rank/gap vs 1st ──
+    // teamScores is already sorted descending by total.
+    var myEntry = roster.filter(function(p){ return p.name===me.name; })[0] || null;
+    var myTeam = myEntry ? myEntry.team : null;
+    var myTeamResult = null;
+    if(myTeam && teamScores.length){
+      var idx = -1;
+      for(var ti=0; ti<teamScores.length; ti++){ if(teamScores[ti].team===myTeam){ idx=ti; break; } }
+      if(idx>=0){
+        myTeamResult = {
+          team: myTeam,
+          rank: idx+1,
+          total: teamScores[idx].total,
+          gapToFirst: teamScores[0].total - teamScores[idx].total,
+          won: idx===0
+        };
+      }
+    }
+
+    // ── CHANGE 3: which achievement banners does the VIEWING player qualify for? ──
+    var myStreak = mySc.streak||0;
+    var maxStreak = (longest && longest.streak>0) ? longest.streak : 0;
+    var achievements = {
+      // single highest scorer = strictly above 2nd place (no shared-1st), and >0
+      topScorer: ind.length>0 && ind[0].name===me.name && ind[0].total>0 && (ind.length<2 || ind[0].total>ind[1].total),
+      biggestClimber: !!climber && climber.name===me.name,
+      longestStreak: maxStreak>0 && myStreak===maxStreak
+    };
+
+    // ── CHANGE 4: next month name with Dec→Jan rollover (month is 1-indexed; 12%12=0→January) ──
+    var nextMonthName = MONTHS[(season.month||1)%12] || '';
+
+    return {
+      groupName: (window.groupData && window.groupData.name) || window.groupCode || 'Forge',
+      groupCode: window.groupCode || '', seasonId: window.seasonId || '',
+      monthName: MONTHS[(season.month||1)-1] || '', year: season.year || '',
+      nextMonthName: nextMonthName,
+      winningTeam: winningTeam, top3: top3, longest: longest, climber: climber,
+      totalWorkouts: totalWorkouts, topWorkout: topWorkout,
+      meName: me.name, myWo: mySc.wo||0,
+      myTopWorkouts: myTopWorkouts, myTeamResult: myTeamResult,
+      achievements: achievements
+    };
+  }
+
+  // ── STYLE (injected once; all classes prefixed so nothing existing clashes) ─
+  function injectStyle(){
+    if(document.getElementById('recapStyle')) return;
+    var s = document.createElement('style'); s.id='recapStyle';
+    s.textContent =
+      '.recap-overlay{position:fixed;inset:0;z-index:10001;display:flex;align-items:flex-start;justify-content:center;'+
+        'overflow-y:auto;-webkit-overflow-scrolling:touch;padding:24px 16px calc(32px + env(safe-area-inset-bottom));'+
+        'background:radial-gradient(120% 70% at 50% 0%,rgba(212,168,67,.16),transparent 60%),rgba(6,6,9,.94);'+
+        'backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);opacity:0;transition:opacity .35s ease}'+
+      '.recap-overlay.recap-in{opacity:1}'+
+      '.recap-card{width:100%;max-width:440px;margin:auto;background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,0) 36%),#121218;'+
+        'border:1px solid rgba(212,168,67,.28);border-radius:24px;padding:26px 22px 22px;position:relative;'+
+        'box-shadow:0 0 60px -10px rgba(212,168,67,.25),0 30px 60px -24px rgba(0,0,0,.85);'+
+        'transform:translateY(14px) scale(.98);transition:transform .4s cubic-bezier(.32,.72,0,1)}'+
+      '.recap-overlay.recap-in .recap-card{transform:none}'+
+      '.recap-kicker{font-size:11px;font-weight:700;letter-spacing:.22em;color:#d4a843;text-align:center}'+
+      '.recap-title{font-size:32px;font-weight:800;letter-spacing:-.02em;color:#f5f5f7;text-align:center;margin-top:6px}'+
+      '.recap-group{font-size:13px;color:#9a9aa3;text-align:center;margin-top:4px}'+
+      '.recap-sec{margin-top:18px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:15px 16px}'+
+      '.recap-h{font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#9a9aa3;margin-bottom:10px}'+
+      '.recap-winner{display:flex;align-items:center;gap:13px}'+
+      '.recap-winner .rw-body{flex:1;min-width:0}'+
+      '.recap-winner .rw-team{font-size:22px;font-weight:800;letter-spacing:-.01em}'+
+      '.recap-winner .rw-sub{font-size:12px;color:#9a9aa3;margin-top:2px}'+
+      '.recap-won{border-color:rgba(212,168,67,.55)!important;'+
+        'background:linear-gradient(180deg,rgba(212,168,67,.16),rgba(212,168,67,.03))!important;'+
+        'box-shadow:0 0 26px -8px rgba(212,168,67,.4)}'+
+      '.recap-won .rw-team{font-size:24px}'+
+      '.recap-row{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.06)}'+
+      '.recap-row:last-child{border-bottom:none}'+
+      '.recap-row .rr-nm{flex:1;min-width:0;font-size:15px;font-weight:600;color:#f5f5f7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'+
+      '.recap-row .rr-pts{font-size:15px;font-weight:800;color:#d4a843;font-variant-numeric:tabular-nums}'+
+      '.recap-stat{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;font-size:14px;color:#c8c8d0}'+
+      '.recap-stat b{color:#f5f5f7;font-weight:800;font-variant-numeric:tabular-nums}'+
+      '.recap-line{margin-top:8px;font-size:13.5px;color:#c8c8d0;line-height:1.5}'+
+      '.recap-line b{color:#d4a843}'+
+      '.recap-personal{margin-top:16px;text-align:center;font-size:15px;color:#f5f5f7}'+
+      '.recap-personal b{color:#d4a843;font-weight:800}'+
+      // CHANGE 1: matte rank-coloured name highlights (no SVG medals)
+      '.recap-rank{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 13px;border-radius:12px;margin-bottom:8px;border:1px solid rgba(255,255,255,.05)}'+
+      '.recap-rank:last-child{margin-bottom:0}'+
+      '.recap-rank .rk-nm{font-weight:800;font-size:15px;color:#f5f5f7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}'+
+      '.recap-rank .rk-pts{font-size:13px;font-weight:600;color:#9a9aa3;font-variant-numeric:tabular-nums;flex:none}'+
+      '.recap-rank1{background:rgba(212,168,67,.18)}'+
+      '.recap-rank2{background:rgba(192,192,192,.15)}'+
+      '.recap-rank3{background:rgba(205,127,50,.15)}'+
+      // CHANGE 3: achievement banners — gold (prominent) / blue / ember accents
+      '.recap-ban{margin-top:14px;border-radius:14px;padding:13px 15px;font-size:13.5px;line-height:1.5;border:1px solid}'+
+      '.recap-ban b{font-weight:800}'+
+      '.recap-ban-gold{background:linear-gradient(180deg,rgba(212,168,67,.22),rgba(212,168,67,.05));border-color:rgba(212,168,67,.55);color:#f3e2b3;box-shadow:0 0 22px -10px rgba(212,168,67,.5)}'+
+      '.recap-ban-blue{background:rgba(64,156,255,.12);border-color:rgba(64,156,255,.42);color:#bcdcff}'+
+      '.recap-ban-ember{background:rgba(255,106,60,.12);border-color:rgba(255,106,60,.42);color:#ffc6ad}'+
+      '.recap-btns{margin-top:20px}'+
+      '.recap-trigger-card{display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,rgba(212,168,67,.18),rgba(212,168,67,.05));border:1px solid rgba(212,168,67,.55);border-radius:16px;padding:16px 18px;cursor:pointer;margin:0 0 16px;box-shadow:0 0 26px -8px rgba(212,168,67,.35);animation:recapBtnPulse 2.4s ease-in-out infinite;-webkit-tap-highlight-color:transparent}'+
+      '@keyframes recapBtnPulse{0%,100%{box-shadow:0 0 20px -8px rgba(212,168,67,.35)}50%{box-shadow:0 0 32px -4px rgba(212,168,67,.55)}}'+
+      '.recap-trigger-dot{width:10px;height:10px;border-radius:50%;background:#d4a843;flex-shrink:0;animation:recapDotPulse 1.4s ease-in-out infinite}'+
+      '@keyframes recapDotPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}'+
+      '.recap-trigger-label{flex:1;font-size:15px;font-weight:700;color:#d4a843;letter-spacing:-.01em}'+
+      '.recap-trigger-arrow{font-size:22px;color:rgba(212,168,67,.7);font-weight:300;line-height:1}';
+    document.head.appendChild(s);
+  }
+
+  function crownSVG(color){
+    return '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="'+color+'" '+
+      'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none">'+
+      '<path d="M3 18h18M5 18l-2-9 5 4 4-7 4 7 5-4-2 9"/></svg>';
+  }
+  function buildHTML(d){
+    var html = '<div class="recap-card">';
+
+    // 1) Header
+    html += '<div class="recap-kicker">SEASON RECAP</div>'+
+            '<div class="recap-title">'+rEsc(d.monthName)+' '+rEsc(d.year)+'</div>'+
+            '<div class="recap-group">'+rEsc(d.groupName)+'</div>';
+
+    // 2) Personal line
+    html += '<div class="recap-personal">You logged <b>'+d.myWo+'</b> workout'+(d.myWo===1?'':'s')+' this month</div>';
+
+    // 3) Your Top 3 workouts (viewing player's own logs)
+    if(d.myTopWorkouts && d.myTopWorkouts.length){
+      html += '<div class="recap-sec"><div class="recap-h">Your top '+d.myTopWorkouts.length+' workout'+(d.myTopWorkouts.length===1?'':'s')+'</div>';
+      d.myTopWorkouts.forEach(function(w,i){
+        html += '<div class="recap-row"><div class="rr-nm">'+(i+1)+'. '+rEsc(w.label)+'</div>'+
+          '<div class="rr-pts">'+w.n+' time'+(w.n===1?'':'s')+'</div></div>';
+      });
+      html += '</div>';
+    }
+
+    // 4) Achievement banners — only the ones the VIEWER qualifies for; whole
+    //    section is skipped (no empty state) if none qualify.
+    var a = d.achievements || {};
+    if(a.topScorer || a.biggestClimber || a.longestStreak){
+      if(a.topScorer)
+        html += '<div class="recap-ban recap-ban-gold"><b>You were the highest scorer of your group!</b> '+
+                'Hope your back didn\'t hurt from carrying your team through the month.</div>';
+      if(a.biggestClimber)
+        html += '<div class="recap-ban recap-ban-blue"><b>Biggest climb of the month</b> — '+
+                'you moved up more than anyone else. Keep that momentum.</div>';
+      if(a.longestStreak)
+        html += '<div class="recap-ban recap-ban-ember"><b>Longest streak in the group.</b> '+
+                'Consistency like that wins seasons.</div>';
+    }
+
+    // 5) Team result (won/lost) — dynamic month names (CHANGE 4)
+    if(d.myTeamResult && d.myTeamResult.won){
+      html += '<div class="recap-sec recap-winner recap-won">'+
+        crownSVG('#d4af37')+
+        '<div class="rw-body"><div class="rw-team" style="color:#d4af37">Your team won!</div>'+
+        '<div class="rw-sub" style="color:#e7c45c">Congratulations on a strong '+rEsc(d.monthName)+
+          '. Keep the momentum going and crush '+rEsc(d.nextMonthName)+' too.</div></div></div>';
+    } else if(d.myTeamResult){
+      var wcL = d.winningTeam ? teamHex(d.winningTeam.team) : '#d4a843';
+      var winnerName = d.winningTeam ? ('Team '+rEsc(d.winningTeam.team)) : 'Another team';
+      var gap = d.myTeamResult.gapToFirst;
+      html += '<div class="recap-sec recap-winner" style="border-color:'+wcL+'55">'+
+        crownSVG(wcL)+
+        '<div class="rw-body"><div class="rw-team" style="color:'+wcL+'">'+winnerName+' wins this month</div>'+
+        '<div class="rw-sub">Your team (Team '+rEsc(d.myTeamResult.team)+') came '+ordinal(d.myTeamResult.rank)+
+          ' place, just '+gap+' point'+(gap===1?'':'s')+' behind. '+rEsc(d.monthName)+
+          ' may be over, but tomorrow is a fresh start.</div>'+
+        '</div></div>';
+    } else if(d.winningTeam){
+      // Fallback (viewer not matched to any team)
+      var wc = teamHex(d.winningTeam.team);
+      html += '<div class="recap-sec recap-winner" style="border-color:'+wc+'55">'+
+        crownSVG(wc)+
+        '<div class="rw-body"><div class="rw-team" style="color:'+wc+'">Team '+rEsc(d.winningTeam.team)+' wins</div>'+
+        '<div class="rw-sub">'+d.winningTeam.total+' avg pts · '+d.winningTeam.count+' member'+(d.winningTeam.count===1?'':'s')+'</div></div></div>';
+    }
+
+    // 6) Top 3 individual players — matte rank-coloured highlights, no SVG (CHANGE 1)
+    if(d.top3 && d.top3.length){
+      html += '<div class="recap-sec"><div class="recap-h">Top performers</div>';
+      d.top3.forEach(function(p,i){
+        html += '<div class="recap-rank recap-rank'+(i+1)+'">'+
+          '<span class="rk-nm">'+(i+1)+'. '+rEsc(p.name)+'</span>'+
+          '<span class="rk-pts">'+p.total+' pts</span></div>';
+      });
+      html += '</div>';
+    }
+
+    // 7) Group totals
+    html += '<div class="recap-sec"><div class="recap-h">The group</div>'+
+      '<div class="recap-stat"><span>Workouts logged</span><b>'+d.totalWorkouts+'</b></div>'+
+      (d.topWorkout?'<div class="recap-stat"><span>Most popular</span><b>'+rEsc(d.topWorkout.label)+' ('+d.topWorkout.n+')</b></div>':'')+
+      '</div>';
+
+    // 8) Buttons
+    html += '<div class="recap-btns">'+
+      '<button class="btn btn-gold" data-recap-share type="button">Share Recap</button>'+
+      '<button class="btn btn-surface" data-recap-continue type="button">Close</button>'+
+      '</div>';
+
+    html += '</div>';
+    return html;
+  }
+
+  function dismiss(ov){
+    try{ ov.classList.remove('recap-in'); setTimeout(function(){ try{ov.remove();}catch(_){} }, 320); }
+    catch(e){ try{ ov.remove(); }catch(_){} }
+  }
+
+  function showModal(d){
+    if(document.getElementById('recapOverlay')) return;
+    injectStyle();
+    var ov = document.createElement('div');
+    ov.id = 'recapOverlay'; ov.className = 'recap-overlay';
+    ov.innerHTML = buildHTML(d);
+    document.body.appendChild(ov);
+    requestAnimationFrame(function(){ ov.classList.add('recap-in'); });
+    var share = ov.querySelector('[data-recap-share]');
+    var cont  = ov.querySelector('[data-recap-continue]');
+    if(share) share.addEventListener('click', function(){ try{ generateImage(d); }catch(e){} });
+    if(cont)  cont.addEventListener('click',  function(){ dismiss(ov); });
+  }
+
+  // ── SHAREABLE IMAGE — pure HTML5 Canvas, no library, no network ────────────
+  function generateImage(d){
+    try{
+      var S = 1080;
+      var cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+      var ctx = cv.getContext('2d'); if(!ctx) return;
+      var FONT = '-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+      function fit(text,maxw){
+        text = String(text==null?'':text);
+        if(ctx.measureText(text).width <= maxw) return text;
+        while(text.length>1 && ctx.measureText(text+'…').width>maxw) text = text.slice(0,-1);
+        return text+'…';
+      }
+
+      // Background + gold glow + frame
+      ctx.fillStyle = '#0a0a0d'; ctx.fillRect(0,0,S,S);
+      var g = ctx.createRadialGradient(S/2,120,40,S/2,120,760);
+      g.addColorStop(0,'rgba(212,168,67,0.20)'); g.addColorStop(1,'rgba(212,168,67,0)');
+      ctx.fillStyle = g; ctx.fillRect(0,0,S,S);
+      ctx.strokeStyle = 'rgba(212,168,67,0.35)'; ctx.lineWidth = 4;
+      ctx.strokeRect(42,42,S-84,S-84);
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#d4a843'; ctx.font = '700 32px '+FONT;
+      ctx.fillText(fit(String(d.groupName).toUpperCase(),S-200), S/2, 138);
+      ctx.fillStyle = '#f5f5f7'; ctx.font = '800 70px '+FONT;
+      ctx.fillText('Season Recap', S/2, 218);
+      ctx.fillStyle = '#9a9aa3'; ctx.font = '500 32px '+FONT;
+      ctx.fillText((d.monthName+' '+d.year).trim(), S/2, 268);
+
+      ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(140,310); ctx.lineTo(S-140,310); ctx.stroke();
+
+      // Winning team
+      if(d.winningTeam){
+        var wc = teamHex(d.winningTeam.team);
+        ctx.fillStyle = '#9a9aa3'; ctx.font = '700 24px '+FONT;
+        ctx.fillText('WINNING TEAM', S/2, 380);
+        ctx.fillStyle = wc; ctx.font = '800 58px '+FONT;
+        ctx.fillText('Team '+d.winningTeam.team, S/2, 446);
+        ctx.fillStyle = '#c8c8d0'; ctx.font = '500 28px '+FONT;
+        ctx.fillText(d.winningTeam.total+' avg pts', S/2, 488);
+      }
+
+      // Top 3 — left aligned list
+      var top = d.top3 || [];
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#9a9aa3'; ctx.font = '700 24px '+FONT;
+      ctx.fillText('TOP PERFORMERS', 150, 568);
+      var rowY = 628;
+      top.forEach(function(p,i){
+        var c = MEDAL[i] || '#9a9aa3';
+        ctx.beginPath(); ctx.arc(176, rowY-10, 22, 0, Math.PI*2);
+        ctx.strokeStyle = c; ctx.lineWidth = 4; ctx.stroke();
+        ctx.fillStyle = c; ctx.textAlign = 'center'; ctx.font = '800 26px '+FONT;
+        ctx.fillText(String(i+1), 176, rowY-1);
+        ctx.textAlign = 'left'; ctx.fillStyle = '#f5f5f7'; ctx.font = '600 38px '+FONT;
+        ctx.fillText(fit(p.name, 560), 224, rowY);
+        ctx.textAlign = 'right'; ctx.fillStyle = '#d4a843'; ctx.font = '800 38px '+FONT;
+        ctx.fillText(p.total+' pts', S-150, rowY);
+        ctx.textAlign = 'left';
+        rowY += 78;
+      });
+
+      // Group totals
+      var ty = rowY + 36;
+      ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(150,ty-30); ctx.lineTo(S-150,ty-30); ctx.stroke();
+      ctx.fillStyle = '#c8c8d0'; ctx.font = '500 30px '+FONT;
+      ctx.fillText('Workouts logged', 150, ty+18);
+      ctx.textAlign = 'right'; ctx.fillStyle = '#f5f5f7'; ctx.font = '800 30px '+FONT;
+      ctx.fillText(String(d.totalWorkouts), S-150, ty+18);
+      ctx.textAlign = 'left';
+      if(d.topWorkout){
+        ctx.fillStyle = '#c8c8d0'; ctx.font = '500 30px '+FONT;
+        ctx.fillText('Most popular', 150, ty+68);
+        ctx.textAlign = 'right'; ctx.fillStyle = '#f5f5f7'; ctx.font = '800 30px '+FONT;
+        ctx.fillText(fit(d.topWorkout.label+' ('+d.topWorkout.n+')', 560), S-150, ty+68);
+        ctx.textAlign = 'left';
+      }
+
+      // forge wordmark
+      ctx.textAlign = 'center'; ctx.fillStyle = '#d4a843'; ctx.font = '900 52px '+FONT;
+      ctx.fillText('forge', S/2, S-78);
+
+      var url = cv.toDataURL('image/png');
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'forge-recap-'+(d.groupCode||'')+'-'+(d.seasonId||'')+'.png';
+      document.body.appendChild(a); a.click();
+      setTimeout(function(){ try{ a.remove(); }catch(e){} }, 0);
+    }catch(e){ /* image is best-effort — never break the modal/app */ }
+  }
+
+  // ── RECAP BUTTON — shown on real last calendar day from 18:00 ─────────────
+  // No auto-popup. Button is a deliberate, repeatable tap. No localStorage gating.
+
+  function shouldShowBtn(){
+    var season = window.season; if(!season) return false;
+    var today = new Date();
+    var inSeasonMonth = (today.getMonth()+1)===season.month && today.getFullYear()===season.year;
+    var lastCalendarDay = new Date(season.year, season.month, 0).getDate();
+    return inSeasonMonth && today.getDate()===lastCalendarDay && today.getHours()>=18;
+  }
+
+  function injectRecapBtn(){
+    if(document.getElementById('recapShowBtn')) return;
+    injectStyle();
+    var wrap = document.createElement('div');
+    wrap.id = 'recapShowBtn';
+    wrap.innerHTML =
+      '<div class="recap-trigger-card">'+
+        '<span class="recap-trigger-dot"></span>'+
+        '<span class="recap-trigger-label">Season Recap is ready</span>'+
+        '<span class="recap-trigger-arrow">›</span>'+
+      '</div>';
+    wrap.querySelector('.recap-trigger-card').addEventListener('click', function(){
+      try{ var data=computeRecap(); if(data) showModal(data); }catch(e){}
+    });
+    var hero = document.getElementById('heroCard');
+    if(hero && hero.parentNode) hero.parentNode.insertBefore(wrap, hero.nextSibling);
+  }
+
+  function removeRecapBtn(){
+    var el = document.getElementById('recapShowBtn'); if(el) el.remove();
+  }
+
+  function syncRecapBtn(){
+    try{
+      var appScreen = document.getElementById('screen-app');
+      if(!appScreen || !appScreen.classList.contains('active')) return;
+      if(!window.season || !window.me || !window.groupCode) return;
+      var hero = document.getElementById('heroCard');
+      if(!hero || !hero.innerHTML.trim()) return;   // wait for renderHome() to paint
+      if(shouldShowBtn()) injectRecapBtn(); else removeRecapBtn();
+    }catch(e){}
+  }
+
+  // Own load listener — initial check after 2s, then every 10s.
+  // The 2s delay gives Firestore time to load before the first check.
+  window.addEventListener('load', function(){
+    try{ setTimeout(syncRecapBtn, 2000); setInterval(syncRecapBtn, 10000); }catch(e){}
+  });
+})();
 </script>
 </body>
 </html>
