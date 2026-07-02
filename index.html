@@ -433,6 +433,13 @@ function esc(s){
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+// Hashes a string to a lowercase hex SHA-256 digest using the browser's built-in
+// SubtleCrypto API (HTTPS-only, available on all modern browsers / GitHub Pages).
+async function sha256hex(str){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
 function getDailyFact(){ return DAILY_FACTS[(new Date().getDate()-1)%DAILY_FACTS.length]; }
 function getStreakMsg(s){ const keys=Object.keys(STREAK_MSGS).map(Number).sort((a,b)=>b-a); for(const k of keys){if(s>=k)return STREAK_MSGS[k];} return null; }
 function getRandomComeback(){ return COMEBACK_MSGS[Math.floor(Math.random()*COMEBACK_MSGS.length)]; }
@@ -507,10 +514,11 @@ window.onload = () => {
   });
 };
 
-function bootApp(){
+async function bootApp(){
   if(location.search.includes('superadmin')){
     const pin = prompt('Super admin PIN:');
-    if(pin === SUPER_PIN){ showScreen('super'); loadSuperAdmin(); return; }
+    const hash = await sha256hex(pin||'');
+    if(hash === SUPER_PIN_HASH){ showScreen('super'); loadSuperAdmin(); return; }
   }
   migrateLegacySession();
   const sessions = getSessions();
@@ -2711,10 +2719,11 @@ function updateTabPill(t){
   pill.style.left=(tabRect.left-tabsRect.left)+'px';
   pill.style.width=tabRect.width+'px';
 }
-function showTab(t){
+async function showTab(t){
   if(t==='admin'&&!adminUnlocked){
     const pin=prompt('Enter admin PIN:');
-    if(pin!==ADMIN_PIN){toast('Wrong PIN','error');return;}
+    const hash=await sha256hex(pin||'');
+    if(hash!==ADMIN_PIN_HASH){toast('Wrong PIN','error');return;}
     adminUnlocked=true;
   }
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));

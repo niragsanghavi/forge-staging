@@ -13,8 +13,8 @@ A competitive, team-based fitness habit tracker for friend groups. People log da
 - **Repo (staging):** github.com/niragsanghavi/forge-staging
 - **Firebase prod:** forge-25c8c (asia-south1)
 - **Firebase staging:** forge-staging (asia-south1, free tier, open rules)
-- **Super admin:** append `?superadmin` to URL, PIN `FORGE2026`
-- **Admin (per group):** PIN `9090`
+- **Super admin:** append `?superadmin` to URL — PIN hash stored in `src/state/appState.js` as `SUPER_PIN_HASH`
+- **Admin (per group):** PIN hash stored in `src/state/appState.js` as `ADMIN_PIN_HASH`
 
 ---
 

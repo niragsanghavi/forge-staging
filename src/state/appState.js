@@ -1,6 +1,6 @@
-// ── PINS ──────────────────────────────────────────────────────────────────
-window.SUPER_PIN = 'FORGE2026';
-window.ADMIN_PIN = '9090';
+// ── PIN HASHES (SHA-256 hex; plaintext lives only in password manager) ────
+window.SUPER_PIN_HASH = '365346103ca5afb17413770bfe4dbc212d5fa88719a4c12ac0319c37af16874d';
+window.ADMIN_PIN_HASH = 'b0958fda6b5cdee38b99f53f9876c5192b6918760f8e75c98e8d37f5cbd3c4ab';
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────
 window.COMMON_WORKOUTS = [
