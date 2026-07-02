@@ -229,7 +229,7 @@
     </div>
     <div class="card" id="ironPledgeAdminCard" style="display:none">
       <div class="card-title" style="color:var(--orange)">⚔️ Iron Pledge — Results</div>
-      <div class="tmuted" style="margin-bottom:12px">Players who locked in a pledge this week. Calculate to apply bonuses and zeroes.</div>
+      <div class="tmuted" style="margin-bottom:12px">Table shows this week's pledges. Calculate applies the most recently completed week — Mon–Sat that's last week; on Sundays the current week can be closed out. Zeroes always ask for confirmation.</div>
       <div id="ironPledgeTable"></div>
       <button class="btn btn-gold" style="margin-top:12px" onclick="calculateIronPledgeResults()">Calculate & Apply Results</button>
     </div>
@@ -2705,30 +2705,50 @@ function renderIronPledgeAdmin(){
 
 async function calculateIronPledgeResults(){
   if(!season||!seasonId||!groupCode) return;
+  // Results may only be applied for a COMPLETED week — a mid-week tap used to
+  // permanently zero players who still had days left (results are immutable).
+  // Mon–Sat the target is LAST week; on Sunday the current week may be closed
+  // out (it ends tonight), gated by the zero-confirm below.
   const today=new Date();
-  const weekStr=getISOWeek(today);
+  const dow=today.getDay()===0?6:today.getDay()-1;          // 0=Mon … 6=Sun
+  const isSunday=today.getDay()===0;
+  const monDateObj=new Date(today.getFullYear(),today.getMonth(),today.getDate()-dow-(isSunday?0:7));
+  // Cross-month weeks can't be scored yet: the day-of-month log filters would
+  // silently miscount. Refuse honestly instead of writing wrong immutable docs.
+  if(monDateObj.getMonth()+1!==season.month || monDateObj.getFullYear()!==season.year){
+    toast('That pledge week crosses a month boundary — it can\'t be calculated for this season yet.','error');
+    return;
+  }
+  const weekStr=getISOWeek(monDateObj);
+  const monDay=monDateObj.getDate();
+  const weekLabel=isSunday?'this week':'last week';
   const activeBets=Object.values(bets).filter(b=>b.week===weekStr);
-  if(activeBets.length===0){ toast('No active pledges this week.'); return; }
-  const dow=today.getDay()===0?6:today.getDay()-1;
-  const monDay=today.getDate()-dow;
+  if(activeBets.length===0){ toast(`No pledges to calculate for ${weekLabel} (${weekStr}).`); return; }
   const alreadyCalc=ironPledgeBonuses.filter(b=>b.groupCode===groupCode&&b.week===weekStr);
   const toCalc=activeBets.filter(b=>!alreadyCalc.some(c=>c.player===b.player));
-  if(toCalc.length===0){ toast('All pledges already calculated for this week.'); return; }
+  if(toCalc.length===0){ toast(`All pledges already calculated for ${weekLabel}.`); return; }
+  // Compute outcomes first so anyone about to be zeroed can be confirmed
+  // BEFORE anything is written.
+  const results=toCalc.map(betData=>{
+    const daysLogged=new Set(allLogs.filter(l=>l.player===betData.player&&l.day>=monDay&&l.day<=monDay+6).map(l=>l.day)).size;
+    return {betData, daysLogged, type: daysLogged>=betData.pledge?'double':'zero'};
+  });
+  const zeroed=results.filter(r=>r.type==='zero').map(r=>r.betData.player);
+  if(zeroed.length){
+    const ok=confirm(`Applying ${weekLabel}'s results (${weekStr}) will permanently ZERO base points for:\n\n${zeroed.join(', ')}\n\nResults cannot be undone. Continue?`);
+    if(!ok){ toast('Cancelled — nothing applied.'); return; }
+  }
   try{
     const batch=db.batch();
-    for(const betData of toCalc){
-      const playerName=betData.player;
-      const daysLogged=new Set(allLogs.filter(l=>l.player===playerName&&l.day>=monDay&&l.day<=monDay+6).map(l=>l.day)).size;
-      const rawPoints=daysLogged*5;
-      const type=daysLogged>=betData.pledge?'double':'zero';
+    for(const r of results){
       batch.set(db.collection('bonuses_iron_pledge').doc(),{
-        player:playerName, pledge:betData.pledge, actual:daysLogged,
-        week:weekStr, groupCode, month:season.month, year:season.year, type, rawPoints,
+        player:r.betData.player, pledge:r.betData.pledge, actual:r.daysLogged,
+        week:weekStr, groupCode, month:season.month, year:season.year, type:r.type, rawPoints:r.daysLogged*5,
         calculatedAt:firebase.firestore.FieldValue.serverTimestamp()
       });
     }
     await batch.commit();
-    toast(`Iron Pledge results applied for ${toCalc.length} player(s).`,'success');
+    toast(`Iron Pledge results applied for ${results.length} player(s) — ${weekLabel} (${weekStr}).`,'success');
   }catch(e){ logErr('calculateIronPledgeResults',e); toast('Failed to calculate — check connection.','error'); }
 }
 
