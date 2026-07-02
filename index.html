@@ -2249,7 +2249,16 @@ async function createGroup(){
   const numTeams=Math.min(3, Math.max(2, parseInt(document.getElementById('newGroupNumTeams').value)||3));
   const thresholdPct=Math.min(100, Math.max(30, parseInt(document.getElementById('newGroupThreshold').value)||60));
   const rolesEnabled=document.getElementById('newGroupRoles').checked;
-  const code=Math.random().toString(36).substring(2,8).toUpperCase();
+  // Random 6-char codes can collide, and batch.set() would silently REPLACE
+  // the existing group's doc. Check for a free code before writing.
+  let code=null;
+  for(let i=0;i<5;i++){
+    const cand=Math.random().toString(36).substring(2,8).toUpperCase();
+    if(cand.length!==6) continue;
+    const existing=await db.collection('groups').doc(cand).get();
+    if(!existing.exists){ code=cand; break; }
+  }
+  if(!code){ toast('Could not generate a unique group code — try again.','error'); return; }
   const sid=seasonIdOf(month, year);
   const now=firebase.firestore.FieldValue.serverTimestamp();
 
