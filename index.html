@@ -2503,6 +2503,14 @@ async function checkJackOfAllTrades(day, newWorkouts){
 }
 
 // ── IRON PLEDGE ───────────────────────────────────────────────────────────
+// Bets are keyed by "{player}_{week}" doc IDs (write-once per player per
+// WEEK — the old per-player ID made every post-week-1 pledge a rules-denied
+// update). Lookups match on the doc's player+week FIELDS, so legacy
+// per-player docs from before the change still resolve for their week.
+function betFor(name, weekStr){
+  return Object.values(bets).find(b=>b && b.player===name && b.week===weekStr) || null;
+}
+
 // Show/hide pledge tab + admin card based on twist state
 function updatePledgeTabVisibility(){
   const tab=document.getElementById('pledgeTab');
@@ -2518,8 +2526,8 @@ function renderPledgeStatusCard(){
   if(!activeTwists['double_or_nothing']?.enabled){ el.innerHTML=''; return; }
   const today=new Date();
   const weekStr=getISOWeek(today);
-  const myBet=bets[me.name];
-  if(!myBet||myBet.week!==weekStr){
+  const myBet=betFor(me.name, weekStr);
+  if(!myBet){
     el.innerHTML=`<div class="card" style="border-color:var(--orange);cursor:pointer" onclick="showTab('pledge')">
       <div style="display:flex;align-items:center;gap:12px">
         <div style="font-size:32px">🔒</div>
@@ -2561,8 +2569,8 @@ function renderIronPledgePage(){
   if(!activeTwists['double_or_nothing']?.enabled){ el.innerHTML='<div class="tmuted">Iron Pledge is not active this month.</div>'; return; }
   const today=new Date();
   const weekStr=getISOWeek(today);
-  const myBet=bets[me.name];
-  if(!myBet||myBet.week!==weekStr){
+  const myBet=betFor(me.name, weekStr);
+  if(!myBet){
     el.innerHTML=`
       <div class="card" style="text-align:center;padding:28px 20px">
         <div style="font-size:52px;margin-bottom:12px">🔒</div>
@@ -2628,9 +2636,12 @@ async function lockInPledge(){
   const val=parseInt(inp?.value);
   if(!val||val<1||val>7){ toast('Enter a number between 1 and 7.','error'); return; }
   const weekStr=getISOWeek(new Date());
+  // Doc ID includes the week so each week is its own create (bets rules are
+  // create-only). Same sanitizer as jackAwards doc IDs.
+  const docId=(me.name+'_'+weekStr).replace(/[^a-zA-Z0-9_-]/g,'_');
   try{
     await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId)
-      .collection('bets').doc(me.name).set({
+      .collection('bets').doc(docId).set({
         player:me.name, pledge:val, week:weekStr, groupCode,
         lockedAt:firebase.firestore.FieldValue.serverTimestamp()
       });
@@ -2646,7 +2657,7 @@ function renderIronPledgeAdmin(){
   if(!activeTwists['double_or_nothing']?.enabled) return;
   const today=new Date();
   const weekStr=getISOWeek(today);
-  const activeBets=Object.entries(bets).filter(([,b])=>b.week===weekStr);
+  const activeBets=Object.values(bets).filter(b=>b.week===weekStr);
   if(activeBets.length===0){ el.innerHTML='<div class="tmuted" style="margin-bottom:0">No pledges locked in this week yet.</div>'; return; }
   const dow=today.getDay()===0?6:today.getDay()-1;
   const monDay=today.getDate()-dow;
@@ -2657,7 +2668,8 @@ function renderIronPledgeAdmin(){
       <th style="text-align:center;padding:6px 4px;color:var(--muted);font-weight:600">Logged</th>
       <th style="text-align:center;padding:6px 4px;color:var(--muted);font-weight:600">Status</th>
     </tr>
-    ${activeBets.map(([playerName,betData])=>{
+    ${activeBets.map(betData=>{
+      const playerName=betData.player;
       const logged=new Set(allLogs.filter(l=>l.player===playerName&&l.day>=monDay&&l.day<=monDay+6).map(l=>l.day)).size;
       const calc=ironPledgeBonuses.find(b=>b.player===playerName&&b.week===weekStr&&b.groupCode===groupCode);
       const status=calc
@@ -2677,16 +2689,17 @@ async function calculateIronPledgeResults(){
   if(!season||!seasonId||!groupCode) return;
   const today=new Date();
   const weekStr=getISOWeek(today);
-  const activeBets=Object.entries(bets).filter(([,b])=>b.week===weekStr);
+  const activeBets=Object.values(bets).filter(b=>b.week===weekStr);
   if(activeBets.length===0){ toast('No active pledges this week.'); return; }
   const dow=today.getDay()===0?6:today.getDay()-1;
   const monDay=today.getDate()-dow;
   const alreadyCalc=ironPledgeBonuses.filter(b=>b.groupCode===groupCode&&b.week===weekStr);
-  const toCalc=activeBets.filter(([p])=>!alreadyCalc.some(b=>b.player===p));
+  const toCalc=activeBets.filter(b=>!alreadyCalc.some(c=>c.player===b.player));
   if(toCalc.length===0){ toast('All pledges already calculated for this week.'); return; }
   try{
     const batch=db.batch();
-    for(const [playerName,betData] of toCalc){
+    for(const betData of toCalc){
+      const playerName=betData.player;
       const daysLogged=new Set(allLogs.filter(l=>l.player===playerName&&l.day>=monDay&&l.day<=monDay+6).map(l=>l.day)).size;
       const rawPoints=daysLogged*5;
       const type=daysLogged>=betData.pledge?'double':'zero';
