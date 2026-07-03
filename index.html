@@ -2181,36 +2181,50 @@ async function exportAllData(){
   try {
     const snapshot = {
       exportedAt: new Date().toISOString(),
-      schemaVersion: 'forge-v1',
+      schemaVersion: 'forge-v2',   // v2: adds jackAwards/bets/twistWindows per season + bonuses_iron_pledge
       groups: [],
       logs: [],
       bonuses_30day: [],
-      flags: []
+      flags: [],
+      bonuses_iron_pledge: []
     };
 
-    // 1. All groups + their seasons + each season's twists
+    // 1. All groups + their seasons + each season's subcollections. A restore
+    // without jackAwards/bets/twistWindows would silently change scores, so
+    // they are part of the backup, not optional extras.
     const groupsSnap = await db.collection('groups').get();
     for(const gDoc of groupsSnap.docs){
       const group = { code: gDoc.id, ...gDoc.data(), seasons: [] };
       const seasonsSnap = await db.collection('groups').doc(gDoc.id).collection('seasons').get();
       for(const sDoc of seasonsSnap.docs){
         const season = { id: sDoc.id, ...sDoc.data(), twists: {} };
-        const twistsSnap = await db.collection('groups').doc(gDoc.id).collection('seasons').doc(sDoc.id).collection('twists').get();
+        const sRef = db.collection('groups').doc(gDoc.id).collection('seasons').doc(sDoc.id);
+        const [twistsSnap, jackSnap, betsSnap, twwSnap] = await Promise.all([
+          sRef.collection('twists').get(),
+          sRef.collection('jackAwards').get(),
+          sRef.collection('bets').get(),
+          sRef.collection('twistWindows').get()
+        ]);
         twistsSnap.docs.forEach(t => { season.twists[t.id] = t.data(); });
+        season.jackAwards = jackSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        season.bets = betsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        season.twistWindows = twwSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         group.seasons.push(season);
       }
       snapshot.groups.push(group);
     }
 
     // 2. Top-level collections (scoped by groupCode + month + year on each doc)
-    const [logsSnap, bonusSnap, flagsSnap] = await Promise.all([
+    const [logsSnap, bonusSnap, flagsSnap, ipSnap] = await Promise.all([
       db.collection('logs').get(),
       db.collection('bonuses_30day').get(),
-      db.collection('flags').get()
+      db.collection('flags').get(),
+      db.collection('bonuses_iron_pledge').get()
     ]);
     snapshot.logs = logsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     snapshot.bonuses_30day = bonusSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     snapshot.flags = flagsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    snapshot.bonuses_iron_pledge = ipSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
     downloadJSON(snapshot, `forge_full_backup_${todayStamp()}.json`);
     status.textContent = `✅ Exported ${snapshot.groups.length} groups, ${snapshot.logs.length} logs.`;
