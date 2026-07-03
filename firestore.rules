@@ -89,11 +89,11 @@ service cloud.firestore {
         allow delete: if false;
       }
 
-      // Baseline aggregates — written server-side only
-      match /baseline-{docId} {
-        allow read:  if isAuthed();
-        allow write: if false;
-      }
+      // NOTE: baseline-{YYYY-MM} aggregates are top-level analytics/ DOCS, so
+      // the parent match above already covers them (read authed, write denied).
+      // A previous nested `match /baseline-{docId}` block was invalid syntax —
+      // literal-prefix wildcards aren't allowed — and made this whole file
+      // undeployable, which is why deployed rules had drifted from the repo.
     }
 
     // Updates page analytics — public landing page, so writes are unauthenticated
