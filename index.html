@@ -1845,7 +1845,10 @@ async function renderTrendCharts(groups){
   try{
     const now=new Date(), M=now.getMonth()+1, Y=now.getFullYear();
     const reg=groups.reduce((s,g)=>s+(g.players?.length||0),0)||1;
-    const snap=await db.collection('logs').get();
+    // Only this month's logs — the client-side filter below discarded the
+    // rest anyway, so pushing it into the query is free and the read cost
+    // stops growing with every past month.
+    const snap=await db.collection('logs').where('month','==',M).where('year','==',Y).get();
     const dp={}; snap.docs.forEach(dn=>{const l=dn.data(); if(l.month===M&&l.year===Y)(dp[l.day]=dp[l.day]||new Set()).add(l.player);});
     let base=null; try{const b=await db.collection('analytics').doc('baseline-2026-04').get(); if(b.exists) base=b.data();}catch(e){ logErr('renderTrendCharts: baseline read', e); }
     _trend={reg,dp,base,today:(now.getMonth()+1===M?now.getDate():31)};
@@ -1917,10 +1920,14 @@ async function renderSuperDashboard(groups){
     const totalGroups=groups.length;
     const totalPlayers=groups.reduce((s,g)=>s+(g.players?.length||0),0);
 
-    // Logs logged today (by calendar date of the timestamp), across all groups
+    // Logs logged today (by calendar date of the timestamp), across all groups.
+    // Query only the current month — any log written today carries today's
+    // month/year (a stale post-rollover client is the only exception, and the
+    // rollover listener now closes that window).
     const now=new Date();
     const startOfDay=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-    const logsSnap=await db.collection('logs').get();
+    const M=now.getMonth()+1, Y=now.getFullYear();
+    const logsSnap=await db.collection('logs').where('month','==',M).where('year','==',Y).get();
     let loggedToday=0;
     const perGroupToday={};
     logsSnap.docs.forEach(d=>{
@@ -2412,10 +2419,11 @@ async function loadGlobal(){
   try{
     const gSnap=await db.collection('groups').get();
     const groups=gSnap.docs.map(d=>({code:d.id,...d.data()}));
-    const logsSnap=await db.collection('logs').get();
-    const logs=logsSnap.docs.map(d=>({id:d.id,...d.data()}));
-    const bonusSnap=await db.collection('bonuses_30day').get();
-    const bonuses=bonusSnap.docs.map(d=>d.data());
+    // Seasons FIRST, so the logs query can be filtered to exactly the
+    // month/year pairs the active seasons actually use (normally 1 pair,
+    // at most 2 during rollover week) instead of the whole collection.
+    // A group still on last month's season keeps its pair, so it is NOT
+    // dropped from the global boards by the filtering.
     const groupSeasons={};
     for(const g of groups){
       const sid=g.currentSeasonId; if(!sid) continue;
@@ -2429,6 +2437,15 @@ async function loadGlobal(){
       const twistWindows=twwSnap.docs.map(d=>({id:d.id,...d.data()}));
       groupSeasons[g.code]={sData,twists,twistWindows};
     }
+    const pairs=[...new Set(Object.values(groupSeasons).map(gs=>gs.sData.month+'|'+gs.sData.year))];
+    let logs=[];
+    for(const pair of pairs){
+      const [m,y]=pair.split('|').map(Number);
+      const snap=await db.collection('logs').where('month','==',m).where('year','==',y).get();
+      logs=logs.concat(snap.docs.map(d=>({id:d.id,...d.data()})));
+    }
+    const bonusSnap=await db.collection('bonuses_30day').get();
+    const bonuses=bonusSnap.docs.map(d=>d.data());
     globalDataCache={groups,logs,bonuses,groupSeasons};
     globalDataCacheTime=Date.now();
     renderGlobalFromCache(globalDataCache);
