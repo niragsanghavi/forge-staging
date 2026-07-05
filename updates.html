@@ -12,26 +12,23 @@
   weight + tracking. All original functionality is intact.
 
   ────────────────────────────────────────────────────────────────────────
-  VIDEO SHOOTING LIST — drop all of these into an `updates/` folder.
-  Each <video> degrades to a gold "Coming soon" tile if the .mp4 is missing.
-  Each video also wants a poster thumbnail: updates/{name}-thumb.jpg
+  MEDIA STATUS (Iteration 2, July 2026). All videos are preload="none" with
+  poster thumbnails (updates/{name}-thumb.jpg) — opening the page costs
+  kilobytes; nothing streams until a tile is tapped. Videos re-encoded
+  H.264 CRF 28 + faststart. Fonts: SYSTEM STACK BY DECISION (PLAN.md) —
+  Archivo/Hanken Grotesk from the 3-directions exploration is retired for
+  this page; weight + tracking carry Direction A's typographic intent.
 
-  INTRO:
-    updates/forge-loading.gif        → 1.5s intro loader; if missing, skip to landing.
+  SHOT (8 clips + 8 posters, in updates/):
+    install-homescreen, iron-pledge, weekly-twists, visual-overhaul,
+    monthly-goals, step-join-group, step-log-workout, step-leaderboard
+    (step-install.mp4 was a byte-identical duplicate of install-homescreen
+     — deduped; the guide's install step reuses install-homescreen.mp4)
 
-  WHAT'S NEW videos (in order):
-    updates/install-homescreen.mp4   → iPhone Add-to-Home-Screen flow.
-    updates/iron-pledge.mp4          → locking in a weekly pledge + progress ring.
-    updates/weekly-twists.mp4        → admin toggling the monthly twists on.
-    updates/visual-overhaul.mp4      → scrolling the redesigned home + board.
-    updates/monthly-goals.mp4        → tapping the goal ring and setting a target.
-
-  GET STARTED (guide) videos (in order):
-    updates/step-join-group.mp4      → entering a group code and joining.
-    updates/step-log-workout.mp4     → date → workout chips → FAB submit.
-    updates/step-leaderboard.mp4     → podium + individual rankings.
+  STILL TO SHOOT (tiles show "Clip coming soon" until dropped in):
     updates/step-admin.mp4           → twist toggles + role assignment.
-    updates/step-install.mp4         → Add-to-Home-Screen flow.
+    updates/season-recap.mp4         → opening the month-end recap + Share.
+    updates/profile-badges.mp4       → (optional) profile screen once shipped.
   ════════════════════════════════════════════════════════════════════════
 -->
 <html lang="en">
@@ -52,13 +49,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
   height:auto;overflow-y:auto;overflow-x:hidden;
   -webkit-overflow-scrolling:touch;overscroll-behavior-y:none}
 /* page-local helper aliases mapped onto the app's tokens */
-#appRoot,#loadingScreen{--gold-soft:var(--gold-l)}
-
-/* ── INTRO LOADER ── */
-#loadingScreen{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;
-  background:var(--bg);transition:opacity .4s ease}
-#loadingScreen img{max-width:160px;width:55%;height:auto}
-#appRoot{opacity:0;transition:opacity .5s ease}
+#appRoot{--gold-soft:var(--gold-l)}
 
 /* ════ LANDING (hero wordmark + two cards) ════ */
 #landing{min-height:100vh;min-height:100dvh;max-width:480px;margin:0 auto;width:100%;
@@ -104,6 +95,15 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
 .sec-title{font-weight:800;font-size:30px;letter-spacing:-.03em;color:var(--gold)}
 .sec-divider{height:1px;background:var(--hairline);margin:16px 0 22px}
 .sec-intro{font-size:14.5px;line-height:1.55;color:var(--text);margin:-8px 0 26px;max-width:340px}
+
+/* ── MONTH GROUP (changelog runs newest month first, older months keep their entries) ── */
+.month-head{display:flex;align-items:center;gap:12px;margin:26px 0 16px}
+.month-group:first-of-type .month-head{margin-top:0}
+.month-head-label{font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);flex:none}
+.month-head-rule{flex:1;height:1px;background:var(--hairline)}
+.up-badge-soon{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--gold);background:var(--gold-l);border:1px solid rgba(212,168,67,.45);
+  padding:3px 8px;border-radius:999px;margin-left:8px;vertical-align:2px}
 
 /* ── FEED ENTRY (matte raised box) ── */
 .up-card{background:var(--bg-card);border:1px solid var(--hairline);border-radius:16px;padding:18px;margin-bottom:18px;
@@ -158,18 +158,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
 </head>
 <body>
 
-<!-- ══ INTRO LOADER — shows forge-loading.gif for 1.5s, then fades to landing.
-     If the gif is missing, onerror calls skipLoading() → straight to landing. ══ -->
-<div id="loadingScreen">
-  <img src="updates/forge-loading.gif" alt="" onerror="skipLoading()">
-</div>
-
 <div id="appRoot">
 
   <!-- ════ LANDING — hero wordmark + two cards (What's New primary, New to Forge? below) ════ -->
   <div id="landing">
     <div class="hero">
-      <div class="hero-eyebrow">WHAT'S NEW · JUNE 2026</div>
+      <div class="hero-eyebrow" id="heroEyebrow">WHAT'S NEW</div>
       <div class="hero-word">Forge</div>
       <div class="hero-sub">The latest on the app your group competes in.</div>
     </div>
@@ -179,7 +173,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
       <div class="path-card whats-new" onclick="openSection('whatsnew', this)">
         <div>
           <div class="path-title">What's New</div>
-          <div class="path-sub">5 updates this month</div>
+          <div class="path-sub" id="whatsNewCount">Latest updates</div>
         </div>
         <div class="path-arrow" aria-hidden="true">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0a0a0d" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
@@ -213,7 +207,44 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
       <div id="section-whatsnew" class="content-section">
         <div class="sec-title">What's New</div>
         <div class="sec-divider"></div>
-        <p class="sec-intro">Five things we shipped this month. Tap any clip to watch it in action.</p>
+        <p class="sec-intro">Everything we've shipped, newest first. Tap any clip to watch it in action.</p>
+
+        <!-- ── JULY 2026 ── -->
+        <div class="month-group" data-month="2026-07">
+          <div class="month-head"><span class="month-head-label">July 2026</span><span class="month-head-rule"></span></div>
+
+          <!-- Entry: Season Recap -->
+          <article class="up-card">
+            <div class="up-date">July 2026</div>
+            <h2 class="up-title">Season Recap — Your Month, Wrapped</h2>
+            <p class="up-desc">On the last evening of the month, a gold card appears on your Home screen. Tap it: winning team, top performers, your own numbers, and the achievements you earned — then <strong>share the recap image straight to the group chat</strong> so everyone knows exactly who carried.</p>
+            <!-- VIDEO (to shoot): opening the recap + tapping Share. updates/season-recap.mp4 -->
+            <div class="media-wrap">
+              <div class="media-tile">
+                <div class="media-ph"><div class="media-play"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div><div class="media-soon">Clip coming soon</div></div>
+              </div>
+              <div class="media-cap">The month-end recap</div>
+            </div>
+          </article>
+
+          <!-- Entry: Instant open / offline -->
+          <article class="up-card">
+            <div class="up-date">July 2026</div>
+            <h2 class="up-title">Forge Now Opens Instantly</h2>
+            <p class="up-desc">Your board, your streak, your calendar — cached on your phone. Forge paints immediately when you open it, then syncs in the background. Basement gym, dead spots, one bar of signal: <strong>the app shows up even when the network doesn't.</strong></p>
+          </article>
+
+          <!-- Entry: Profiles & badges (shipping this week) -->
+          <article class="up-card">
+            <div class="up-date">July 2026 <span class="up-badge-soon">Shipping this week</span></div>
+            <h2 class="up-title">Profiles, Badges &amp; Winner's Crowns</h2>
+            <p class="up-desc">Your streaks, stats and history are about to follow <strong>you</strong> — across every group you're in. Season winners get a badge that lives on their profile forever, and a 🏆 next to their name all next month. Win June, wear the crown through July.</p>
+          </article>
+        </div>
+
+        <!-- ── JUNE 2026 ── -->
+        <div class="month-group" data-month="2026-06">
+          <div class="month-head"><span class="month-head-label">June 2026</span><span class="month-head-rule"></span></div>
 
         <!-- Entry 1: Install on home screen -->
         <article class="up-card">
@@ -223,7 +254,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
           <!-- VIDEO: Add to Home Screen flow on iPhone. updates/install-homescreen.mp4 -->
           <div class="media-wrap">
             <div class="media-tile">
-              <video data-vid="install-homescreen" class="media-video" controls playsinline poster="updates/install-homescreen-thumb.jpg">
+              <video data-vid="install-homescreen" class="media-video" controls playsinline preload="none" poster="updates/install-homescreen-thumb.jpg">
                 <source src="updates/install-homescreen.mp4" type="video/mp4" onerror="videoFallback(this)">
               </video>
               <span class="media-dur">0:16</span>
@@ -240,7 +271,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
           <!-- VIDEO: locking in a weekly pledge + progress ring. updates/iron-pledge.mp4 -->
           <div class="media-wrap">
             <div class="media-tile">
-              <video data-vid="iron-pledge" class="media-video" controls playsinline poster="updates/iron-pledge-thumb.jpg">
+              <video data-vid="iron-pledge" class="media-video" controls playsinline preload="none" poster="updates/iron-pledge-thumb.jpg">
                 <source src="updates/iron-pledge.mp4" type="video/mp4" onerror="videoFallback(this)">
               </video>
               <span class="media-dur">0:22</span>
@@ -257,7 +288,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
           <!-- VIDEO: admin toggling the monthly twists on. updates/weekly-twists.mp4 -->
           <div class="media-wrap">
             <div class="media-tile">
-              <video data-vid="weekly-twists" class="media-video" controls playsinline poster="updates/weekly-twists-thumb.jpg">
+              <video data-vid="weekly-twists" class="media-video" controls playsinline preload="none" poster="updates/weekly-twists-thumb.jpg">
                 <source src="updates/weekly-twists.mp4" type="video/mp4" onerror="videoFallback(this)">
               </video>
               <span class="media-dur">0:19</span>
@@ -274,7 +305,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
           <!-- VIDEO: scrolling the redesigned home + board. updates/visual-overhaul.mp4 -->
           <div class="media-wrap">
             <div class="media-tile">
-              <video data-vid="visual-overhaul" class="media-video" controls playsinline poster="updates/visual-overhaul-thumb.jpg">
+              <video data-vid="visual-overhaul" class="media-video" controls playsinline preload="none" poster="updates/visual-overhaul-thumb.jpg">
                 <source src="updates/visual-overhaul.mp4" type="video/mp4" onerror="videoFallback(this)">
               </video>
               <span class="media-dur">0:24</span>
@@ -291,7 +322,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
           <!-- VIDEO: tapping the goal ring and setting a target. updates/monthly-goals.mp4 -->
           <div class="media-wrap">
             <div class="media-tile">
-              <video data-vid="monthly-goals" class="media-video" controls playsinline poster="updates/monthly-goals-thumb.jpg">
+              <video data-vid="monthly-goals" class="media-video" controls playsinline preload="none" poster="updates/monthly-goals-thumb.jpg">
                 <source src="updates/monthly-goals.mp4" type="video/mp4" onerror="videoFallback(this)">
               </video>
               <span class="media-dur">0:15</span>
@@ -299,6 +330,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
             <div class="media-cap">Setting a monthly target</div>
           </div>
         </article>
+        </div><!-- /month-group June -->
 
         <footer class="up-foot">Forged by the group.<br><a href="index.html">Open Forge →</a></footer>
       </div>
@@ -319,7 +351,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
           <!-- VIDEO: entering a group code and joining. updates/step-join-group.mp4 -->
           <div class="media-wrap">
             <div class="media-tile">
-              <video data-vid="step-join-group" class="media-video" controls playsinline poster="updates/step-join-group-thumb.jpg">
+              <video data-vid="step-join-group" class="media-video" controls playsinline preload="none" poster="updates/step-join-group-thumb.jpg">
                 <source src="updates/step-join-group.mp4" type="video/mp4" onerror="videoFallback(this)">
               </video>
               <span class="media-dur">0:12</span>
@@ -338,7 +370,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
           <!-- VIDEO: date → workout chips → FAB submit. updates/step-log-workout.mp4 -->
           <div class="media-wrap">
             <div class="media-tile">
-              <video data-vid="step-log-workout" class="media-video" controls playsinline poster="updates/step-log-workout-thumb.jpg">
+              <video data-vid="step-log-workout" class="media-video" controls playsinline preload="none" poster="updates/step-log-workout-thumb.jpg">
                 <source src="updates/step-log-workout.mp4" type="video/mp4" onerror="videoFallback(this)">
               </video>
               <span class="media-dur">0:10</span>
@@ -357,7 +389,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
           <!-- VIDEO: podium + individual rankings. updates/step-leaderboard.mp4 -->
           <div class="media-wrap">
             <div class="media-tile">
-              <video data-vid="step-leaderboard" class="media-video" controls playsinline poster="updates/step-leaderboard-thumb.jpg">
+              <video data-vid="step-leaderboard" class="media-video" controls playsinline preload="none" poster="updates/step-leaderboard-thumb.jpg">
                 <source src="updates/step-leaderboard.mp4" type="video/mp4" onerror="videoFallback(this)">
               </video>
               <span class="media-dur">0:14</span>
@@ -373,13 +405,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
             <div class="up-steptitle">Running the group? Visit Admin</div>
           </div>
           <p class="up-stepdesc">If you're the admin, the Admin tab is your control room — assign teams and roles, flip on monthly twists, and manage the season.</p>
-          <!-- VIDEO: twist toggles + role assignment. updates/step-admin.mp4 -->
+          <!-- VIDEO (to shoot): twist toggles + role assignment. updates/step-admin.mp4
+               Static fallback tile until the clip exists — with preload="none" there is
+               no eager load to trigger the runtime fallback, so we author it directly. -->
           <div class="media-wrap">
             <div class="media-tile">
-              <video data-vid="step-admin" class="media-video" controls playsinline poster="updates/step-admin-thumb.jpg">
-                <source src="updates/step-admin.mp4" type="video/mp4" onerror="videoFallback(this)">
-              </video>
-              <span class="media-dur">0:18</span>
+              <div class="media-ph"><div class="media-play"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div><div class="media-soon">Clip coming soon</div></div>
             </div>
             <div class="media-cap">Twist toggles &amp; roles</div>
           </div>
@@ -392,11 +423,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
             <div class="up-steptitle">Install Forge on your phone</div>
           </div>
           <p class="up-stepdesc">Add Forge to your home screen so it opens like a native app — tap the browser share icon, then "Add to Home Screen."</p>
-          <!-- VIDEO: Add to Home Screen flow. updates/step-install.mp4 -->
+          <!-- VIDEO: Add to Home Screen flow — same clip as the What's New entry
+               (updates/step-install.mp4 was a byte-identical duplicate; deduped). -->
           <div class="media-wrap">
             <div class="media-tile">
-              <video data-vid="step-install" class="media-video" controls playsinline poster="updates/step-install-thumb.jpg">
-                <source src="updates/step-install.mp4" type="video/mp4" onerror="videoFallback(this)">
+              <video data-vid="step-install" class="media-video" controls playsinline preload="none" poster="updates/install-homescreen-thumb.jpg">
+                <source src="updates/install-homescreen.mp4" type="video/mp4" onerror="videoFallback(this)">
               </video>
               <span class="media-dur">0:13</span>
             </div>
@@ -450,26 +482,28 @@ function videoFallback(node){
   }catch(e){ /* never break the page over a missing video */ }
 }
 
-// ── INTRO LOADER ──
-var _loadingDone = false;
-function revealLanding(){
-  if(_loadingDone) return;
-  _loadingDone = true;
-  var ls = document.getElementById('loadingScreen');
-  if(ls){ ls.style.opacity = '0'; setTimeout(function(){ ls.style.display = 'none'; }, 400); }
-  document.getElementById('appRoot').style.opacity = '1';
-}
-function skipLoading(){ revealLanding(); }           // gif missing → straight to landing
 window.addEventListener('DOMContentLoaded', function(){
-  setTimeout(revealLanding, 1500);
-  // Track every video's play event; degrade missing files to a placeholder.
+  // Live month header + entry count — a changelog with a stale hardcoded month
+  // reads as abandoned, which is worse than no changelog.
+  var MONTHS=['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];
+  var now=new Date();
+  var eyebrow=document.getElementById('heroEyebrow');
+  if(eyebrow) eyebrow.textContent='WHAT’S NEW · '+MONTHS[now.getMonth()]+' '+now.getFullYear();
+  var latestGroup=document.querySelector('.month-group');           // first group = newest
+  var countEl=document.getElementById('whatsNewCount');
+  if(latestGroup && countEl){
+    var n=latestGroup.querySelectorAll('.up-card').length;
+    countEl.textContent=n+' update'+(n===1?'':'s')+' this month';
+  }
+  // Track every video's play event; degrade decode failures to a placeholder.
+  // Videos are preload="none": nothing is fetched until the user taps play —
+  // posters carry the visuals, so opening the page costs kilobytes, not megabytes.
   document.querySelectorAll('video[data-vid]').forEach(function(v){
     v.addEventListener('play', function(){
       trackEvent('video_' + this.dataset.vid + '_play');
       var tile = this.closest('.media-tile'); if(tile) tile.classList.add('playing');
     });
     v.addEventListener('error', function(){ videoFallback(this); }, true);  // decode/format failure
-    if(v.querySelector('source')){ v.load(); }   // kick a load so a missing source errors promptly
   });
 });
 
