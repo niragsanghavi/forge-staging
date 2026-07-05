@@ -44,8 +44,13 @@
 <link rel="stylesheet" href="src/style/main.css">
 <style>
 /* ── updates.html — page-specific layout (tokens come from main.css) ── */
+/* Single-flow landing page: scrolls natively at the document level (no fixed-height
+   flex trap), so it works on Android Chrome. -webkit-overflow-scrolling:touch adds
+   iOS momentum; overscroll-behavior-y stops the scroll chaining off the page. */
 body{background:var(--bg);color:var(--text);font-family:var(--font);
-  -webkit-font-smoothing:antialiased;min-height:100vh}
+  -webkit-font-smoothing:antialiased;min-height:100vh;min-height:100dvh;
+  height:auto;overflow-y:auto;overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;overscroll-behavior-y:none}
 /* page-local helper aliases mapped onto the app's tokens */
 #appRoot,#loadingScreen{--gold-soft:var(--gold-l)}
 
@@ -57,7 +62,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
 
 /* ════ LANDING (hero wordmark + two cards) ════ */
 #landing{min-height:100vh;min-height:100dvh;max-width:480px;margin:0 auto;width:100%;
-  display:flex;flex-direction:column;position:relative;overflow:hidden;transition:opacity .35s ease}
+  display:flex;flex-direction:column;position:relative;overflow:visible;transition:opacity .35s ease}
 #landing.fade-out{opacity:0;pointer-events:none}
 #landing::before{content:'';position:absolute;inset:0;pointer-events:none;
   background:radial-gradient(120% 52% at 50% 114%,rgba(212,168,67,.14),transparent 68%)}
