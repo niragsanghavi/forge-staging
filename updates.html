@@ -41,6 +41,8 @@
 <link rel="stylesheet" href="src/style/main.css">
 <style>
 /* ── updates.html — page-specific layout (tokens come from main.css) ── */
+/* Dark by design: this page intentionally ignores the app's saved light/dark
+   theme — the Foundry hero is dark-native. Not an omission. */
 /* Single-flow landing page: scrolls natively at the document level (no fixed-height
    flex trap), so it works on Android Chrome. -webkit-overflow-scrolling:touch adds
    iOS momentum; overscroll-behavior-y stops the scroll chaining off the page. */
@@ -121,8 +123,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
   background:radial-gradient(130% 80% at 50% 0%,#1c1c22,#0b0b0e);border:1px solid var(--hairline);
   display:flex;align-items:center;justify-content:center}
 .media-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;background:transparent;border:none}
-.media-dur{position:absolute;top:9px;right:9px;font-size:10px;font-weight:700;color:var(--text-muted);
-  background:rgba(0,0,0,.55);padding:3px 7px;border-radius:999px;z-index:2;pointer-events:none;transition:opacity .2s}
+/* White on 65% black: the badge sits over arbitrary video frames, so it can't
+   rely on token contrast — muted-on-55% bottomed out near 3:1 on bright frames. */
+.media-dur{position:absolute;top:9px;right:9px;font-size:10px;font-weight:700;color:#fff;
+  background:rgba(0,0,0,.65);padding:3px 7px;border-radius:999px;z-index:2;pointer-events:none;transition:opacity .2s}
 .media-tile.playing .media-dur{opacity:0}
 .media-ph{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
 .media-play{width:50px;height:50px;border-radius:50%;background:var(--gold-soft);border:1px solid rgba(212,168,67,.5);
@@ -149,6 +153,18 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 14px 28px -12px rgba(212,168,67,.55);transition:transform .16s}
 .up-foot a:active{transform:scale(.97)}
 
+/* ── ACCESSIBILITY ── */
+/* One page-wide keyboard focus treatment (extends the back button's default). */
+:focus-visible{outline:2px solid var(--gold);outline-offset:3px;border-radius:4px}
+.path-card:focus-visible,.up-foot a:focus-visible{border-radius:18px}
+/* Hover states — desktop only (WhatsApp Web is a real context for this page). */
+@media (hover:hover){
+  .path-card{transition:transform .16s cubic-bezier(.34,1.56,.64,1),border-color .16s ease,box-shadow .16s ease}
+  .path-card:hover{transform:translateY(-1px);border-color:rgba(212,168,67,.5)}
+  .media-tile:hover .media-play{filter:brightness(1.25)}
+  .up-foot a:hover{filter:brightness(1.06)}
+}
+
 /* ── ANIMATIONS ── */
 @keyframes upSheet{from{opacity:.4;transform:translateY(22px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){
@@ -170,7 +186,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
 
     <div class="landing-cards">
       <!-- What's New (primary, gold) → opens the changelog feed -->
-      <div class="path-card whats-new" onclick="openSection('whatsnew', this)">
+      <div class="path-card whats-new" role="button" tabindex="0" aria-label="What's New — open the changelog" onclick="openSection('whatsnew', this)">
         <div>
           <div class="path-title">What's New</div>
           <div class="path-sub" id="whatsNewCount">Latest updates</div>
@@ -181,7 +197,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
       </div>
 
       <!-- New to Forge? (secondary) → opens the step-by-step guide -->
-      <div class="path-card new-to-forge" onclick="openSection('guide', this)">
+      <div class="path-card new-to-forge" role="button" tabindex="0" aria-label="New to Forge — open the getting-started guide" onclick="openSection('guide', this)">
         <svg class="path-door" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16M14 12h.01"/></svg>
         <div class="ntf-mid">
           <div class="ntf-title">New to Forge?</div>
@@ -495,6 +511,14 @@ window.addEventListener('DOMContentLoaded', function(){
     var n=latestGroup.querySelectorAll('.up-card').length;
     countEl.textContent=n+' update'+(n===1?'':'s')+' this month';
   }
+  // Keyboard activation for the role="button" path cards (Enter / Space).
+  // Media tiles need no wiring: their interactivity is the native <video controls>,
+  // which is already keyboard-accessible.
+  document.querySelectorAll('.path-card[role="button"]').forEach(function(c){
+    c.addEventListener('keydown', function(e){
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); this.click(); }
+    });
+  });
   // Track every video's play event; degrade decode failures to a placeholder.
   // Videos are preload="none": nothing is fetched until the user taps play —
   // posters carry the visuals, so opening the page costs kilobytes, not megabytes.
