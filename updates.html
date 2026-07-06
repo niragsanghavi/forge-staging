@@ -62,12 +62,17 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
   --fs-body:15px;--lh-body:24px;
   --fs-s:13px;--lh-s:20px;
   --fs-label:12px;--lh-label:16px;
-  --fs-micro:11px;--lh-micro:14px}
+  --fs-micro:11px;--lh-micro:14px;
+  /* house easing (DESIGN_ELEVATION.md §2): decel for entrances, spring for
+     RELEASE only — presses compress plainly, objects spring back. Sheet rises
+     keep their original .32,.72,0,1. */
+  --ease-out:cubic-bezier(.22,1,.36,1);
+  --ease-spring:cubic-bezier(.3,1.4,.5,1)}
 
 /* ════ LANDING (hero wordmark + two cards) ════ */
 #landing{min-height:100vh;min-height:100dvh;max-width:480px;margin:0 auto;width:100%;
-  display:flex;flex-direction:column;position:relative;overflow:visible;transition:opacity .35s ease}
-#landing.fade-out{opacity:0;pointer-events:none}
+  display:flex;flex-direction:column;position:relative;overflow:visible}
+#landing.fade-out{pointer-events:none}   /* opacity handled by the slipOut animation */
 #landing::before{content:'';position:absolute;inset:0;pointer-events:none;
   background:radial-gradient(120% 52% at 50% 114%,rgba(212,168,67,.14),transparent 68%)}
 .hero{flex:1;display:flex;flex-direction:column;justify-content:flex-end;
@@ -80,9 +85,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
 /* matte raised cards — flat dark surface, top highlight + drop shadow = "out of the page" */
 .path-card{display:flex;align-items:center;gap:14px;border-radius:18px;cursor:pointer;user-select:none;
   background:var(--bg-card);border:1px solid var(--hairline);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 18px 34px -18px rgba(0,0,0,.92),0 3px 8px -3px rgba(0,0,0,.55);
-  transition:transform .16s cubic-bezier(.34,1.56,.64,1)}
-.path-card:active{transform:scale(.985)}
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 18px 34px -18px rgba(0,0,0,.92),0 3px 8px -3px rgba(0,0,0,.55)}
 .path-card.whats-new{justify-content:space-between;gap:16px;padding:20px;border-color:rgba(212,168,67,.42)}
 .path-card.new-to-forge{padding:16px 20px}
 .path-title{font-weight:800;font-size:var(--fs-t2);line-height:var(--lh-t2);letter-spacing:-.02em;color:var(--text)}
@@ -161,23 +164,48 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
 .up-foot{text-align:center;padding:26px 8px 8px;color:var(--text-muted);font-size:var(--fs-s);line-height:var(--lh-s)}
 .up-foot a{display:inline-block;margin-top:14px;background:linear-gradient(180deg,#e7c45c,var(--gold));
   color:#0a0a0d;text-decoration:none;font-weight:800;font-size:18px;letter-spacing:-.01em;padding:15px 32px;border-radius:14px;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 14px 28px -12px rgba(212,168,67,.55);transition:transform .16s}
-.up-foot a:active{transform:scale(.97)}
-
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 14px 28px -12px rgba(212,168,67,.55)}
 /* ── ACCESSIBILITY ── */
 /* One page-wide keyboard focus treatment (extends the back button's default). */
 :focus-visible{outline:2px solid var(--gold);outline-offset:3px;border-radius:4px}
 .path-card:focus-visible,.up-foot a:focus-visible{border-radius:18px}
 /* Hover states — desktop only (WhatsApp Web is a real context for this page). */
 @media (hover:hover){
-  .path-card{transition:transform .16s cubic-bezier(.34,1.56,.64,1),border-color .16s ease,box-shadow .16s ease}
   .path-card:hover{transform:translateY(-1px);border-color:rgba(212,168,67,.5)}
   .media-tile:hover .media-play{filter:brightness(1.25)}
   .up-foot a:hover{filter:brightness(1.06)}
 }
 
+/* ── MOTION (all of it dies under prefers-reduced-motion below) ── */
+/* Press physics: compress fast and plain (90ms ease-out), spring on RELEASE
+   (350ms). The old build had the bounce on press-down — backwards. */
+.path-card,.media-tile,.up-foot a,.back-btn{
+  transition:transform .35s var(--ease-spring),border-color .16s ease,filter .16s ease}
+.path-card:active,.media-tile:active,.up-foot a:active{
+  transform:scale(.98);transition:transform .09s ease-out}
+.back-btn:active{transform:scale(.96);opacity:.6;transition:transform .09s ease-out}
+
+/* Entrance stagger: the first cards of each section rise in 45ms apart.
+   (First 3 per month group + all 5 guide steps — anything further down has
+   finished animating long before it's scrolled into view, so this matches
+   the "first five visible" intent with selectors that survive new months.) */
+@keyframes cardIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.month-group .up-card:nth-of-type(-n+3),#section-guide .up-step:nth-of-type(-n+5){
+  animation:cardIn .36s var(--ease-out) both}
+.month-group .up-card:nth-of-type(2),#section-guide .up-step:nth-of-type(2){animation-delay:45ms}
+.month-group .up-card:nth-of-type(3),#section-guide .up-step:nth-of-type(3){animation-delay:90ms}
+#section-guide .up-step:nth-of-type(4){animation-delay:135ms}
+#section-guide .up-step:nth-of-type(5){animation-delay:180ms}
+
+/* Poster load-in: kill the "pop" — the tile gradient is the placeholder. */
+@keyframes mediaIn{from{opacity:0}}
+.media-video{animation:mediaIn .24s ease-out}
+
 /* ── ANIMATIONS ── */
 @keyframes upSheet{from{opacity:.4;transform:translateY(22px)}to{opacity:1;transform:none}}
+/* Landing/sheet handoff: outgoing surface slips up-and-out while the incoming
+   sheet starts at 140ms — 60ms overlap, one continuous gesture, no dead gap. */
+@keyframes slipOut{to{opacity:0;transform:translateY(-8px)}}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
 }
@@ -543,10 +571,13 @@ window.addEventListener('DOMContentLoaded', function(){
 });
 
 // ── TWO-PATH NAVIGATION (landing → content sheet → back) ──
+// Handoff: outgoing surface slips out over 200ms; incoming sheet starts at
+// 140ms (60ms overlap) — one continuous gesture instead of fade-stop-rise.
 function openSection(which, cardEl){
   trackEvent(which === 'whatsnew' ? 'landing_whats_new_tap' : 'landing_new_to_forge_tap');
   var landing = document.getElementById('landing');
-  landing.classList.add('fade-out');               // landing fades out
+  landing.classList.add('fade-out');
+  landing.style.animation = 'slipOut .2s ease-in both';
   setTimeout(function(){
     landing.style.display = 'none';
     document.getElementById('contentView').style.display = 'block';
@@ -559,18 +590,23 @@ function openSection(which, cardEl){
     sec.style.animation = 'none'; void sec.offsetWidth;   // restart the sheet-up animation
     sec.style.animation = 'upSheet .44s cubic-bezier(.32,.72,0,1)';
     window.scrollTo(0, 0);
-  }, 280);
+  }, 140);
 }
 function backToLanding(){
   trackEvent('back_button_tap');
-  document.getElementById('contentView').style.display = 'none';
-  document.getElementById('backBar').classList.add('hidden');
-  var landing = document.getElementById('landing');
-  landing.style.display = 'flex';
-  landing.classList.remove('fade-out');
-  landing.style.animation = 'none'; void landing.offsetWidth;
-  landing.style.animation = 'upSheet .4s cubic-bezier(.32,.72,0,1)';
-  window.scrollTo(0, 0);
+  var cv = document.getElementById('contentView');
+  cv.style.animation = 'slipOut .2s ease-in both';
+  setTimeout(function(){
+    cv.style.display = 'none';
+    cv.style.animation = '';
+    document.getElementById('backBar').classList.add('hidden');
+    var landing = document.getElementById('landing');
+    landing.style.display = 'flex';
+    landing.classList.remove('fade-out');
+    landing.style.animation = 'none'; void landing.offsetWidth;
+    landing.style.animation = 'upSheet .4s cubic-bezier(.32,.72,0,1)';
+    window.scrollTo(0, 0);
+  }, 140);
 }
 </script>
 
