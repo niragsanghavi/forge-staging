@@ -73,13 +73,28 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
 #landing{min-height:100vh;min-height:100dvh;max-width:480px;margin:0 auto;width:100%;
   display:flex;flex-direction:column;position:relative;overflow:visible}
 #landing.fade-out{pointer-events:none}   /* opacity handled by the slipOut animation */
+/* Breathing glow: effective intensity oscillates .10 -> .16 over 6s (gradient
+   is authored at .16, element opacity .625 -> 1). Frozen by reduced-motion. */
 #landing::before{content:'';position:absolute;inset:0;pointer-events:none;
-  background:radial-gradient(120% 52% at 50% 114%,rgba(212,168,67,.14),transparent 68%)}
+  background:radial-gradient(120% 52% at 50% 114%,rgba(212,168,67,.16),transparent 68%);
+  animation:heroBreathe 6s ease-in-out infinite}
+@keyframes heroBreathe{0%,100%{opacity:.625}50%{opacity:1}}
 .hero{flex:1;display:flex;flex-direction:column;justify-content:flex-end;
   padding:calc(env(safe-area-inset-top) + 24px) 30px 6px;position:relative}
 .hero-eyebrow{font-size:var(--fs-micro);line-height:var(--lh-micro);font-weight:700;letter-spacing:.18em;color:var(--gold);margin-bottom:18px}
 .hero-word{font-weight:900;font-size:var(--fs-display);line-height:var(--lh-display);letter-spacing:-.045em;color:var(--gold)}
 .hero-sub{font-size:var(--fs-body);line-height:var(--lh-body);color:var(--text);margin-top:16px;max-width:260px}
+/* Latest-update row: the hero leads with the newest headline — the page's
+   TL;DR for returning users, one tap into entry #1. Populated by JS from the
+   newest month group; hidden until then. */
+.hero-latest{display:flex;align-items:center;gap:10px;margin-top:18px;padding:10px 0;width:100%;
+  background:none;border:none;font-family:inherit;text-align:left;cursor:pointer;user-select:none}
+.hero-latest[hidden]{display:none}
+.hl-label{flex:none;font-size:var(--fs-micro);line-height:var(--lh-micro);font-weight:700;
+  letter-spacing:.18em;text-transform:uppercase;color:var(--gold)}
+.hl-text{flex:0 1 auto;min-width:0;font-size:var(--fs-s);line-height:var(--lh-s);font-weight:600;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hl-chev{flex:none;color:var(--gold)}
 .landing-cards{flex:none;position:relative;display:flex;flex-direction:column;gap:12px;
   padding:26px 22px calc(32px + env(safe-area-inset-bottom))}
 /* matte raised cards — flat dark surface, top highlight + drop shadow = "out of the page" */
@@ -221,6 +236,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
       <div class="hero-eyebrow" id="heroEyebrow">WHAT’S NEW</div>
       <div class="hero-word">Forge</div>
       <div class="hero-sub">Everything new in the app your group argues about.</div>
+      <button class="hero-latest" id="heroLatest" type="button" hidden onclick="openLatest()">
+        <span class="hl-label">Latest</span>
+        <span class="hl-text" id="heroLatestText"></span>
+        <svg class="hl-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
     </div>
 
     <div class="landing-cards">
@@ -550,6 +570,14 @@ window.addEventListener('DOMContentLoaded', function(){
     var n=latestGroup.querySelectorAll('.up-card').length;
     countEl.textContent=n+' update'+(n===1?'':'s')+' this month';
   }
+  // Hero latest-update row: newest entry's title, straight from the DOM the
+  // count above already reads — no new data source.
+  var latestTitle=latestGroup && latestGroup.querySelector('.up-card .up-title');
+  var latestBtn=document.getElementById('heroLatest');
+  if(latestTitle && latestBtn){
+    document.getElementById('heroLatestText').textContent=latestTitle.textContent;
+    latestBtn.hidden=false;
+  }
   // Keyboard activation for the role="button" path cards (Enter / Space).
   // Media tiles need no wiring: their interactivity is the native <video controls>,
   // which is already keyboard-accessible.
@@ -571,6 +599,17 @@ window.addEventListener('DOMContentLoaded', function(){
 });
 
 // ── TWO-PATH NAVIGATION (landing → content sheet → back) ──
+// Hero latest row → What's New, pre-scrolled to entry #1 (scroll fires after
+// the sheet has begun rising so it lands smoothly, not mid-transition).
+function openLatest(){
+  trackEvent('landing_latest_tap');
+  openSection('whatsnew');
+  setTimeout(function(){
+    var first = document.querySelector('.month-group .up-card');
+    if(first) first.scrollIntoView({behavior:'smooth', block:'start'});
+  }, 480);
+}
+
 // Handoff: outgoing surface slips out over 200ms; incoming sheet starts at
 // 140ms (60ms overlap) — one continuous gesture instead of fade-stop-rise.
 function openSection(which, cardEl){
