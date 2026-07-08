@@ -70,6 +70,7 @@
       <div class="nav-logo">FORGE</div>
     </div>
     <div style="display:flex;align-items:center;gap:10px">
+      <button class="theme-toggle" id="connResetBtn" onclick="confirmConnReset()" title="Fix connection issues" aria-label="Fix connection issues" style="opacity:.55"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></button>
       <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark">🌙</button>
       <div class="nav-user" onclick="promptSwitch()">
         <div class="nav-av" id="navAv"></div>
@@ -498,6 +499,35 @@ function toast(msg, type){
   setTimeout(()=>{ t.classList.add('out'); setTimeout(()=>t.remove(),240); }, type==='error'?4200:2600);
 }
 
+// ── LIVE CHANNEL RECOVERY BANNER ─────────────────────────────────────────────
+// Shown when firebase.js's burst detector sees 2+ distinct listeners fail
+// within 8s mid-session (subscribe()'s onSnapshot error callbacks feed it) —
+// the signature of a wedged local Firebase state, not a normal blip. Unlike
+// a toast, this persists (no auto-dismiss) until the user acts, since the
+// underlying problem doesn't self-heal.
+function showLiveChannelRecoveryBanner(){
+  if(document.getElementById('channelRecoveryBanner')) return; // don't stack
+  const b=document.createElement('div');
+  b.id='channelRecoveryBanner';
+  b.className='warn-box warn-red';
+  b.style.cssText='position:fixed;top:calc(env(safe-area-inset-top) + 8px);left:12px;right:12px;z-index:9998;margin:0;box-shadow:0 12px 32px -8px rgba(0,0,0,.6)';
+  b.innerHTML='⚠️ Connection trouble — some updates may not be showing. '+
+    '<span onclick="resetFirestoreState(\'live-channel-wedged\')" style="text-decoration:underline;cursor:pointer;font-weight:700">Reset connection</span>'+
+    ' &nbsp;·&nbsp; <span onclick="document.getElementById(\'channelRecoveryBanner\').remove()" style="text-decoration:underline;cursor:pointer;opacity:.7">Dismiss</span>';
+  document.body.appendChild(b);
+}
+window._forgeOnChannelWedged = showLiveChannelRecoveryBanner;
+
+// Proactive escape hatch: the nav's small ↻ icon. For the user whose local
+// Firebase state wedges WITHOUT tripping the burst detector (or who dismissed
+// the banner), this is the always-available path — no browser settings needed.
+// Session pointers in localStorage survive; only Firebase's IndexedDB is reset.
+function confirmConnReset(){
+  if(confirm('Fix connection issues?\n\nThis resets Forge’s connection to the server and reloads. You stay logged in — nothing is deleted.')){
+    resetFirestoreState('manual-nav-reset');
+  }
+}
+
 // ── BOOT ──────────────────────────────────────────────────────────────────
 window.onload = () => {
   // Establish the anonymous auth session FIRST, before any Firestore read.
@@ -507,9 +537,16 @@ window.onload = () => {
     window.currentUid = uid;   // available app-wide for Stage 2+ (PIN binding)
     bootApp();
   }).catch(err => {
-    // If auth fails, the app can't talk to Firestore. Show a clear message
-    // rather than a silent blank screen.
-    document.body.innerHTML = '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#888">Could not connect. Please refresh.<br><br><span style="font-size:12px">'+(err?.message||'')+'</span></div>';
+    // Auth itself failed — the app can't talk to Firestore at all. This is
+    // exactly the signature of a wedged/corrupted local Firebase state (seen
+    // in prod: 400s on Listen+Write, cleared instantly in Incognito). Give
+    // the user a real recovery path instead of a dead-end message.
+    console.error('[Forge] ensureAuth failed at boot:', err);
+    if (typeof window.showBootFailureRecovery === 'function') {
+      window.showBootFailureRecovery('Could not connect');
+    } else {
+      document.body.innerHTML = '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#888">Could not connect. Please refresh.<br><br><span style="font-size:12px">'+(err?.message||'')+'</span></div>';
+    }
   });
 };
 
@@ -566,7 +603,18 @@ async function verifyCode(){
     document.getElementById('ob-s2-group').textContent = `${groupData.name} · ${season.roster?.length||0} members · ${season.month}/${season.year}`;
     buildPlayerPicker(season.roster||[]);
     showObStep(2);
-  } catch(e){ console.error(e); err.textContent = 'Could not load group.'; err.classList.remove('hidden'); }
+  } catch(e){
+    // Any exception here is already anomalous — the "wrong/unknown code"
+    // path above returns early without throwing. A thrown error at this
+    // point is either a transient network blip (Try Again fixes it) or a
+    // wedged local Firebase state (Reset connection fixes it) — offer both,
+    // cheapest first, so a flaky-wifi user isn't handed a destructive action
+    // for a problem a plain retry would solve.
+    console.error('[Forge] verifyCode failed:', e);
+    err.innerHTML = 'Could not load group. <span onclick="verifyCode()" style="text-decoration:underline;cursor:pointer">Try again</span>'+
+      ' &nbsp;·&nbsp; <span onclick="resetFirestoreState(\'verifyCode-failure\')" style="text-decoration:underline;cursor:pointer;opacity:.75">Reset connection</span>';
+    err.classList.remove('hidden');
+  }
 }
 
 function buildPlayerPicker(players){
@@ -706,10 +754,12 @@ async function submitNewPin(){
         const gSnap=await tx.get(gRef);               // ALL reads first
         const sSnap=await tx.get(sRef);
         if(!sSnap.exists) throw new Error('SEASON_MISSING');
-        const players=(gSnap.exists && gSnap.data().players)||[];
+        // players can drift from roster (seen in prod: duplicate + empty {} entries),
+        // so drop corrupt entries while we're rewriting the array anyway
+        const players=((gSnap.exists && gSnap.data().players)||[]).filter(p=>p && typeof p.name==='string' && p.name.trim());
         const roster=sSnap.data().roster||[];
         if(roster.some(p=>p.name.toLowerCase()===flow.name.toLowerCase())) throw new Error('NAME_TAKEN');  // someone grabbed it during the race
-        players.push({name:flow.name});
+        if(!players.some(p=>p.name.toLowerCase()===flow.name.toLowerCase())) players.push({name:flow.name});
         roster.push(newPlayerObj);
         tx.update(gRef,{players});                    // then writes
         tx.update(sRef,{roster});
@@ -900,6 +950,13 @@ function cancelJoin(){
 }
 
 // ── SUBSCRIPTIONS ─────────────────────────────────────────────────────────
+// Shared error callback for every listener below. Routes into firebase.js's
+// rolling-window burst detector: one channel erroring is normal network
+// noise; 2+ distinct channels erroring within 8s is a wedged local Firebase
+// state, and that detector surfaces the reset banner automatically. This is
+// the mid-session half of the fix — the boot-time half is in window.onload.
+function _chanErr(source){ return err => { if(window._forgeMarkChannelError) window._forgeMarkChannelError(source, err); }; }
+
 function subscribe(){
   unsub.forEach(fn=>fn());
   unsub = [];
@@ -921,36 +978,36 @@ function subscribe(){
       toast('New season started — reloading');
       loadGroup(groupCode, true);
     }
-  }));
+  }, _chanErr('group')));
 
-  unsub.push(db.collection('logs').where('groupCode','==',groupCode).where('month','==',month).where('year','==',year).onSnapshot(s=>{ allLogs=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }));
-  unsub.push(db.collection('bonuses_30day').where('groupCode','==',groupCode).where('month','==',month).where('year','==',year).onSnapshot(s=>{ bonus30=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }));
-  unsub.push(db.collection('flags').where('groupCode','==',groupCode).where('month','==',month).where('year','==',year).onSnapshot(s=>{ flags=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }));
+  unsub.push(db.collection('logs').where('groupCode','==',groupCode).where('month','==',month).where('year','==',year).onSnapshot(s=>{ allLogs=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }, _chanErr('logs')));
+  unsub.push(db.collection('bonuses_30day').where('groupCode','==',groupCode).where('month','==',month).where('year','==',year).onSnapshot(s=>{ bonus30=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }, _chanErr('bonuses_30day')));
+  unsub.push(db.collection('flags').where('groupCode','==',groupCode).where('month','==',month).where('year','==',year).onSnapshot(s=>{ flags=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }, _chanErr('flags')));
 
   // Twists now live under the season as a subcollection
   unsub.push(
     db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('twists')
-      .onSnapshot(s=>{ activeTwists={}; s.docs.forEach(d=>{ activeTwists[d.id]=d.data(); }); renderTwistToggles(); refresh(); })
+      .onSnapshot(s=>{ activeTwists={}; s.docs.forEach(d=>{ activeTwists[d.id]=d.data(); }); renderTwistToggles(); refresh(); }, _chanErr('twists'))
   );
   // Week-bound twist windows (Boss Week / Underdog Week) — permanent, immutable docs.
   // Scoring reads THESE, not the toggle state, so toggling never retro-changes scores.
   unsub.push(
     db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('twistWindows')
-      .onSnapshot(s=>{ twistWindows=s.docs.map(d=>({id:d.id,...d.data()})); renderTwistToggles(); refresh(); })
+      .onSnapshot(s=>{ twistWindows=s.docs.map(d=>({id:d.id,...d.data()})); renderTwistToggles(); refresh(); }, _chanErr('twistWindows'))
   );
   // Jack of All Trades awards
   unsub.push(
     db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('jackAwards')
-      .onSnapshot(s=>{ jackAwards=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); })
+      .onSnapshot(s=>{ jackAwards=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }, _chanErr('jackAwards'))
   );
   // Iron Pledge: bets (per season) + bonuses_iron_pledge (top-level scoped by groupCode)
   unsub.push(
     db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('bets')
-      .onSnapshot(s=>{ bets={}; s.docs.forEach(d=>{ bets[d.id]=d.data(); }); renderPledgeStatusCard(); renderIronPledgePage(); renderIronPledgeAdmin(); })
+      .onSnapshot(s=>{ bets={}; s.docs.forEach(d=>{ bets[d.id]=d.data(); }); renderPledgeStatusCard(); renderIronPledgePage(); renderIronPledgeAdmin(); }, _chanErr('bets'))
   );
   unsub.push(
     db.collection('bonuses_iron_pledge').where('groupCode','==',groupCode).where('month','==',season.month).where('year','==',season.year)
-      .onSnapshot(s=>{ ironPledgeBonuses=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); })
+      .onSnapshot(s=>{ ironPledgeBonuses=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }, _chanErr('bonuses_iron_pledge'))
   );
 }
 
