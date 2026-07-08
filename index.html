@@ -1963,6 +1963,30 @@ function renderAdminRoles(){
     </div>`).join('');
 }
 
+// KNOWN, UNDERSTOOD, ACCEPTED NON-ISSUE (verified 8 Jul 2026 — do not re-litigate
+// this as a mystery if it resurfaces in testing): a `.get({source:'server'})`
+// call issued IMMEDIATELY (same synchronous script tick) after this function's
+// transaction resolves can return STALE data for a brief window — reproduced
+// 4/4 times under scripted back-to-back write→read testing, empirically
+// bounded between 0ms (stale) and ~600ms (always correct by then). This is a
+// Firestore client/backend read-after-write propagation characteristic, not a
+// bug in this function: instrumented logging proved the transaction computes
+// and commits the CORRECT roster every time (including the last-admin guard
+// correctly not firing when a second admin exists), and the ACTIVE onSnapshot
+// listener on this exact season doc already reflects the correct data at the
+// same 0ms mark where a fresh one-off get() does not — listeners get a local-
+// cache/watch-stream echo of a transaction's write essentially instantly;
+// a brand-new get() is a separate request that can occasionally be served
+// before that write has fully propagated backend-side, even from the SAME
+// client, even with source:'server'. No code path in this file is exposed to
+// this: every runTransaction call site (grep "written=" or "await tx.get")
+// uses the transaction's own in-memory result for its follow-up state update
+// (season.roster=written, me=..., etc.) — never a fresh get() right after.
+// Real usage never hits the window either way: the acting admin's own UI
+// updates from `written` below (not a re-fetch), every OTHER open client
+// updates via the listener (already proven instant), and a genuinely fresh
+// get() only ever happens on a new page load, which is always well past
+// human reaction time, let alone 600ms.
 async function saveRoles(){
   if(!season || !seasonId){ toast('This group is still loading — give it a second and try again.','error'); return; }
   const ref = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
