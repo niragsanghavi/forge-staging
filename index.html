@@ -980,6 +980,21 @@ function subscribe(){
     }
   }, _chanErr('group')));
 
+  // Watch the season doc itself so roster/config edits from OTHER devices
+  // (new join, re-team, target changes) reach this one — the group listener
+  // above only catches rollovers. `season` gets replaced wholesale (not
+  // mutated), which is what scoringEngine's WeakMap cache keys off of, so
+  // scores recompute automatically on the next render; no extra cache-bust.
+  unsub.push(db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).onSnapshot(s=>{
+    if(!s.exists) return; // archived/rollover case is handled by the group listener above
+    season = s.data();
+    if(me){
+      const fresh = (season.roster||[]).find(p=>p.name===me.name);
+      if(fresh) me = fresh;
+    }
+    refresh();
+  }, _chanErr('season')));
+
   unsub.push(db.collection('logs').where('groupCode','==',groupCode).where('month','==',month).where('year','==',year).onSnapshot(s=>{ allLogs=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }, _chanErr('logs')));
   unsub.push(db.collection('bonuses_30day').where('groupCode','==',groupCode).where('month','==',month).where('year','==',year).onSnapshot(s=>{ bonus30=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }, _chanErr('bonuses_30day')));
   unsub.push(db.collection('flags').where('groupCode','==',groupCode).where('month','==',month).where('year','==',year).onSnapshot(s=>{ flags=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }, _chanErr('flags')));
