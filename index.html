@@ -1468,30 +1468,77 @@ async function submitLog(){
         timestamp: firebase.firestore.FieldValue.serverTimestamp()
       });
     });
-    await batch.commit();
 
-    // Jack of All Trades: check after batch lands (uses allLogs + current selW)
-    if(activeTwists['jack_of_all_trades']?.enabled){
-      await checkJackOfAllTrades(selDay, selW);
+    // Offline persistence applies this write to the local cache instantly
+    // (the logs listener already reflects it — that's why the entry shows up
+    // in the feed right away) but the COMMIT PROMISE only resolves on server
+    // ack, which can hang indefinitely while offline. Past a short grace
+    // period, stop waiting on the network: the local write already happened,
+    // so treat it as good enough rather than leaving the button stuck on
+    // "Saving..." until reconnect and then firing a success screen with no
+    // visible connection to the tap that caused it. 4s: long enough to
+    // absorb a slow-but-connected network without lying to an online user,
+    // short enough that an offline user isn't stuck staring at it.
+    let commitSettled=false, commitFailed=null;
+    const commitPromise = batch.commit()
+      .then(()=>{ commitSettled=true; })
+      .catch(err=>{ commitSettled=true; commitFailed=err; });
+    await Promise.race([commitPromise, new Promise(r=>setTimeout(r,4000))]);
+
+    if(!commitSettled){
+      // Still pending after the grace period — let the real commit keep
+      // resolving in the background; only a genuine failure gets logged
+      // (the success screen below is already shown and stays shown).
+      commitPromise.then(()=>{ if(commitFailed) logErr('submitLog: deferred commit failed', commitFailed); });
+    } else if(commitFailed){
+      throw commitFailed; // resolved within the window with a real error — outer catch handles it
     }
 
-    const sc=score(me.name);
-    const myDays=[...allLogs.filter(l=>l.player===me.name).map(l=>l.day)].sort((a,b)=>a-b);
-    const lastDay=myDays.length>=2?myDays[myDays.length-2]:null;
-    const isComeback=lastDay&&(selDay-lastDay)>=3;
-    document.getElementById('ls2').classList.add('hidden');
-    document.getElementById('ls3').classList.remove('hidden');
-    const HYPE=['Forged! 🔨','Beast mode 🔥','Logged & loaded 💪','Another one in the books ✅','Showing up wins 🏆','Crushed it 💥'];
-    document.getElementById('succTitle').textContent = isComeback ? 'Welcome Back!' : HYPE[Math.floor(Math.random()*HYPE.length)];
-    const multiNote = targets.length>1 ? ` · posted to ${targets.length} groups` : '';
-    document.getElementById('succSub').textContent=`${selW.join(', ')} · Day ${selDay}${multiNote}`;
-    const cbMsg=document.getElementById('comebackMsg');
-    if(isComeback){cbMsg.textContent=getRandomComeback();cbMsg.classList.remove('hidden');}else{cbMsg.classList.add('hidden');}
-    document.getElementById('succStats').innerHTML=`<div class="srow" style="margin-bottom:0"><div class="sc"><div class="sv cu" id="cuPoints">0</div><div class="sl">POINTS</div></div><div class="sc"><div class="sv cu" id="cuWo">0</div><div class="sl">WORKOUTS</div></div><div class="sc"><div class="sv cu" id="cuStreak" style="color:var(--orange)">0</div><div class="sl">STREAK</div></div></div>`;
-    const si=document.querySelector('#ls3 .succ-icon'); if(si){si.classList.remove('strike-icon');void si.offsetWidth;si.classList.add('strike-icon');}
-    fireSparks();
-    if(navigator.vibrate) navigator.vibrate(200);
-    celebrateLog(sc);
+    // Everything below is presentation only. The write already committed or
+    // is safely queued locally, so a failure here (Jack check, DOM updates,
+    // animation) must never look like a failed SAVE and must never re-arm
+    // the submit button — that's what caused genuine duplicate logs before.
+    // The success screen itself (the part the user actually needs to see)
+    // gets shown regardless of whether the optional steps around it throw —
+    // each of those is wrapped separately so one failing can't skip the rest.
+    try {
+      if(activeTwists['jack_of_all_trades']?.enabled){
+        try { await checkJackOfAllTrades(selDay, selW); }
+        catch(e){ logErr('submitLog: jack check failed', e); }
+      }
+
+      let sc;
+      try { sc = score(me.name); }
+      catch(e){ logErr('submitLog: score computation failed', e); sc = {total:0,wo:0,streak:0}; }
+
+      const myDays=[...allLogs.filter(l=>l.player===me.name).map(l=>l.day)].sort((a,b)=>a-b);
+      const lastDay=myDays.length>=2?myDays[myDays.length-2]:null;
+      const isComeback=lastDay&&(selDay-lastDay)>=3;
+      document.getElementById('ls2').classList.add('hidden');
+      document.getElementById('ls3').classList.remove('hidden');
+      const HYPE=['Forged! 🔨','Beast mode 🔥','Logged & loaded 💪','Another one in the books ✅','Showing up wins 🏆','Crushed it 💥'];
+      document.getElementById('succTitle').textContent = !commitSettled
+        ? 'Saved on this phone'
+        : (isComeback ? 'Welcome Back!' : HYPE[Math.floor(Math.random()*HYPE.length)]);
+      const multiNote = targets.length>1 ? ` · posted to ${targets.length} groups` : '';
+      document.getElementById('succSub').textContent = !commitSettled
+        ? "Will sync when you're back online"
+        : `${selW.join(', ')} · Day ${selDay}${multiNote}`;
+      const cbMsg=document.getElementById('comebackMsg');
+      if(isComeback && commitSettled){cbMsg.textContent=getRandomComeback();cbMsg.classList.remove('hidden');}else{cbMsg.classList.add('hidden');}
+      document.getElementById('succStats').innerHTML=`<div class="srow" style="margin-bottom:0"><div class="sc"><div class="sv cu" id="cuPoints">0</div><div class="sl">POINTS</div></div><div class="sc"><div class="sv cu" id="cuWo">0</div><div class="sl">WORKOUTS</div></div><div class="sc"><div class="sv cu" id="cuStreak" style="color:var(--orange)">0</div><div class="sl">STREAK</div></div></div>`;
+      const si=document.querySelector('#ls3 .succ-icon'); if(si){si.classList.remove('strike-icon');void si.offsetWidth;si.classList.add('strike-icon');}
+
+      try {
+        fireSparks();
+        if(navigator.vibrate) navigator.vibrate(200);
+        celebrateLog(sc);
+      } catch(e){
+        logErr('submitLog: celebration failed', e);
+      }
+    } catch(e){
+      logErr('submitLog: post-commit presentation failed', e);
+    }
   } catch(e){ console.error('submitLog failed:',e); toast('Error saving. Check connection.','error'); btn.disabled=false; btn.textContent='Log Workout'; }
 }
 function resetLog(){ selDay=null; selW=[]; ['ls1','ls2','ls3'].forEach((id,i)=>document.getElementById(id).classList[i===0?'remove':'add']('hidden')); document.getElementById('pickerWrap').classList.add('hidden'); showTab('home'); }
