@@ -1315,8 +1315,32 @@ function pickDay(t){
   }
   goS2();
 }
-function showPicker(){ document.getElementById('pickerWrap').classList.remove('hidden'); }
-function pickDayFromInput(){ const v=document.getElementById('dpick').value; if(!v) return; selDay=new Date(v).getDate(); goS2(); }
+function showPicker(){
+  // Native picker range = the season's own month, capped at today — so the
+  // widget itself can't offer an out-of-season or future date. The JS check
+  // in pickDayFromInput stays the authoritative guard regardless.
+  const inp=document.getElementById('dpick');
+  const {month,year}=season;
+  const pad=n=>String(n).padStart(2,'0');
+  const today=new Date();
+  inp.min=`${year}-${pad(month)}-01`;
+  inp.max=`${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
+  document.getElementById('pickerWrap').classList.remove('hidden');
+}
+function pickDayFromInput(){
+  const v=document.getElementById('dpick').value;
+  if(!v) return;
+  const [Y,M,D]=v.split('-').map(Number); // manual split — avoids new Date(v) UTC-parse day-shift
+  const today=new Date();
+  const todayOnly=new Date(today.getFullYear(),today.getMonth(),today.getDate());
+  const pickedOnly=new Date(Y,M-1,D);
+  if(M!==season.month || Y!==season.year || pickedOnly>todayOnly){
+    toast('Pick a day within this month, not in the future','error');
+    return;
+  }
+  selDay=D;
+  goS2();
+}
 function pickDayFromStrip(day){ selDay=day; goS2(); }
 function buildDayStrip(){
   const el=document.getElementById('dayStrip');
