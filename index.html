@@ -230,9 +230,8 @@
     </div>
     <div class="card" id="ironPledgeAdminCard" style="display:none">
       <div class="card-title" style="color:var(--orange)">⚔️ Iron Pledge — Results</div>
-      <div class="tmuted" style="margin-bottom:12px">Table shows this week's pledges. Calculate applies the most recently completed week — Mon–Sat that's last week; on Sundays the current week can be closed out. Zeroes always ask for confirmation.</div>
+      <div class="tmuted" style="margin-bottom:12px">Table shows this week's pledges. Results settle automatically once a week has fully ended — nothing to click.</div>
       <div id="ironPledgeTable"></div>
-      <button class="btn btn-gold" style="margin-top:12px" onclick="calculateIronPledgeResults()">Calculate & Apply Results</button>
     </div>
     <div class="card">
       <div class="card-title">Flagged Workouts <span id="flagCount" style="color:var(--red)"></span></div>
@@ -463,6 +462,18 @@ function getISOWeek(date){
   d.setUTCDate(d.getUTCDate()+4-(d.getUTCDay()||7));
   const y=new Date(Date.UTC(d.getUTCFullYear(),0,1));
   return `${d.getUTCFullYear()}-W${Math.ceil(((d-y)/86400000+1)/7)}`;
+}
+// Inverse of getISOWeek: given "YYYY-Wnn", returns the Monday of that week as
+// a local Date (midnight). Jan 4 is always in ISO week 1; find its Monday,
+// then add (week-1) weeks. Used by S2 pledge auto-settlement to know exactly
+// which calendar days a bet's week covers.
+function mondayOfISOWeek(weekStr){
+  const [yStr, wStr] = weekStr.split('-W');
+  const year = parseInt(yStr), week = parseInt(wStr);
+  const jan4 = new Date(year, 0, 4);
+  const jan4Dow = jan4.getDay() || 7; // 1=Mon..7=Sun
+  const week1Monday = new Date(year, 0, 4 - (jan4Dow - 1));
+  return new Date(week1Monday.getFullYear(), week1Monday.getMonth(), week1Monday.getDate() + (week-1)*7);
 }
 
 // ── SESSION STORE (multi-group) ─────────────────────────────────────────────
@@ -947,6 +958,13 @@ async function loadGroup(code, fromCache){
     // Keep this group's session entry fresh (group name + latest player record).
     upsertSession(code, me, groupData.name);
 
+    // S2 auto-rollover: opportunistic, never awaited — this client keeps
+    // booting normally on the (possibly about-to-be-archived) season; if a
+    // rollover fires, the group-doc listener subscribe() wires up below
+    // picks up the currentSeasonId change and reloads, same as it already
+    // does for every other open client.
+    checkAutoRollover(code).catch(e=>logErr('checkAutoRollover',e));
+
     if(gracePinCheckOnResume()) return;
     launchApp();
   } catch(e){
@@ -1122,7 +1140,11 @@ function subscribe(){
   // Iron Pledge: bets (per season) + bonuses_iron_pledge (top-level scoped by groupCode)
   unsub.push(
     db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('bets')
-      .onSnapshot(s=>{ bets={}; s.docs.forEach(d=>{ bets[d.id]=d.data(); }); renderPledgeStatusCard(); renderIronPledgePage(); renderIronPledgeAdmin(); }, _chanErr('bets'))
+      .onSnapshot(s=>{
+        bets={}; s.docs.forEach(d=>{ bets[d.id]=d.data(); });
+        renderPledgeStatusCard(); renderIronPledgePage(); renderIronPledgeAdmin();
+        checkPledgeAutoSettlement().catch(e=>logErr('checkPledgeAutoSettlement',e));
+      }, _chanErr('bets'))
   );
   unsub.push(
     db.collection('bonuses_iron_pledge').where('groupCode','==',groupCode).where('month','==',season.month).where('year','==',season.year)
@@ -1130,7 +1152,10 @@ function subscribe(){
   );
 }
 
-function refresh(){ renderHome(); renderLB(); renderFeed(); renderFlagQueue(); renderGlobalConsent(); renderIronPledgePage(); renderIronPledgeAdmin(); }
+function refresh(){
+  renderHome(); renderLB(); renderFeed(); renderFlagQueue(); renderGlobalConsent(); renderIronPledgePage(); renderIronPledgeAdmin();
+  checkPledgeAutoSettlement().catch(e=>logErr('checkPledgeAutoSettlement',e));
+}
 
 // ── HOME ──────────────────────────────────────────────────────────────────
 function renderHome(){
@@ -2166,7 +2191,7 @@ async function loadSuperAdmin(){
         </div>
         <div style="display:flex;gap:8px;margin-top:10px">
           <button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="event.stopPropagation();openEditGroup('${g.code}')">⚙ Manage</button>
-          <button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="event.stopPropagation();startNewSeason('${g.code}')">↻ New Season</button>
+          <button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="event.stopPropagation();manualRolloverRepair('${g.code}')">↻ Roll Over</button>
         </div>
       </div>`).join('');
 }
@@ -2246,7 +2271,7 @@ function checkRolloverNudges(groups){
   el.innerHTML=`<div class="card" style="border:1px solid var(--orange);background:var(--orange-l)">
     <div style="font-size:13px;font-weight:700;color:var(--orange);margin-bottom:6px">⏰ Season rollover due</div>
     <div class="tmuted" style="margin-bottom:10px">These groups are still on a past month. Roll them into the current month when ready (teams carry forward; you confirm each step):</div>
-    ${due.map(g=>`<button class="btn btn-surface btn-sm" style="margin:0 6px 6px 0" onclick="startNewSeason('${g.code}')">↻ Roll over ${g.name}</button>`).join('')}
+    ${due.map(g=>`<button class="btn btn-surface btn-sm" style="margin:0 6px 6px 0" onclick="manualRolloverRepair('${g.code}')">↻ Roll over ${g.name}</button>`).join('')}
   </div>`;
 }
 async function superViewGroup(code){
@@ -2358,74 +2383,248 @@ async function saveEditGroup(){
     setTimeout(()=>{ closeEditGroup(); loadSuperAdmin(); }, 700);
   }catch(e){ console.error(e); status.textContent='❌ Save failed: '+e.message; }
 }
-// ── START NEW SEASON ──────────────────────────────────────────────────────
-// Archives the group's current active season and creates the next one,
-// carrying the roster (names+teams+roles), targets, and rolesEnabled forward.
-// Logs/bonuses/flags are untouched — they stay scoped to their own month+year,
-// so the archived season stays frozen and the new season starts with a clean board.
-async function startNewSeason(code){
+// ── S2 SNAPSHOT WRITER ────────────────────────────────────────────────────
+// Computes final standings + badges for a group's CURRENT active season and
+// writes them onto that season doc, plus one users/{userId}/seasons/{code}_{sid}
+// archive doc per roster entry that has a userId — the path S1 left ready
+// for exactly this. Skip-if-exists idempotent: a season that already has
+// snapshotAt is a true no-op (proven by calling this twice — see test suite).
+//
+// Deliberately independent of whatever the CALLING client currently has
+// loaded into season/allLogs/groupCode — takes its own fresh reads for
+// whichever group is passed in, via an explicit ctx into score()/teamAvg().
+// That's what makes it safe to call for a group that ISN'T the caller's
+// active session (multi-group auto-rollover, and the manual repair path).
+async function writeSeasonSnapshot(code){
   const gSnap = await db.collection('groups').doc(code).get();
-  if(!gSnap.exists){ toast('Group not found.','error'); return; }
-  const g = gSnap.data();
-  const curSid = g.currentSeasonId;
-  if(!curSid){ toast('Group has no active season to roll over from.','error'); return; }
-  const curSnap = await db.collection('groups').doc(code).collection('seasons').doc(curSid).get();
-  if(!curSnap.exists){ toast('Current season doc missing.','error'); return; }
-  const cur = curSnap.data();
+  if(!gSnap.exists) return {skipped:true, reason:'GROUP_MISSING'};
+  const sid = gSnap.data().currentSeasonId;
+  if(!sid) return {skipped:true, reason:'NO_ACTIVE_SEASON'};
+  const sRef = db.collection('groups').doc(code).collection('seasons').doc(sid);
+  const sSnap = await sRef.get();
+  if(!sSnap.exists) return {skipped:true, reason:'SEASON_MISSING'};
+  const sData = sSnap.data();
+  if(sData.snapshotAt) return {skipped:true, reason:'ALREADY_SNAPSHOTTED'};
 
-  // Gather the new season parameters
-  const month = parseInt(prompt(`New season — month (1-12)?\n(Current active: ${cur.month}/${cur.year})`));
-  if(!month || month<1 || month>12){ toast('Invalid month.','error'); return; }
-  const year = parseInt(prompt('New season — year?', cur.year));
-  if(!year){ toast('Invalid year.','error'); return; }
-  const newSid = seasonIdOf(month, year);
+  const roster = sData.roster||[];
+  const {month, year} = sData;
 
-  if(newSid === curSid){ toast('That season is already the active one.','error'); return; }
+  const [logsSnap, bonusSnap, twistsSnap, jackSnap, betsSnap, twwSnap] = await Promise.all([
+    db.collection('logs').where('groupCode','==',code).where('month','==',month).where('year','==',year).get(),
+    db.collection('bonuses_30day').where('groupCode','==',code).where('month','==',month).where('year','==',year).get(),
+    sRef.collection('twists').get(),
+    sRef.collection('jackAwards').get(),
+    sRef.collection('bets').get(),
+    sRef.collection('twistWindows').get()
+  ]);
+  const logs = logsSnap.docs.map(d=>d.data());
+  const betsMap = {}; betsSnap.docs.forEach(d=>{ betsMap[d.id]=d.data(); });
 
-  // Refuse to clobber an existing season doc (guards double-rollover)
-  const existing = await db.collection('groups').doc(code).collection('seasons').doc(newSid).get();
-  if(existing.exists){ toast(`A ${newSid} season already exists for this group. Aborting to avoid overwriting it.`,'error'); return; }
+  // Settle any outstanding completed pledge weeks for THIS season BEFORE
+  // scoring. Without this, there's a real race: a live client's own
+  // settlement pass (triggered independently by its bets listener) might not
+  // have landed yet when auto-rollover's snapshot runs — and since the
+  // snapshot is skip-if-exists, a pledge result missing from it here is
+  // missing forever, not just delayed. Deterministic, not timing-dependent:
+  // this call site doesn't touch client globals, so it's correct even if
+  // this group has no live client open at all right now.
+  const existingIpSnap = await db.collection('bonuses_iron_pledge').where('groupCode','==',code).where('month','==',month).where('year','==',year).get();
+  await settlePledgesFor(code, sData, betsMap, logs, existingIpSnap.docs.map(d=>d.data()));
+  const ipSnap = await db.collection('bonuses_iron_pledge').where('groupCode','==',code).where('month','==',month).where('year','==',year).get();
 
-  const days = parseInt(prompt('Days in the new month?', new Date(year, month, 0).getDate()));
-   if(!days){ toast('Invalid day count.','error'); return; }
+  const twists = {}; twistsSnap.docs.forEach(t=>{ twists[t.id]=t.data(); });
+  const ctx = {
+    season: sData, logs, twists,
+    bonuses: bonusSnap.docs.map(d=>d.data()), jackAwards: jackSnap.docs.map(d=>d.data()),
+    ironPledgeBonuses: ipSnap.docs.map(d=>d.data()), twistWindows: twwSnap.docs.map(d=>d.data()),
+    groupCode: code
+  };
 
-  const carryRoster = confirm('Carry forward the roster (same players, teams, roles)?\n\nOK = carry forward\nCancel = start with empty roster');
-  const newRoster = carryRoster ? JSON.parse(JSON.stringify(cur.roster||[])) : [];
+  // ── Standings (existing engine — nothing re-derived) ──
+  const scored = roster.map(p=>({ p, sc: score(p.name, ctx) })).sort((a,b)=>b.sc.total-a.sc.total);
+  const finalStandings = scored.map((e,i)=>({
+    userId: e.p.userId||null, name: e.p.name, team: e.p.team, total: e.sc.total, wo: e.sc.wo, streak: e.sc.streak, rank: i+1
+  }));
 
-  const keepRoles = confirm('Keep Captain/Vice Captain roles enabled this season?\n\nOK = enabled\nCancel = disabled (everyone is a Player, no role bonuses)');
+  function teamAvg(team){
+    const players = roster.filter(p=>p.team===team);
+    if(!players.length) return 0;
+    return Math.round(players.reduce((s,p)=>s+score(p.name,ctx).total,0)/players.length);
+  }
+  const teams = [...new Set(roster.map(p=>p.team))];
+  const teamStandings = teams.map(t=>({ team:t, avg:teamAvg(t), memberCount: roster.filter(p=>p.team===t).length }))
+    .sort((a,b)=>b.avg-a.avg)
+    .map((t,i)=>({...t, rank:i+1}));
+
+  // ── Badges (§2.5: no shared #1 — a genuine tie at the top awards nobody) ──
+  const top = finalStandings[0], secondTotal = finalStandings[1]?.total;
+  const seasonWinnerName = (top && top.total>0 && (secondTotal===undefined || top.total>secondTotal)) ? top.name : null;
+  const teamTop = teamStandings[0], teamSecondAvg = teamStandings[1]?.avg;
+  const teamWinner = (teamTop && (teamSecondAvg===undefined || teamTop.avg>teamSecondAvg)) ? teamTop.team : null;
+
+  const badgesAwarded = [];
+  finalStandings.forEach(e=>{
+    const badges=[];
+    if(seasonWinnerName && e.name===seasonWinnerName) badges.push('season_winner');
+    if(teamWinner && e.team===teamWinner) badges.push('team_winner');
+    if(badges.length) badgesAwarded.push({ userId:e.userId, name:e.name, badges });
+  });
 
   const now = firebase.firestore.FieldValue.serverTimestamp();
   const batch = db.batch();
+  batch.update(sRef, { finalStandings, teamStandings, badgesAwarded, snapshotAt: now });
 
-  // 1. Archive current season
-  const curRef = db.collection('groups').doc(code).collection('seasons').doc(curSid);
-  batch.update(curRef, { status:'archived', endedAt:now });
-
-  // 2. Create new active season (carries numTeams + threshold forward from prev)
-  const newRef = db.collection('groups').doc(code).collection('seasons').doc(newSid);
-  batch.set(newRef, {
-    month, year, days,
-    capTarget: cur.capTarget ?? 16,
-    vcTarget: cur.vcTarget ?? 20,
-    minWorkouts: cur.minWorkouts ?? 12,
-    numTeams: cur.numTeams ?? 3,
-    teamStreakThreshold: cur.teamStreakThreshold ?? 0.6,
-    rolesEnabled: keepRoles,
-    roster: newRoster,
-    status: 'active',
-    startedAt: now,
-    endedAt: null
+  const seasonKey = `${code}_${sid}`;
+  let archivesWritten = 0;
+  finalStandings.forEach(e=>{
+    if(!e.userId) return; // unmigrated entry — nothing to archive against yet
+    const badges = (badgesAwarded.find(b=>b.name===e.name)||{}).badges||[];
+    const teamRank = teamStandings.find(t=>t.team===e.team)?.rank||null;
+    batch.set(db.collection('users').doc(e.userId).collection('seasons').doc(seasonKey), {
+      groupCode:code, sid, groupName: gSnap.data().name, month, year,
+      rank:e.rank, total:e.total, wo:e.wo, streak:e.streak, team:e.team, teamRank, rosterSize:roster.length,
+      badges
+    });
+    const badgeCountFields = {};
+    badges.forEach(b=>{ badgeCountFields[`stats.badgeCounts.${b}`] = firebase.firestore.FieldValue.increment(1); });
+    batch.update(db.collection('users').doc(e.userId), {
+      'stats.seasonsPlayed': firebase.firestore.FieldValue.increment(1),
+      ...badgeCountFields
+    });
+    archivesWritten++;
   });
 
-  // 3. Point the group at the new season
-  batch.update(db.collection('groups').doc(code), { currentSeasonId: newSid });
+  await batch.commit();
+  return { skipped:false, finalStandings, teamStandings, badgesAwarded, archivesWritten };
+}
 
-  try {
-    await batch.commit();
+// ── S2 AUTO-ROLLOVER ──────────────────────────────────────────────────────
+// Archives the current season and creates the next one — the automated
+// replacement for the old manual "New Season" tool. ALWAYS runs the snapshot
+// writer first and waits for it, structurally (not by caller convention) —
+// this function cannot be called out of order. Days are auto-computed, and
+// the roster + rolesEnabled always carry forward — there's no admin to
+// prompt, so the old tool's interactive choices (arbitrary target month,
+// optional roster wipe) are gone; this only ever advances by exactly one
+// calendar month from wherever the group currently is.
+//
+// Eligibility (age + calendar-due) is checked BEFORE ever calling the
+// snapshot writer, not after — a season that's too young or not yet due
+// must never be snapshotted at all, since that would freeze standings/badges
+// permanently (skip-if-exists would then block a REAL snapshot from ever
+// landing once the season is genuinely over). Checked once via a plain read
+// to gate the snapshot call, then re-checked inside the transaction itself
+// (covers the race where another client already rolled this over in
+// between) — currentSeasonId always points at whichever season is truly
+// active, so a concurrent racing call naturally re-reads a season that's
+// either too young or not yet due on its retry and declines.
+async function performRollover(code){
+  const gSnap = await db.collection('groups').doc(code).get();
+  if(!gSnap.exists) return {ok:false, reason:'GROUP_MISSING'};
+  const curSid = gSnap.data().currentSeasonId;
+  if(!curSid) return {ok:false, reason:'NO_ACTIVE_SEASON'};
+  const curRef = db.collection('groups').doc(code).collection('seasons').doc(curSid);
+  const curSnap = await curRef.get();
+  if(!curSnap.exists) return {ok:false, reason:'SEASON_MISSING'};
+  const cur = curSnap.data();
+
+  const eligibility = checkRolloverEligibility(cur);
+  if(!eligibility.ok) return eligibility;
+
+  // Eligible — now it's safe to snapshot.
+  const snap = await writeSeasonSnapshot(code);
+  if(snap.skipped && snap.reason!=='ALREADY_SNAPSHOTTED') return { ok:false, reason:snap.reason };
+
+  let result=null;
+  await db.runTransaction(async tx=>{
+    const gRef = db.collection('groups').doc(code);
+    const gSnap2 = await tx.get(gRef);                 // ALL reads first
+    if(!gSnap2.exists){ result={ok:false, reason:'GROUP_MISSING'}; return; }
+    const g = gSnap2.data();
+    const curSid2 = g.currentSeasonId;
+    const curRef2 = gRef.collection('seasons').doc(curSid2);
+    const curSnap2 = await tx.get(curRef2);
+    if(!curSnap2.exists){ result={ok:false, reason:'SEASON_MISSING'}; return; }
+    const cur2 = curSnap2.data();
+
+    // Re-verify inside the transaction — covers the race where a concurrent
+    // call already rolled this over between the plain read above and now.
+    const reCheck = checkRolloverEligibility(cur2);
+    if(!reCheck.ok){ result=reCheck; return; }
+
+    // Advance by exactly one month from the CURRENT season, not "today" — a
+    // group stale for 2+ months still only steps forward one at a time.
+    let nextMonth=cur2.month+1, nextYear=cur2.year;
+    if(nextMonth>12){ nextMonth=1; nextYear++; }
+    const newSid = seasonIdOf(nextMonth, nextYear);
+    const newRef = gRef.collection('seasons').doc(newSid);
+    const newSnap = await tx.get(newRef);              // still a read — before any writes
+    if(newSnap.exists){ result={ok:false, reason:'TARGET_SEASON_EXISTS'}; return; }
+
+    const days = new Date(nextYear, nextMonth, 0).getDate();
+    const newRoster = JSON.parse(JSON.stringify(cur2.roster||[]));
+
+    tx.update(curRef2, { status:'archived', endedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    tx.set(newRef, {
+      month: nextMonth, year: nextYear, days,
+      capTarget: cur2.capTarget ?? 16, vcTarget: cur2.vcTarget ?? 20, minWorkouts: cur2.minWorkouts ?? 12,
+      numTeams: cur2.numTeams ?? 3, teamStreakThreshold: cur2.teamStreakThreshold ?? 0.6,
+      rolesEnabled: cur2.rolesEnabled !== false,
+      roster: newRoster, status:'active',
+      startedAt: firebase.firestore.FieldValue.serverTimestamp(), endedAt: null
+    });
+    tx.update(gRef, { currentSeasonId: newSid });
+    result = { ok:true, newSid, prevSid: curSid2 };
+  });
+  return result;
+}
+
+// Shared eligibility check for performRollover — checked once before the
+// snapshot writer runs, and again inside the transaction (race guard).
+function checkRolloverEligibility(seasonData){
+  const startedAtMs = seasonData.startedAt?.toMillis ? seasonData.startedAt.toMillis() : ((seasonData.startedAt?.seconds||0)*1000);
+  const ageDays = (Date.now()-startedAtMs)/86400000;
+  if(ageDays < 20) return {ok:false, reason:'TOO_YOUNG', ageDays};
+  const now = new Date();
+  const seasonEnded = (seasonData.year<now.getFullYear()) || (seasonData.year===now.getFullYear() && seasonData.month<now.getMonth()+1);
+  if(!seasonEnded) return {ok:false, reason:'NOT_YET_DUE'};
+  return {ok:true};
+}
+
+// Opportunistic trigger: called when a client loads a group (loadGroup).
+// Never awaited by the caller — the current client keeps rendering the
+// about-to-be-archived season normally; if this succeeds, the group-doc
+// listener subscribe() already wires up picks up the currentSeasonId change
+// and reloads, exactly like every OTHER already-open client (same mechanism,
+// no special-casing for "the one that triggered it"). Silent on any
+// not-due/skip reason — that's the expected outcome on the overwhelming
+// majority of boots.
+async function checkAutoRollover(code){
+  const result = await performRollover(code);
+  if(result.ok) console.log(`[Forge] Auto-rollover: ${code} ${result.prevSid} -> ${result.newSid}`);
+}
+
+// Admin "repair" path — same function as the automatic trigger, not a
+// separate implementation. Exists for the case auto-rollover needs a human
+// nudge (e.g. no client visited the group for a while). Reports the specific
+// reason when there's nothing to do, rather than a bare failure.
+async function manualRolloverRepair(code){
+  const result = await performRollover(code);
+  if(result.ok){
     globalDataCache = null;
-    toast(`${cur.month}/${cur.year} archived. ${month}/${year} is now live. Adjust teams in Admin if needed.`,'success');
+    toast(`Rolled over: ${result.prevSid} archived, ${result.newSid} is now live.`,'success');
     loadSuperAdmin();
-  } catch(e){ console.error(e); toast('Rollover failed: '+e.message,'error'); }
+    return;
+  }
+  const messages = {
+    TOO_YOUNG: `This season is only ${Math.floor(result.ageDays)} day(s) old — rollover requires at least 20.`,
+    NOT_YET_DUE: 'This season\'s month hasn\'t ended yet.',
+    TARGET_SEASON_EXISTS: 'The next season already exists for this group — nothing to do.',
+    GROUP_MISSING: 'Group not found.',
+    SEASON_MISSING: 'Current season doc missing.',
+    NO_ACTIVE_SEASON: 'Group has no active season.'
+  };
+  toast(messages[result.reason] || `Nothing to do (${result.reason}).`, result.ok===false && result.reason==='TARGET_SEASON_EXISTS' ? 'error' : undefined);
 }
 function exitSuper(){
   // Leave super admin entirely. If a normal player session exists on this
@@ -3199,53 +3398,84 @@ function renderIronPledgeAdmin(){
   </table>`;
 }
 
-async function calculateIronPledgeResults(){
-  if(!season||!seasonId||!groupCode) return;
-  // Results may only be applied for a COMPLETED week — a mid-week tap used to
-  // permanently zero players who still had days left (results are immutable).
-  // Mon–Sat the target is LAST week; on Sunday the current week may be closed
-  // out (it ends tonight), gated by the zero-confirm below.
-  const today=new Date();
-  const dow=today.getDay()===0?6:today.getDay()-1;          // 0=Mon … 6=Sun
-  const isSunday=today.getDay()===0;
-  const monDateObj=new Date(today.getFullYear(),today.getMonth(),today.getDate()-dow-(isSunday?0:7));
-  // Cross-month weeks can't be scored yet: the day-of-month log filters would
-  // silently miscount. Refuse honestly instead of writing wrong immutable docs.
-  if(monDateObj.getMonth()+1!==season.month || monDateObj.getFullYear()!==season.year){
-    toast('That pledge week crosses a month boundary — it can\'t be calculated for this season yet.','error');
-    return;
-  }
-  const weekStr=getISOWeek(monDateObj);
-  const monDay=monDateObj.getDate();
-  const weekLabel=isSunday?'this week':'last week';
-  const activeBets=Object.values(bets).filter(b=>b.week===weekStr);
-  if(activeBets.length===0){ toast(`No pledges to calculate for ${weekLabel} (${weekStr}).`); return; }
-  const alreadyCalc=ironPledgeBonuses.filter(b=>b.groupCode===groupCode&&b.week===weekStr);
-  const toCalc=activeBets.filter(b=>!alreadyCalc.some(c=>c.player===b.player));
-  if(toCalc.length===0){ toast(`All pledges already calculated for ${weekLabel}.`); return; }
-  // Compute outcomes first so anyone about to be zeroed can be confirmed
-  // BEFORE anything is written.
-  const results=toCalc.map(betData=>{
-    const daysLogged=new Set(allLogs.filter(l=>l.player===betData.player&&l.day>=monDay&&l.day<=monDay+6).map(l=>l.day)).size;
-    return {betData, daysLogged, type: daysLogged>=betData.pledge?'double':'zero'};
-  });
-  const zeroed=results.filter(r=>r.type==='zero').map(r=>r.betData.player);
-  if(zeroed.length){
-    const ok=confirm(`Applying ${weekLabel}'s results (${weekStr}) will permanently ZERO base points for:\n\n${zeroed.join(', ')}\n\nResults cannot be undone. Continue?`);
-    if(!ok){ toast('Cancelled — nothing applied.'); return; }
-  }
-  try{
-    const batch=db.batch();
-    for(const r of results){
-      batch.set(db.collection('bonuses_iron_pledge').doc(),{
-        player:r.betData.player, pledge:r.betData.pledge, actual:r.daysLogged,
-        week:weekStr, groupCode, month:season.month, year:season.year, type:r.type, rawPoints:r.daysLogged*5,
-        calculatedAt:firebase.firestore.FieldValue.serverTimestamp()
-      });
+// ── S2 PLEDGE AUTO-SETTLEMENT ─────────────────────────────────────────────
+// Replaces the manual "Calculate & Apply" button entirely — no admin click
+// exists anymore. Settles every week present in `bets` that has FULLY ended
+// in local time: today strictly after that week's Sunday. The old manual
+// tool's Sunday-only "close out today" branch existed purely for a human's
+// convenience (forcing results before the day was actually over) — unsafe
+// for unattended settlement, so it's gone; auto-settlement just waits one
+// more day. Cross-month weeks stay skipped, checking BOTH ends of the week
+// (Batch 1's original guard only checked the Monday — a week that STARTS in
+// this season's month but runs into the next, e.g. Mon Jun 29 – Sun Jul 5,
+// would pass that narrower check yet its second half's logs live in a
+// different month/year query entirely and can never be seen here, silently
+// under-counting toward a wrong "zero." Caught via a real seeded cross-month
+// pledge on staging before this ever ran unattended.)
+//
+// Idempotence: a pre-filter against already-settled players PLUS a
+// deterministic {groupCode}_{player}_{week} doc ID backed by
+// firestore.rules' create-only rule on bonuses_iron_pledge — a genuine
+// double-run's second write to the same ID is REJECTED by Firestore as an
+// update to an existing doc, not silently duplicated. Each player settles
+// independently (no shared batch) so one rejection can't block the rest.
+//
+// Shared core (settlePledgesFor) is called from two places: the live client
+// (checkPledgeAutoSettlement, reading globals) AND writeSeasonSnapshot
+// (passing its own freshly-read data for whatever group it's snapshotting —
+// see the comment there for why that second call site is load-bearing, not
+// redundant: without it there's a real race between an unsettled pledge and
+// the season-end snapshot, and the snapshot has no second chance).
+async function settlePledgesFor(code, seasonData, betsMap, logsArr, existingBonuses){
+  const today = new Date();
+  const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const weeksInBets = [...new Set(Object.values(betsMap).map(b=>b.week))];
+  let settledAny = false;
+
+  for(const weekStr of weeksInBets){
+    const monDateObj = mondayOfISOWeek(weekStr);
+    const sunDateObj = new Date(monDateObj.getFullYear(), monDateObj.getMonth(), monDateObj.getDate()+6);
+    if(!(sunDateObj < todayOnly)) continue; // not fully ended yet — never touch an in-progress week
+
+    if(monDateObj.getMonth()+1!==seasonData.month || monDateObj.getFullYear()!==seasonData.year ||
+       sunDateObj.getMonth()+1!==seasonData.month || sunDateObj.getFullYear()!==seasonData.year) continue;
+
+    const monDay = monDateObj.getDate();
+    const activeBets = Object.values(betsMap).filter(b=>b.week===weekStr);
+    const alreadyCalc = existingBonuses.filter(b=>b.groupCode===code && b.week===weekStr);
+    const toCalc = activeBets.filter(b=>!alreadyCalc.some(c=>c.player===b.player));
+    if(toCalc.length===0) continue; // fully settled already — no-op
+
+    for(const betData of toCalc){
+      const daysLogged = new Set(logsArr.filter(l=>l.player===betData.player && l.day>=monDay && l.day<=monDay+6).map(l=>l.day)).size;
+      const type = daysLogged>=betData.pledge ? 'double' : 'zero';
+      const docId = `${code}_${betData.player}_${weekStr}`.replace(/[^a-zA-Z0-9_-]/g,'_');
+      try {
+        await db.collection('bonuses_iron_pledge').doc(docId).set({
+          player:betData.player, pledge:betData.pledge, actual:daysLogged,
+          week:weekStr, groupCode:code, month:seasonData.month, year:seasonData.year, type, rawPoints:daysLogged*5,
+          calculatedAt:firebase.firestore.FieldValue.serverTimestamp()
+        });
+        settledAny = true;
+      } catch(e){
+        // Expected on a genuine race (create-only rules reject a doc that
+        // already exists) — someone else settled this player first.
+        logErr('settlePledgesFor: '+docId, e);
+      }
     }
-    await batch.commit();
-    toast(`Iron Pledge results applied for ${results.length} player(s) — ${weekLabel} (${weekStr}).`,'success');
-  }catch(e){ logErr('calculateIronPledgeResults',e); toast('Failed to calculate — check connection.','error'); }
+  }
+  return settledAny;
+}
+
+let _pledgeSettlementInFlight = false;
+async function checkPledgeAutoSettlement(){
+  if(_pledgeSettlementInFlight || !season || !seasonId || !groupCode) return;
+  _pledgeSettlementInFlight = true;
+  try {
+    await settlePledgesFor(groupCode, season, bets, allLogs, ironPledgeBonuses);
+  } finally {
+    _pledgeSettlementInFlight = false;
+  }
 }
 
 // ── SCROLL COMPRESSION ────────────────────────────────────────────────────
@@ -3320,7 +3550,7 @@ if('serviceWorker' in navigator){
 /* ════════════════════════════════════════════════════════════════════════
    SEASON RECAP — 100% ADDITIVE, READ-ONLY FEATURE (new code only)
 
-   • Touches NO existing function (startNewSeason / submitLog / score /
+   • Touches NO existing function (performRollover / submitLog / score /
      subscribe / onboarding / any write path are all untouched).
    • NO new Firestore reads or writes. Computes everything from in-memory
      globals already loaded by the app: window.allLogs, window.season,
