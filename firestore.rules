@@ -45,6 +45,28 @@ service cloud.firestore {
       }
     }
 
+    // ── S1 IDENTITY LAYER ──────────────────────────────────────────────────
+    // request.auth.uid can't gate these writes: anonymous auth issues a new
+    // uid per device, so uid == userId is never true across devices (PIN is
+    // checked client-side, same posture as the roster today — narrower than
+    // before since pinHash replaces plaintext, not wider). Real enforcement
+    // needs custom-token auth (AUTH_UPGRADE.md); not this sprint.
+    match /users/{userId} {
+      allow read:   if isAuthed();
+      allow create: if isAuthed();
+      allow update: if isAuthed();
+      allow delete: if false;
+
+      // Path reserved for the future S2 snapshot writer — not built yet.
+      // Create-only: season archives are immutable from the moment they exist.
+      match /seasons/{seasonKey} {
+        allow read:   if isAuthed();
+        allow create: if isAuthed();
+        allow update: if false;
+        allow delete: if false;
+      }
+    }
+
     // ── TOP-LEVEL LOG COLLECTIONS ─────────────────────────────────────────
     match /logs/{id} {
       allow read:   if isAuthed();

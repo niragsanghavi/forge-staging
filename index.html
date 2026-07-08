@@ -319,6 +319,19 @@
     </div>
 
     <div style="margin-top:24px">
+      <div class="shdr">User Identity Migration (S1)</div>
+      <div class="card" style="border:1px solid var(--gold)">
+        <div class="card-title" style="color:var(--gold)">Backfill users/{userId}</div>
+        <div class="tmuted" style="margin-bottom:12px">Creates one users doc per person across all groups (exact-uid merge only — never by name) and writes userId back onto rosters. Idempotent: safe to dry-run repeatedly, safe to re-run live. Preview first — Run Migration stays locked until a dry run has completed.</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="runUserMigration(true)">🔍 Preview (dry run)</button>
+          <button class="btn btn-gold btn-sm" id="migrationRunBtn" style="flex:1;margin:0" onclick="runUserMigration(false)" disabled>▶ Run Migration</button>
+        </div>
+        <div id="migrationStatus" class="tmuted" style="text-align:center;margin-top:8px"></div>
+      </div>
+    </div>
+
+    <div style="margin-top:24px">
       <div class="shdr">Create New Group</div>
       <div class="card">
         <label>Group Name</label>
@@ -649,7 +662,7 @@ function choosePlayer(name){
 }
 
 // Stage 3: validate the entered PIN against the player's stored PIN.
-function submitPinEntry(){
+async function submitPinEntry(){
   const name = window._pinEntryFor;
   const p = (season.roster||[]).find(x=>x.name===name);
   const err = document.getElementById('pinEntryError');
@@ -657,7 +670,25 @@ function submitPinEntry(){
   if(!p){ err.textContent='Something went wrong. Pick your name again.'; err.classList.remove('hidden'); return; }
   const entered = document.getElementById('pinEntry').value;
   if(!/^\d{4}$/.test(entered)){ err.textContent='Enter your 4-digit PIN.'; err.classList.remove('hidden'); return; }
-  if(entered !== p.pin){
+
+  // Migrated entry (has userId): verify against users.pinHash — the source
+  // of truth going forward. Fallback to roster.pin only if that doc is
+  // missing/unreadable (rollback safety during the transition) — this never
+  // WIDENS who can log in, only covers the case migration hasn't reached yet.
+  let verified;
+  if(p.userId){
+    try {
+      const uSnap = await db.collection('users').doc(p.userId).get();
+      verified = uSnap.exists ? (await sha256hex(entered)) === uSnap.data().pinHash : (entered === p.pin);
+    } catch(e){
+      logErr('submitPinEntry: users doc read failed, falling back to roster.pin', e);
+      verified = (entered === p.pin);
+    }
+  } else {
+    verified = (entered === p.pin);
+  }
+
+  if(!verified){
     err.textContent='Incorrect PIN. Try again, or ask your admin to reset it.';
     err.classList.remove('hidden');
     document.getElementById('pinEntry').value='';
@@ -667,6 +698,36 @@ function submitPinEntry(){
   me = p;
   window._pinEntryFor = null;
   upsertSession(groupCode, p, groupData?.name);
+
+  // S1 login write path (NORTHSTAR §2.1) — lazy self-heal for an unmigrated
+  // entry, else the two per-login fields. Fire-and-forget: never blocks or
+  // fails the login itself, only logged on failure.
+  (async () => {
+    try {
+      if(!p.userId){
+        const userId = db.collection('users').doc().id;
+        const pinHash = await sha256hex(entered);
+        const sRef = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
+        await db.runTransaction(async tx=>{
+          const sSnap=await tx.get(sRef);
+          if(!sSnap.exists) return;
+          const roster=sSnap.data().roster||[];
+          const entry=roster.find(r=>r.name===p.name);
+          if(!entry || entry.userId) return; // already healed elsewhere — don't clobber
+          entry.userId=userId;
+          tx.update(sRef,{roster});
+          tx.set(db.collection('users').doc(userId), newUserDocFields(p.name, pinHash, groupCode, groupData?.name, window.currentUid, 'login-self-heal'));
+        });
+        p.userId = userId; // same object as `me` — mutation is visible there too
+      } else {
+        await db.collection('users').doc(p.userId).set({
+          lastActiveAt: firebase.firestore.FieldValue.serverTimestamp(),
+          knownDeviceUids: firebase.firestore.FieldValue.arrayUnion(window.currentUid||null)
+        }, {merge:true});
+      }
+    } catch(e){ logErr('submitPinEntry: identity write failed', e); }
+  })();
+
   launchApp();
 }
 
@@ -731,6 +792,28 @@ async function registerAndJoin(){
   showObStep(3);
 }
 
+// ── S1 IDENTITY LAYER ────────────────────────────────────────────────────
+// users/{userId} — EXACT scope per FORGE_NORTHSTAR.md §2.1. Do not add fields
+// beyond this list even if ARCHITECTURE.md describes more (gender, the
+// activity/{YYYY-MM} subcollection, cross-group streak fields, and
+// analytics/{code}/heatmap writes are explicitly cut this sprint).
+// The users/{userId}/seasons/{code}_{sid} archive subcollection is written
+// only by the future S2 snapshot writer — not built here, path just left
+// ready (see firestore.rules).
+function newUserDocFields(name, pinHash, groupCode, groupName, currentUid, migratedFrom){
+  return {
+    name,
+    nameLower: name.toLowerCase(),
+    pinHash,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    migratedFrom,
+    knownDeviceUids: currentUid ? [currentUid] : [],
+    memberships: { [groupCode]: { joinedAt: firebase.firestore.FieldValue.serverTimestamp(), groupName: groupName||groupCode } },
+    lastActiveAt: firebase.firestore.FieldValue.serverTimestamp(),
+    stats: { seasonsPlayed:0, badgeCounts:{}, totalWorkouts:0 }
+  };
+}
+
 // Finalizes whichever PIN flow is active (register or grace).
 async function submitNewPin(){
   const pin = document.getElementById('pinInput').value;
@@ -746,9 +829,16 @@ async function submitNewPin(){
 
   try {
     if(flow.mode === 'register'){
-      const newPlayerObj = { name:flow.name, role:flow.role, team:flow.team, pin, uid:(window.currentUid||null) };
+      // S1 identity layer (FORGE_NORTHSTAR.md §2.1 exact scope): every brand-new
+      // registration creates its users/{userId} doc in the SAME transaction as
+      // the roster write. userId is a fresh auto-ID (never the anonymous auth
+      // uid — that's a device, not identity; see standing traps).
+      const pinHash = await sha256hex(pin);
+      const userId = db.collection('users').doc().id;
+      const newPlayerObj = { name:flow.name, role:flow.role, team:flow.team, pin, uid:(window.currentUid||null), userId };
       const gRef = db.collection('groups').doc(groupCode);
       const sRef = gRef.collection('seasons').doc(seasonId);
+      const uRef = db.collection('users').doc(userId);
       let wPlayers=null, wRoster=null;
       await db.runTransaction(async tx=>{
         const gSnap=await tx.get(gRef);               // ALL reads first
@@ -763,6 +853,7 @@ async function submitNewPin(){
         roster.push(newPlayerObj);
         tx.update(gRef,{players});                    // then writes
         tx.update(sRef,{roster});
+        tx.set(uRef, newUserDocFields(flow.name, pinHash, groupCode, groupData?.name, window.currentUid, 'signup'));
         wPlayers=players; wRoster=roster;
       });
       groupData.players=wPlayers;
@@ -770,6 +861,14 @@ async function submitNewPin(){
       me=newPlayerObj;
       upsertSession(groupCode, newPlayerObj, groupData?.name);
     } else if(flow.mode === 'grace'){
+      // S1 self-heal: an existing roster entry setting its FIRST PIN is
+      // establishing identity for the first time too — mirror the register
+      // path. Candidate id is generated once, outside the transaction, so a
+      // transaction retry never produces a second distinct id for the same
+      // attempt; it's only actually used if the entry still lacks one at
+      // read time (defends against a concurrent self-heal from elsewhere).
+      const pinHash = await sha256hex(pin);
+      const candidateUserId = db.collection('users').doc().id;
       const sRef = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
       let wRoster=null, myEntry=null;
       await db.runTransaction(async tx=>{
@@ -780,7 +879,12 @@ async function submitNewPin(){
         if(!entry) throw new Error('NO_RECORD');
         entry.pin=pin;
         entry.uid=(window.currentUid||null);
+        let newUserId=null;
+        if(!entry.userId){ newUserId=candidateUserId; entry.userId=newUserId; }
         tx.update(sRef,{roster});
+        if(newUserId){
+          tx.set(db.collection('users').doc(newUserId), newUserDocFields(entry.name, pinHash, groupCode, groupData?.name, window.currentUid, 'grace-flow'));
+        }
         wRoster=roster; myEntry=entry;
       });
       season.roster=wRoster;
@@ -1502,6 +1606,19 @@ async function submitLog(){
     // gets shown regardless of whether the optional steps around it throw —
     // each of those is wrapped separately so one failing can't skip the rest.
     try {
+      // S1 identity layer: single fire-and-forget merge-update per log submit
+      // (NORTHSTAR §2.1's exact write path — lastActiveAt + totalWorkouts
+      // only; no activity/heatmap/streak writes, those are cut this sprint).
+      // Once per submit regardless of how many groups it posted to — this is
+      // USER-scoped, not per-group. No-ops until me.userId exists (self-heal
+      // or migration backfills it).
+      if(me.userId){
+        db.collection('users').doc(me.userId).set({
+          lastActiveAt: firebase.firestore.FieldValue.serverTimestamp(),
+          stats: { totalWorkouts: firebase.firestore.FieldValue.increment(1) }
+        }, {merge:true}).catch(e=>logErr('submitLog: users-doc write failed', e));
+      }
+
       if(activeTwists['jack_of_all_trades']?.enabled){
         try { await checkJackOfAllTrades(selDay, selW); }
         catch(e){ logErr('submitLog: jack check failed', e); }
@@ -2381,6 +2498,202 @@ async function exportAllData(){
   } catch(e){
     console.error(e);
     status.textContent = '❌ Export failed: ' + e.message;
+  }
+}
+
+// ── S1 MIGRATION ────────────────────────────────────────────────────────────
+// Backfills users/{userId} for every roster entry that lacks one, per
+// FORGE_NORTHSTAR.md §2.1 / ARCHITECTURE.md §6. Super-admin only, run from
+// the browser (rules-authed, auditable via console — no Node toolchain).
+//
+// Standing traps this respects:
+//   - userId is identity; the roster's uid is a DEVICE. Only an exact uid
+//     match across entries is treated as "same person" (strong evidence).
+//   - name+pin matches are logged as MERGE-CANDIDATES for manual review —
+//     never auto-merged. Wrong no-merge = two profiles, annoying. Wrong
+//     merge = two humans share a profile, destructive. Asymmetry decides it.
+//   - Scoring is untouched: this never reads or writes anything score() uses.
+//
+// Idempotent: only considers roster entries that don't already have a
+// userId, so a re-run (dry or live) naturally skips everyone already
+// migrated — proven by running twice and diffing (zero on the second run).
+// Dry-run prints the full plan to console and writes nothing; the live run
+// is locked behind having completed a dry run in this session, plus an
+// explicit confirm() naming what's about to be written.
+window._migrationDryRunDone = false;
+
+async function runUserMigration(dryRun){
+  const statusEl = document.getElementById('migrationStatus');
+  const log = (msg) => { console.log('[Migration] '+msg); if(statusEl) statusEl.textContent = msg; };
+
+  if(!dryRun){
+    if(!window._migrationDryRunDone){ log('Run a dry-run first — see console for the plan.'); return; }
+    if(!confirm('This WRITES real users/{userId} docs and updates roster entries across ALL groups. You have reviewed a dry run. Continue?')){ log('Cancelled — nothing written.'); return; }
+  }
+
+  console.log(`%c[Migration] ${dryRun?'DRY RUN':'LIVE RUN'} starting`, `font-weight:bold;color:${dryRun?'#3b82f6':'#ef4444'}`);
+
+  try {
+    // ---- Pass 1: inventory every roster entry, every group, every season
+    // (archived seasons too — needed for the seasonsPlayed backfill) ----
+    const groupsSnap = await db.collection('groups').get();
+    const entries = [];
+    const groupMeta = {};
+    for(const gDoc of groupsSnap.docs){
+      const g = gDoc.data();
+      const seasonsSnap = await db.collection('groups').doc(gDoc.id).collection('seasons').get();
+      groupMeta[gDoc.id] = { name: g.name, seasons: seasonsSnap.docs.map(d=>({id:d.id, ...d.data()})) };
+      seasonsSnap.docs.forEach(sDoc=>{
+        const sData = sDoc.data();
+        (sData.roster||[]).forEach(p=>{
+          if(!p || !p.name) return;
+          entries.push({
+            groupCode: gDoc.id, groupName: g.name, seasonId: sDoc.id,
+            isActiveSeason: sDoc.id===g.currentSeasonId,
+            name: p.name, nameLower: p.name.toLowerCase(),
+            pin: p.pin||null, uid: p.uid||null, hasUserId: !!p.userId
+          });
+        });
+      });
+    }
+    log(`Pass 1: ${entries.length} roster entries across ${groupsSnap.size} groups.`);
+
+    // ---- Pass 2: identity resolution (active-season entries only — an
+    // archived season's roster is history, not a login target) ----
+    const activeEntries = entries.filter(e=>e.isActiveSeason && !e.hasUserId);
+    const byUid = new Map();
+    activeEntries.filter(e=>e.uid).forEach(e=>{
+      if(!byUid.has(e.uid)) byUid.set(e.uid, []);
+      byUid.get(e.uid).push(e);
+    });
+    const resolvedUsers = [];
+    const claimed = new Set();
+    byUid.forEach(group => {
+      // "Same uid in 2+ GROUPS" is the spec's exact bar for auto-merge (one
+      // device joined multiple groups — strong evidence of one person). Same
+      // uid within a SINGLE group but different names is a weaker signal
+      // (e.g. one device used to register two roster entries) and does not
+      // clear that bar — each entry stays its own candidate instead of being
+      // silently folded together, per "never merge on anything but exact
+      // cross-group uid match."
+      if(new Set(group.map(e=>e.groupCode)).size >= 2){
+        resolvedUsers.push({ entries: group });
+        group.forEach(e=>claimed.add(e));
+      }
+    });
+    activeEntries.filter(e=>!claimed.has(e)).forEach(e=>{ resolvedUsers.push({ entries:[e] }); });
+
+    // Weak-evidence pairs (name+pin match across different resolved users) —
+    // surfaced only, never acted on.
+    const mergeCandidates = [];
+    for(let i=0;i<resolvedUsers.length;i++){
+      for(let j=i+1;j<resolvedUsers.length;j++){
+        const a=resolvedUsers[i].entries[0], b=resolvedUsers[j].entries[0];
+        if(a.nameLower===b.nameLower && a.pin && a.pin===b.pin){
+          mergeCandidates.push({a:`${a.name} (${a.groupCode})`, b:`${b.name} (${b.groupCode})`});
+        }
+      }
+    }
+    log(`Pass 2: ${resolvedUsers.length} distinct user(s) to create, ${mergeCandidates.length} merge-candidate pair(s) flagged (not auto-merged).`);
+    if(mergeCandidates.length){
+      console.log('%c[Migration] MERGE-CANDIDATES — manual review only, never auto-merge:','font-weight:bold;color:#f59e0b');
+      console.table(mergeCandidates);
+    }
+
+    function seasonsPlayedFor(entry){
+      const gm = groupMeta[entry.groupCode];
+      if(!gm) return 0;
+      return gm.seasons.filter(s=>s.status==='archived' && (s.roster||[]).some(p=>p && p.name===entry.name)).length;
+    }
+
+    if(dryRun){
+      const preview = resolvedUsers.slice(0,15).map(u=>({
+        name: u.entries[0].name,
+        groups: u.entries.map(e=>e.groupCode).join(','),
+        mergedDeviceEntries: u.entries.length,
+        seasonsPlayed: seasonsPlayedFor(u.entries[0]),
+        hasPinYet: !!u.entries[0].pin
+      }));
+      console.log('%c[Migration] DRY RUN — sample of first 15 users to create:','font-weight:bold;color:#3b82f6');
+      console.table(preview);
+      console.log('[Migration] Full plan (all resolved users):', resolvedUsers);
+      window._migrationDryRunDone = true;
+      const runBtn = document.getElementById('migrationRunBtn');
+      if(runBtn) runBtn.disabled = false;
+      log(`Dry run complete: would create ${resolvedUsers.length} users doc(s). Full plan + merge candidates in console. Nothing written.`);
+      return;
+    }
+
+    // ---- Pass 3: writes, batched at <=400 ops (below Firestore's 500 cap,
+    // leaving headroom) ----
+    // A uid can only be reused AS the userId doc-ID when it belongs to
+    // exactly one resolved user. Two entries that share a uid but were
+    // deliberately left UNMERGED (same-group case, below the "2+ groups" bar
+    // in Pass 2) would otherwise both compute the same doc ID here and the
+    // second write silently clobbers the first — a genuine wrong-merge, not
+    // just a resolution-logic question. Caught on staging test data (V9D3WI
+    // "Test1"/"Test3" sharing one uid) before this ever touched real groups.
+    const uidOwnerCount = new Map();
+    resolvedUsers.forEach(u=>{ const uid=u.entries[0].uid; if(uid) uidOwnerCount.set(uid, (uidOwnerCount.get(uid)||0)+1); });
+
+    let created=0, batch=db.batch(), opsInBatch=0;
+    const rosterPatchesByGroupSeason = new Map(); // `${code}|${sid}` -> Map(name -> userId)
+
+    for(const u of resolvedUsers){
+      const primary = u.entries[0];
+      const uidIsExclusive = primary.uid && uidOwnerCount.get(primary.uid)===1;
+      const userId = uidIsExclusive ? primary.uid : db.collection('users').doc().id;
+      const memberships = {};
+      u.entries.forEach(e=>{ memberships[e.groupCode] = { joinedAt: firebase.firestore.FieldValue.serverTimestamp(), groupName: e.groupName||e.groupCode }; });
+      batch.set(db.collection('users').doc(userId), {
+        name: primary.name,
+        nameLower: primary.nameLower,
+        pinHash: primary.pin ? await sha256hex(primary.pin) : null,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        migratedFrom: 'migration-v1',
+        knownDeviceUids: primary.uid ? [primary.uid] : [],
+        memberships,
+        lastActiveAt: firebase.firestore.FieldValue.serverTimestamp(),
+        stats: { seasonsPlayed: seasonsPlayedFor(primary), badgeCounts:{}, totalWorkouts:0 }
+      }, {merge:true});
+      opsInBatch++; created++;
+
+      u.entries.forEach(e=>{
+        const key = `${e.groupCode}|${e.seasonId}`;
+        if(!rosterPatchesByGroupSeason.has(key)) rosterPatchesByGroupSeason.set(key, new Map());
+        rosterPatchesByGroupSeason.get(key).set(e.name, userId);
+      });
+
+      if(opsInBatch>=400){ await batch.commit(); batch=db.batch(); opsInBatch=0; }
+    }
+    if(opsInBatch>0){ await batch.commit(); }
+    log(`Pass 3a: ${created} users doc(s) written.`);
+
+    // Write userId back onto each roster entry — one transaction per season
+    // doc (same read-then-write pattern as saveRoles). Re-checks at read
+    // time so a concurrent self-heal (login/grace-flow) never gets clobbered.
+    let rosterPatches=0;
+    for(const [key, nameToUserId] of rosterPatchesByGroupSeason){
+      const [code, sid] = key.split('|');
+      const sRef = db.collection('groups').doc(code).collection('seasons').doc(sid);
+      await db.runTransaction(async tx=>{
+        const sSnap = await tx.get(sRef);
+        if(!sSnap.exists) return;
+        const roster = sSnap.data().roster||[];
+        let changed=false;
+        roster.forEach(p=>{
+          if(p && nameToUserId.has(p.name) && !p.userId){ p.userId = nameToUserId.get(p.name); changed=true; }
+        });
+        if(changed){ tx.update(sRef, {roster}); rosterPatches++; }
+      });
+    }
+    window._migrationDryRunDone = false; // require a fresh dry-run before another live run
+    const runBtn = document.getElementById('migrationRunBtn');
+    if(runBtn) runBtn.disabled = true;
+    log(`Migration complete: ${created} users doc(s) created, ${rosterPatches} season roster(s) patched. Full detail in console.`);
+  } catch(e){
+    console.error('[Migration] failed:', e);
+    log('Migration failed — see console. Already-committed batches stay; nothing after the error point was written.');
   }
 }
 
