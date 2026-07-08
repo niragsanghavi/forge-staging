@@ -62,6 +62,28 @@
   </div>
 </div>
 
+<!-- ══ SELF-SERVE GROUP CREATION (S3 §4.2) — DARK LAUNCH ══
+     Reachable ONLY via ?create in the URL (see bootApp). No button, link, or
+     any other reference to this screen exists anywhere else in this file or
+     updates.html — that is the entire security model for this launch stage.
+     Visible CTAs land later, inside S4's own promotion commit, coupled to
+     the security gate going live in the same push (NORTHSTAR §4.2/§5.3). -->
+<div class="screen" id="screen-create">
+  <div class="ob-logo">FORGE</div>
+  <div class="ob-tag">Start a new group.</div>
+  <div class="ob-card">
+    <div class="ob-step active">
+      <div class="ob-title">Create Your Group</div>
+      <div class="ob-sub">Defaults: roles off, 2 teams, 8-workout minimum. You can adjust these later in Admin.</div>
+      <input type="text" id="ssGroupName" placeholder="Group name" maxlength="40" style="margin-bottom:10px">
+      <input type="text" id="ssCreatorName" placeholder="Your name" maxlength="24">
+      <div id="ssError" class="warn-box warn-red hidden" style="margin-top:10px"></div>
+      <button class="btn btn-gold" style="margin-top:10px" onclick="selfServeCreateGroup()">Create Group</button>
+      <div id="ssResult" class="warn-box warn-green hidden" style="margin-top:14px"></div>
+    </div>
+  </div>
+</div>
+
 <!-- ══ MAIN APP ══ -->
 <div class="screen" id="screen-app">
   <nav class="nav">
@@ -575,6 +597,13 @@ window.onload = () => {
 };
 
 async function bootApp(){
+  // S3 §4.2 dark launch: the ONLY entry point to self-serve group creation.
+  // No link/button to this exists anywhere else — see the screen-create
+  // comment block for the full rationale.
+  if(location.search.includes('create')){
+    showScreen('create');
+    return;
+  }
   if(location.search.includes('superadmin')){
     const pin = prompt('Super admin PIN:');
     const hash = await sha256hex(pin||'');
@@ -1917,7 +1946,9 @@ function renderAdminRoles(){
   const numTeams=season.numTeams===2?2:3;
   const teamOpts=numTeams===2?['A','B']:['A','B','C'];
   const rolesOn=season.rolesEnabled!==false;
-  const cols=rolesOn?'1fr 80px 130px':'1fr 80px';
+  // S3 §4.1: Admin checkbox + Reset PIN button, independent of whether the
+  // Captain/VC roles feature is on for this season.
+  const cols=rolesOn?'1fr 70px 120px 46px 70px':'1fr 70px 46px 70px';
   document.getElementById('adminRoles').innerHTML=players.map(p=>`
     <div style="display:grid;grid-template-columns:${cols};gap:6px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
       <span style="font-size:13px;font-weight:600">${esc(p.name)}</span>
@@ -1927,6 +1958,8 @@ function renderAdminRoles(){
       ${rolesOn?`<select id="role_${p.name}" style="padding:6px;font-size:12px;margin-bottom:0">
         ${['Player','Vice Captain','Captain'].map(r=>`<option value="${r}"${p.role===r?' selected':''}>${r}</option>`).join('')}
       </select>`:''}
+      <input type="checkbox" id="admin_${p.name}" title="Admin" style="width:auto;margin:0;justify-self:center" ${p.isAdmin?'checked':''}>
+      <button class="btn btn-surface btn-sm" style="margin:0;padding:6px 4px;font-size:11px" onclick="resetPlayerPin('${p.name}')">Reset PIN</button>
     </div>`).join('');
 }
 
@@ -1939,12 +1972,22 @@ async function saveRoles(){
       const snap=await tx.get(ref);
       if(!snap.exists) throw new Error('SEASON_MISSING');
       const roster=snap.data().roster||[];           // FRESH copy — includes anyone who joined while you edited
+      const hadAdminBefore = roster.some(p=>p.isAdmin);
       roster.forEach(p=>{
         const t=document.getElementById(`team_${p.name}`)?.value;
         const r=document.getElementById(`role_${p.name}`)?.value;
+        const adminCheckbox=document.getElementById(`admin_${p.name}`);
         if(t) p.team=t;
         if(r) p.role=r;                               // players with no input row are left untouched
+        if(adminCheckbox) p.isAdmin=adminCheckbox.checked;
       });
+      // Last-admin guard: a group that currently HAS an admin must never be
+      // saved into having zero — never blocks a legacy group that never had
+      // one (nothing to protect there; the same save path still works for
+      // team/role edits on those).
+      if(hadAdminBefore && !roster.some(p=>p.isAdmin)){
+        throw new Error('LAST_ADMIN');
+      }
       tx.update(ref,{roster});
       written=roster;
     });
@@ -1952,7 +1995,41 @@ async function saveRoles(){
     upsertSession(groupCode, me, groupData?.name);
     renderAdminRoles(); refresh();
     toast('Roles saved.','success');
-  } catch(e){ logErr('saveRoles', e); toast('Save failed — check connection: '+e.message,'error'); }
+  } catch(e){
+    if(e.message==='LAST_ADMIN'){ toast('A group must have at least one admin — promote someone else before removing the last one.','error'); }
+    else { logErr('saveRoles', e); toast('Save failed — check connection: '+e.message,'error'); }
+  }
+}
+
+// S3 §4.1 PIN reset: clears BOTH roster.pin (legacy) and users.pinHash (S1)
+// in the SAME transaction — a partial reset (one cleared, not the other)
+// would leave the player unable to log in via either path, or worse, still
+// loggable-in via their OLD pin through whichever path didn't clear. Puts
+// the player back into the existing grace-flow state (no pin yet); their
+// next name-pick routes them straight into setting a new one.
+async function resetPlayerPin(name){
+  if(!confirm(`Reset ${name}'s PIN? They'll set a new one next time they log in.`)) return;
+  const sRef = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
+  try {
+    let written=null, clearedUserId=null;
+    await db.runTransaction(async tx=>{
+      const snap=await tx.get(sRef);
+      if(!snap.exists) throw new Error('SEASON_MISSING');
+      const roster=snap.data().roster||[];
+      const entry=roster.find(p=>p.name===name);
+      if(!entry) throw new Error('NO_RECORD');
+      entry.pin=null;
+      clearedUserId=entry.userId||null;
+      tx.update(sRef,{roster});
+      if(clearedUserId){
+        tx.update(db.collection('users').doc(clearedUserId), {pinHash:null});
+      }
+      written=roster;
+    });
+    if(written){ season.roster=written; }
+    renderAdminRoles();
+    toast(`${name}'s PIN has been reset.`,'success');
+  } catch(e){ logErr('resetPlayerPin', e); toast('Reset failed — check connection.','error'); }
 }
 
 function renderTwistToggles(){
@@ -2908,6 +2985,88 @@ function downloadJSON(obj, filename){
   window.URL.revokeObjectURL(url); // clean up the object URL
 }
 
+// ── S3 §4.2 SELF-SERVE GROUP CREATION — DARK LAUNCH ─────────────────────────
+// Reachable only from screen-create, itself reachable only via ?create (see
+// bootApp). Fixed defaults, no config UI — self-serve means dead simple:
+// roles off, 2 teams, minWorkouts 8, days auto-computed (never prompted,
+// same pattern as the auto-rollover fix). Creator becomes the first roster
+// entry AND isAdmin:true — the entire point of self-serve is that nobody
+// needs Nirag to grant admin access to their own new group. Routes into the
+// EXISTING grace-flow PIN step afterward — same machinery every other
+// first-PIN-set uses, including S1's self-heal (the entry has no userId yet,
+// so submitNewPin's grace branch creates one automatically).
+async function selfServeCreateGroup(){
+  const groupNameInput = document.getElementById('ssGroupName');
+  const creatorNameInput = document.getElementById('ssCreatorName');
+  const err = document.getElementById('ssError');
+  err.classList.add('hidden');
+
+  const groupName = groupNameInput.value.trim();
+  if(!groupName || groupName.length>40){ err.textContent='Enter a group name (up to 40 characters).'; err.classList.remove('hidden'); return; }
+
+  const rawName = creatorNameInput.value.trim();
+  if(!rawName){ err.textContent='Enter your name.'; err.classList.remove('hidden'); return; }
+  const formattedName = rawName.split(' ').filter(Boolean).map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
+  if(formattedName.length < 2 || formattedName.length > 24){ err.textContent='Name must be 2–24 characters.'; err.classList.remove('hidden'); return; }
+  if(/[^\p{L}\p{N} .\-]/u.test(formattedName)){ err.textContent='Name can only contain letters, numbers, spaces, hyphens and periods.'; err.classList.remove('hidden'); return; }
+
+  // Collision-checked code — same pattern as the super-admin createGroup fix
+  // (Batch 1): a random 6-char code can collide, and a plain write would
+  // silently replace an existing group's doc.
+  let code=null;
+  for(let i=0;i<5;i++){
+    const cand=Math.random().toString(36).substring(2,8).toUpperCase();
+    if(cand.length!==6) continue;
+    const existing=await db.collection('groups').doc(cand).get();
+    if(!existing.exists){ code=cand; break; }
+  }
+  if(!code){ err.textContent='Could not generate a unique group code — try again.'; err.classList.remove('hidden'); return; }
+
+  const now = new Date();
+  const month = now.getMonth()+1, year = now.getFullYear();
+  const sid = seasonIdOf(month, year);
+  const days = new Date(year, month, 0).getDate(); // auto-computed, never prompted
+
+  const creatorEntry = { name: formattedName, team:'A', role:'Player', pin:null, uid:(window.currentUid||null), isAdmin:true };
+  const serverNow = firebase.firestore.FieldValue.serverTimestamp();
+  try {
+    const batch = db.batch();
+    const groupRef = db.collection('groups').doc(code);
+    batch.set(groupRef, { name: groupName, players:[{name:formattedName}], currentSeasonId: sid, createdAt: serverNow });
+    const seasonRef = groupRef.collection('seasons').doc(sid);
+    batch.set(seasonRef, {
+      month, year, days,
+      capTarget: 16, vcTarget: 20, minWorkouts: 8,
+      numTeams: 2, teamStreakThreshold: 0.6,
+      rolesEnabled: false,
+      roster: [creatorEntry],
+      status: 'active', startedAt: serverNow, endedAt: null
+    });
+    await batch.commit();
+
+    groupCode = code;
+    groupData = { name: groupName, players:[{name:formattedName}], currentSeasonId: sid };
+    season = { month, year, days, capTarget:16, vcTarget:20, minWorkouts:8, numTeams:2, teamStreakThreshold:0.6, rolesEnabled:false, roster:[creatorEntry], status:'active' };
+    seasonId = sid;
+
+    const waText = encodeURIComponent(`Join my Forge group "${groupName}"! Code: ${code}\nhttps://goforge.in/`);
+    const waLink = `https://wa.me/?text=${waText}`;
+    document.getElementById('ssResult').innerHTML = `✅ Group created! Code: <strong style="font-size:20px;letter-spacing:3px">${esc(code)}</strong><br><a href="${waLink}" target="_blank" rel="noopener" style="color:var(--green)">📱 Share on WhatsApp</a>`;
+    document.getElementById('ssResult').classList.remove('hidden');
+
+    window._pinFlow = { mode:'grace', name: formattedName };
+    showScreen('onboard');
+    document.getElementById('ob-s3-sub').textContent = `Welcome, ${formattedName}. Pick a 4-digit PIN to secure your account.`;
+    document.getElementById('pinInput').value=''; document.getElementById('pinConfirm').value='';
+    document.getElementById('pinError').classList.add('hidden');
+    showObStep(3);
+  } catch(e){
+    logErr('selfServeCreateGroup', e);
+    err.textContent='Failed to create group — check connection.';
+    err.classList.remove('hidden');
+  }
+}
+
 // Helper: YYYY-MM-DD stamp for filenames.
 function todayStamp(){
   const d = new Date();
@@ -3506,10 +3665,18 @@ function updateTabPill(t){
 }
 async function showTab(t){
   if(t==='admin'&&!adminUnlocked){
-    const pin=prompt('Enter admin PIN:');
-    const hash=await sha256hex(pin||'');
-    if(hash!==ADMIN_PIN_HASH){toast('Wrong PIN','error');return;}
-    adminUnlocked=true;
+    // S3 §4.1: a per-group admin gets straight in — no PIN needed for their
+    // own group. ADMIN_PIN stays as the master super-override for anyone
+    // else (unchanged behavior for every non-admin, including every group
+    // that predates this feature and has no isAdmin data at all yet).
+    if(me?.isAdmin){
+      adminUnlocked=true;
+    } else {
+      const pin=prompt('Enter admin PIN:');
+      const hash=await sha256hex(pin||'');
+      if(hash!==ADMIN_PIN_HASH){toast('Wrong PIN','error');return;}
+      adminUnlocked=true;
+    }
   }
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
