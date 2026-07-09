@@ -283,6 +283,15 @@
     <div class="card" id="profileStatsCard"><div class="tmuted">Loading…</div></div>
     <div class="shdr">Past Seasons</div>
     <div class="card" id="profileSeasonsCard"><div class="tmuted">Loading…</div></div>
+    <div class="shdr">Link Another Group</div>
+    <div class="card">
+      <div class="tmuted" style="font-size:12px;margin-bottom:10px">In another Forge group under the same you? Link it so your streak and stats count both — you'll prove it's you with that group's PIN.</div>
+      <input type="text" id="linkGroupCode" placeholder="Other group code (6 characters)" maxlength="6" style="margin-bottom:8px;text-transform:uppercase">
+      <input type="text" id="linkPlayerName" placeholder="Your name in that group" maxlength="24" style="margin-bottom:8px">
+      <input type="password" inputmode="numeric" id="linkPin" placeholder="Your PIN in that group" maxlength="4" style="margin-bottom:8px">
+      <button class="btn btn-gold" id="linkBtn" style="margin:0" onclick="linkAnotherGroup()">Link Group</button>
+      <div id="linkResult" style="margin-top:10px;font-size:13px"></div>
+    </div>
   </div>
 
   <!-- IRON PLEDGE -->
@@ -1638,6 +1647,240 @@ function buildRecapDataFromArchive(s){
     myTeamResult: s.team ? { team:s.team, rank:s.teamRank||null, total:null, gapToFirst:null, won:badges.includes('team_winner') } : null,
     achievements: { topScorer: badges.includes('season_winner'), biggestClimber:false, longestStreak:false }
   };
+}
+
+// ── SELF-SERVE GROUP LINKING (Option A — identity merge) ───────────────────
+// Merges two fragmented users/{userId} identities into one, proven by the
+// person knowing the target group's PIN. Treated with migration-grade care:
+// canonical identity is the older doc; streak is RECOMPUTED from the real
+// combined set of logged days (never algebraically combined); every write is
+// in one all-reads-before-writes transaction; the merged-in doc is marked, not
+// deleted (rules deny users deletes by design).
+
+// Recompute streaks from a real set of 'YYYY-MM-DD' days. currentStreak is the
+// consecutive run ending at the LATEST logged day (Profile's display-freshness
+// then zeroes it if that day is stale — same as every other streak surface).
+function computeStreaksFromDays(days){
+  const arr=[...new Set(days)].sort();
+  if(!arr.length) return {currentStreak:0, longestStreak:0, lastLoggedDay:null};
+  const D=s=>new Date(s+'T00:00:00');
+  let longest=1, run=1;
+  for(let i=1;i<arr.length;i++){
+    const diff=Math.round((D(arr[i])-D(arr[i-1]))/86400000);
+    run = diff===1 ? run+1 : 1;                // diff===0 impossible (deduped set)
+    if(run>longest) longest=run;
+  }
+  let cur=1;
+  for(let i=arr.length-1;i>0;i--){
+    const diff=Math.round((D(arr[i])-D(arr[i-1]))/86400000);
+    if(diff===1) cur++; else break;
+  }
+  return {currentStreak:cur, longestStreak:longest, lastLoggedDay:arr[arr.length-1]};
+}
+// Distinct logged calendar days for an identity, from real logs (non-voided).
+async function _daysForUserId(uid){
+  const snap=await db.collection('logs').where('userId','==',uid).get();
+  const s=new Set();
+  snap.docs.forEach(d=>{ const l=d.data(); if(l.voided) return; if(l.year&&l.month&&l.day) s.add(ymdOf(l.year,l.month,l.day)); });
+  return s;
+}
+// Distinct logged days for an unmigrated target (its logs carry no userId yet),
+// found by (group, name). groupCode is single-field auto-indexed; player is
+// filtered client-side to avoid needing a composite index.
+async function _daysForGroupName(code,name){
+  const snap=await db.collection('logs').where('groupCode','==',code).get();
+  const s=new Set(); const nl=name.toLowerCase();
+  snap.docs.forEach(d=>{ const l=d.data(); if(l.voided) return; if((l.player||'').toLowerCase()!==nl) return; if(l.year&&l.month&&l.day) s.add(ymdOf(l.year,l.month,l.day)); });
+  return s;
+}
+function _tsSeconds(doc){ const c=doc&&doc.createdAt; return (c&&typeof c.seconds==='number') ? c.seconds+(c.nanoseconds||0)/1e9 : Infinity; }
+function _sumBadges(a,b){ const out={...(a||{})}; Object.entries(b||{}).forEach(([k,v])=>{ out[k]=(out[k]||0)+v; }); return out; }
+
+async function linkAnotherGroup(){
+  const btn=document.getElementById('linkBtn');
+  const resEl=document.getElementById('linkResult');
+  const code=(document.getElementById('linkGroupCode').value||'').trim().toUpperCase();
+  const name=(document.getElementById('linkPlayerName').value||'').trim();
+  const pin=(document.getElementById('linkPin').value||'').trim();
+  // ONE generic message for every credential failure (wrong code / name / PIN)
+  // so this form can't be used to probe for valid group codes or member names.
+  const GENERIC='Could not link — double-check the group code, your name, and PIN, then try again.';
+  const fail=(msg,muted)=>{ resEl.style.color=muted?'var(--muted)':'var(--red)'; resEl.textContent=msg; };
+  resEl.textContent='';
+  if(!me||!me.userId){ fail('Your profile is still setting up — try again in a moment.'); return; }
+  if(!code||!name||!/^\d{4}$/.test(pin)){ fail(GENERIC); return; }
+  if(code===groupCode){ fail('That’s the group you’re already in on this screen — pick a different one.'); return; }
+
+  btn.disabled=true; btn.textContent='Linking…';
+  try{
+    // ── Resolve + verify target (all reads; no writes yet) ──
+    const gRef=db.collection('groups').doc(code);
+    const gSnap=await gRef.get();
+    if(!gSnap.exists){ fail(GENERIC); return; }
+    const gData=gSnap.data();
+    const sid=gData.currentSeasonId;
+    const sRef= sid ? gRef.collection('seasons').doc(sid) : null;
+    const sSnap= sRef ? await sRef.get() : null;
+    if(!sSnap || !sSnap.exists){ fail(GENERIC); return; }
+    const entry=(sSnap.data().roster||[]).find(p=>p&&p.name&&p.name.toLowerCase()===name.toLowerCase());
+    if(!entry){ fail(GENERIC); return; }
+
+    // Dual-path PIN check — mirrors submitPinEntry exactly.
+    let targetUserId=entry.userId||null, verified=false;
+    if(targetUserId){
+      const uSnap=await db.collection('users').doc(targetUserId).get();
+      verified = uSnap.exists ? ((await sha256hex(pin))===uSnap.data().pinHash) : (pin===entry.pin);
+    } else {
+      verified = (pin===entry.pin);
+    }
+    if(!verified){ fail(GENERIC); return; }
+
+    // ── Already-linked guards (no-op instead of a corrupting re-merge) ──
+    if(targetUserId && targetUserId===me.userId){ fail('These two are already linked — nothing to do.',true); return; }
+    const selfSnap=await db.collection('users').doc(me.userId).get();
+    if(selfSnap.exists && (selfSnap.data().memberships||{})[code]){ fail('These two are already linked — nothing to do.',true); return; }
+
+    // ── PIN-consistency invariant ──
+    // After a merge, every re-pointed roster entry authenticates against the
+    // ONE surviving identity's pinHash (login is pinHash-first since S4). If the
+    // two identities have DIFFERENT PINs, one group's members would afterwards
+    // be locked out of the PIN they know — a silent login break. So only permit
+    // the link when the PINs already match (the real-world norm: the prod audit
+    // showed every multi-group member reuses one PIN across their groups). This
+    // is the only way to keep "both logins keep working with their own PIN" true
+    // under pinHash-first auth without a per-group-pinHash redesign of login.
+    // Not a probing risk: the user is authenticated here and already proved the
+    // target PIN, so this reveals nothing new about the target.
+    const selfPinHash = selfSnap.exists ? selfSnap.data().pinHash : null;
+    if(selfPinHash && (await sha256hex(pin))!==selfPinHash){
+      fail('To link, use the same PIN in both groups. Ask an admin to reset one so they match, then link.');
+      return;
+    }
+
+    const result=await _performIdentityLink({ code, gData, sid, sRef, entry, targetUserId, selfId:me.userId });
+    if(result.blocked){ fail(result.message||GENERIC, true); return; }
+
+    // Reflect the surviving identity on this device.
+    me.userId=result.canonical;
+    upsertSession(groupCode, me, groupData?.name);
+    resEl.style.color='var(--green)';
+    resEl.textContent=`Linked ${esc(gData.name||code)}. Your streak and stats now count both groups.`;
+    document.getElementById('linkGroupCode').value=''; document.getElementById('linkPlayerName').value=''; document.getElementById('linkPin').value='';
+    renderProfile();
+  }catch(e){
+    logErr('linkAnotherGroup', e);
+    fail('Something went wrong linking — check your connection and try again.');
+  }finally{
+    btn.disabled=false; btn.textContent='Link Group';
+  }
+}
+
+// Does the actual merge. Two shapes:
+//  ADOPT  — target roster entry has no userId (unmigrated): fold it under the
+//           logged-in identity, recompute streak from combined real days.
+//  MERGE  — target entry has its own userId: pick the OLDER doc (createdAt) as
+//           canonical, sum stats, recompute streak, copy season archives,
+//           re-point every roster entry of the merged-in id, mark it mergedInto.
+async function _performIdentityLink(ctx){
+  const { code, gData, sid, sRef, entry, targetUserId, selfId } = ctx;
+
+  // ADOPT ────────────────────────────────────────────────────────────────
+  if(!targetUserId){
+    const combined=new Set([ ...(await _daysForUserId(selfId)), ...(await _daysForGroupName(code, entry.name)) ]);
+    const streak=computeStreaksFromDays(combined);
+    const canonRef=db.collection('users').doc(selfId);
+    await db.runTransaction(async tx=>{
+      const cSnap=await tx.get(canonRef);          // read
+      const rSnap=await tx.get(sRef);              // read
+      if(!cSnap.exists) throw new Error('CANON_MISSING');
+      const roster=(rSnap.data()||{}).roster||[];
+      const re=roster.find(p=>p&&p.name&&p.name.toLowerCase()===entry.name.toLowerCase());
+      if(!re) throw new Error('ENTRY_GONE');
+      if(re.userId && re.userId!==selfId) throw new Error('RACED');   // someone migrated it meanwhile
+      re.userId=selfId;                            // writes
+      tx.update(sRef,{roster});
+      tx.set(canonRef,{
+        memberships:{ [code]:{ joinedAt:firebase.firestore.FieldValue.serverTimestamp(), groupName:gData.name||code } },
+        stats:{ currentStreak:streak.currentStreak, longestStreak:Math.max(streak.longestStreak, (cSnap.data().stats||{}).longestStreak||0), lastLoggedDay:streak.lastLoggedDay }
+      },{merge:true});
+    });
+    return { canonical:selfId, mode:'adopt', streak };
+  }
+
+  // MERGE ────────────────────────────────────────────────────────────────
+  const [selfSnap, targetSnap] = await Promise.all([
+    db.collection('users').doc(selfId).get(),
+    db.collection('users').doc(targetUserId).get()
+  ]);
+  if(!selfSnap.exists || !targetSnap.exists) return { blocked:true, message:'Could not link — one of the accounts is missing.' };
+  const selfData=selfSnap.data(), targetData=targetSnap.data();
+  if(targetData.mergedInto || selfData.mergedInto) return { blocked:true, message:'One of these was already merged elsewhere — nothing to do.' };
+
+  // Canonical = older createdAt (survivor). Either side can win.
+  const selfCanon = _tsSeconds(selfData) <= _tsSeconds(targetData);
+  const canonical = selfCanon ? selfId : targetUserId;
+  const mergedIn  = selfCanon ? targetUserId : selfId;
+  const canonData = selfCanon ? selfData : targetData;
+  const mergedData= selfCanon ? targetData : selfData;
+
+  // Combined real day-set → recomputed streak (NOT max/sum of the two numbers).
+  const combined=new Set([ ...(await _daysForUserId(selfId)), ...(await _daysForUserId(targetUserId)) ]);
+  const streak=computeStreaksFromDays(combined);
+
+  // Summed stats.
+  const cs=canonData.stats||{}, ms=mergedData.stats||{};
+  const mergedStats={
+    totalWorkouts:(cs.totalWorkouts||0)+(ms.totalWorkouts||0),
+    seasonsPlayed:(cs.seasonsPlayed||0)+(ms.seasonsPlayed||0),
+    badgeCounts:_sumBadges(cs.badgeCounts, ms.badgeCounts),
+    currentStreak:streak.currentStreak, longestStreak:streak.longestStreak, lastLoggedDay:streak.lastLoggedDay
+  };
+  const mergedMemberships={ ...(canonData.memberships||{}), ...(mergedData.memberships||{}) };
+
+  // Season archives of the merged-in id → copy under canonical (read outside tx).
+  const archSnap=await db.collection('users').doc(mergedIn).collection('seasons').get();
+  const archives=archSnap.docs.map(d=>({ id:d.id, data:d.data() }));
+
+  // Every roster entry that currently points at the merged-in id must re-point
+  // to canonical. Its groups come from its memberships; read each group's active
+  // season ref + the name to match OUTSIDE, re-validate + write INSIDE the tx.
+  const repoint=[];
+  for(const gc of Object.keys(mergedData.memberships||{})){
+    let rref, rname=null;
+    if(gc===code){ rref=sRef; rname=entry.name; }
+    else {
+      const gs=await db.collection('groups').doc(gc).get();
+      const gsid=gs.exists?gs.data().currentSeasonId:null; if(!gsid) continue;
+      rref=db.collection('groups').doc(gc).collection('seasons').doc(gsid);
+      const rs=await rref.get();
+      const re=(rs.exists?rs.data().roster||[]:[]).find(p=>p&&p.userId===mergedIn);
+      if(!re) continue; rname=re.name;
+    }
+    repoint.push({ ref:rref, name:rname });
+  }
+
+  const canonRef=db.collection('users').doc(canonical);
+  const mergedRef=db.collection('users').doc(mergedIn);
+  await db.runTransaction(async tx=>{
+    // ---- reads ----
+    const cSnap=await tx.get(canonRef);
+    const mSnap=await tx.get(mergedRef);
+    if(!cSnap.exists||!mSnap.exists) throw new Error('DOC_MISSING');
+    if(mSnap.data().mergedInto) throw new Error('ALREADY_MERGED');
+    const rosterSnaps=[];
+    for(const r of repoint){ rosterSnaps.push({ ...r, snap: await tx.get(r.ref) }); }
+    // ---- writes ----
+    tx.set(canonRef,{ stats:mergedStats, memberships:mergedMemberships },{merge:true});
+    archives.forEach(a=>{ tx.set(db.collection('users').doc(canonical).collection('seasons').doc(a.id), a.data, {merge:true}); });
+    rosterSnaps.forEach(r=>{
+      if(!r.snap.exists) return;
+      const roster=r.snap.data().roster||[];
+      const re=roster.find(p=>p&&p.name&&p.name.toLowerCase()===String(r.name).toLowerCase());
+      if(re && re.userId===mergedIn){ re.userId=canonical; tx.update(r.ref,{roster}); }
+    });
+    tx.set(mergedRef,{ mergedInto:canonical },{merge:true});
+  });
+  return { canonical, mergedIn, mode:'merge', streak };
 }
 
 function showCalTip(el,text){
