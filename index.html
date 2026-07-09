@@ -308,14 +308,14 @@
     <div class="nav-logo" style="font-size:14px">FORGE — SUPER ADMIN</div>
     <button class="btn btn-surface btn-sm" onclick="exitSuper()" style="margin:0">Exit</button>
   </nav>
-  <div style="padding:16px;max-width:500px;margin:0 auto">
-    <div class="shdr">Overview</div>
-    <div id="superDashboard"></div>
+  <div style="padding:16px;max-width:680px;margin:0 auto;min-width:0;width:100%;box-sizing:border-box">
+    <!-- Cockpit dashboard (SuperDash module) renders here. Every date range is
+         derived from new Date() at load — no hardcoded months. min-width:0 lets
+         this flex-column child shrink so the wide Group Health table scrolls
+         inside its own overflow-x card instead of forcing page overflow. -->
+    <div id="superDashRoot" style="min-width:0"></div>
     <div id="rolloverNudge" style="margin-top:12px"></div>
-    <div class="shdr" style="margin-top:20px">Engagement Trend</div>
-    <div id="trendCharts"></div>
-
-    <div class="shdr" style="margin-top:20px">All Groups</div>
+    <div class="shdr" style="margin-top:20px">Manage Groups</div>
     <div id="superGroupList"></div>
 
     <!-- Edit group settings (hidden until ⚙ Manage) -->
@@ -2746,60 +2746,24 @@ async function saveFoundryGoal(){
 
 // Super-admin engagement trends: active people/day + participation rate,
 // Super-admin engagement trends with a day-window toggle (7 / 14 / All).
-let _trend=null, _trendWin='all', _trendCharts=[];
-async function renderTrendCharts(groups){
-  const el=document.getElementById('trendCharts'); if(!el||typeof Chart==='undefined') return;
-  el.innerHTML='<div class="tmuted">Loading trends…</div>';
-  try{
-    const now=new Date(), M=now.getMonth()+1, Y=now.getFullYear();
-    const reg=groups.reduce((s,g)=>s+(g.players?.length||0),0)||1;
-    // Only this month's logs — the client-side filter below discarded the
-    // rest anyway, so pushing it into the query is free and the read cost
-    // stops growing with every past month.
-    const snap=await db.collection('logs').where('month','==',M).where('year','==',Y).get();
-    const dp={}; snap.docs.forEach(dn=>{const l=dn.data(); if(!l.voided&&l.month===M&&l.year===Y)(dp[l.day]=dp[l.day]||new Set()).add(l.player);});
-    let base=null; try{const b=await db.collection('analytics').doc('baseline-2026-04').get(); if(b.exists) base=b.data();}catch(e){ logErr('renderTrendCharts: baseline read', e); }
-    _trend={reg,dp,base,today:(now.getMonth()+1===M?now.getDate():31)};
-    el.innerHTML=
-      '<div style="display:flex;gap:6px;margin-bottom:10px">'+
-      [['7','Last 7'],['14','Last 14'],['all','All']].map(([w,t])=>`<button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="setTrendWin('${w}')">${t}</button>`).join('')+
-      '</div>'+
-      '<div class="card" style="margin:0 0 12px"><div class="card-title">Active people / day</div><canvas id="chA" height="170"></canvas></div>'+
-      '<div class="card" style="margin:0"><div class="card-title">Participation rate</div><canvas id="chP" height="170"></canvas></div>';
-    drawTrend();
-  }catch(e){console.error('renderTrendCharts',e); el.innerHTML='<div class="tmuted">Could not load trends.</div>';}
-}
-function setTrendWin(w){ _trendWin=w; drawTrend(); }
-function drawTrend(){
-  if(!_trend) return;
-  _trendCharts.forEach(c=>{try{c.destroy();}catch(e){}}); _trendCharts=[];
-  const {reg,dp,base,today}=_trend;
-  let days=Array.from({length:31},(_,i)=>i+1);
-  if(_trendWin!=='all'){ const n=parseInt(_trendWin); days=days.filter(d=>d<=today&&d>today-n); }
-  const ca=days.map(d=>dp[d]?dp[d].size:null);
-  const cp=days.map(d=>dp[d]?Math.round(dp[d].size/reg*100):null);
-  const br=base?.registered||1;
-  const ba=base?days.map(d=>base.daily[d]??null):null;
-  const bp=base?days.map(d=>base.daily[d]!=null?Math.round(base.daily[d]/br*100):null):null;
-  const lbl=base?.label||'Baseline';
-  const mk=(id,cur,bse,sfx)=>_trendCharts.push(new Chart(document.getElementById(id),{type:'line',data:{labels:days,datasets:[
-    {label:'This month',data:cur,borderColor:'#f59e0b',backgroundColor:'#f59e0b',spanGaps:true,tension:.3},
-    ...(bse?[{label:lbl,data:bse,borderColor:'#6b7280',borderDash:[5,4],spanGaps:true,tension:.3}]:[])
-  ]},options:{responsive:true,plugins:{legend:{labels:{color:'#9ca3af',boxWidth:12}}},scales:{x:{ticks:{color:'#6b7280',maxTicksLimit:10}},y:{beginAtZero:true,ticks:{color:'#6b7280',callback:v=>v+(sfx||'')}}}}}));
-  mk('chA',ca,ba,''); mk('chP',cp,bp,'%');
-}
+// (Removed: renderTrendCharts/drawTrend/setTrendWin — the old Chart.js baseline
+// trend that read a hardcoded analytics/baseline-2026-04 doc. That was the
+// "April data" bug. Replaced by the SuperDash module's Trends section, which
+// derives every range from the live date.)
 
 // ── SUPER ADMIN ───────────────────────────────────────────────────────────
 async function loadSuperAdmin(){
   const snap=await db.collection('groups').get();
   const groups=snap.docs.map(d=>({code:d.id,...d.data()}));
 
-  // ── Dashboard strip: cross-group totals, fetched on load ──
-  renderSuperDashboard(groups);
+  // ── Cockpit dashboard (5 sections + month selector + drill-down) ──
+  // Superseded the old Overview strip + Chart.js baseline trend (which read a
+  // hardcoded analytics/baseline-2026-04 doc — the "April data" bug). Everything
+  // now derives from the live date; see the SuperDash module.
+  if(window.SuperDash) window.SuperDash.render(groups);
 
   // ── Rollover nudge: if any active season's month has ended/is last day ──
   checkRolloverNudges(groups);
-  renderTrendCharts(groups);
 
   document.getElementById('superGroupList').innerHTML=groups.length===0
     ?'<div class="tmuted">No groups yet</div>'
@@ -4826,6 +4790,459 @@ if('serviceWorker' in navigator){
   // Profile tab (on-demand recap for archived seasons) needs to open this
   // same modal from OUTSIDE this IIFE. One hook, nothing else exposed.
   window.__recapShowFromData = function(d){ try{ showModal(d); }catch(e){} };
+})();
+</script>
+<script>
+/* ════════════════════════════════════════════════════════════════════════
+   SUPERADMIN COCKPIT — SuperDash
+   Full dashboard: Pulse · Needs Attention · Group Health · Trends · Champions,
+   plus a player drill-down and a month selector. EVERY date range derives from
+   new Date() at load — there is no hardcoded month anywhere in here (that was
+   the old "April data" bug, from a baseline-2026-04 doc, now removed).
+
+   Date model: a log's WORKOUT date is (year,month,day) → 'YYYY-MM-DD'. Every
+   window (today / this week / at-risk / streaks) is computed against that date
+   relative to local today — so a backlogged log counts for the day it's FOR.
+
+   Efficiency: cross-group reads are bounded — groups.get() (done by caller) +
+   one seasons.get() per group + at most 4 month-filtered logs queries +
+   one tabClicks doc per group. No unfiltered logs scan.
+
+   Only reachable from loadSuperAdmin(), which is behind the superadmin PIN gate.
+   ════════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  var MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var TAB_LABELS={home:'Home',log:'Log',lb:'Board',feed:'Feed',global:'Global',admin:'Admin',pledge:'Pledge',profile:'Profile'};
+  var E=function(s){ return (window.esc?window.esc:function(x){return String(x==null?'':x);})(s); };
+  function ymd(y,m,d){ return y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0'); }
+  function parseYmd(s){ return new Date(s+'T00:00:00'); }
+  function midnight(dt){ return new Date(dt.getFullYear(),dt.getMonth(),dt.getDate()); }
+  function daysAgoOf(dateStr, todayMid){ return Math.round((todayMid - parseYmd(dateStr))/86400000); }
+  function prevMonth(m,y){ return m===1?{m:12,y:y-1}:{m:m-1,y:y}; }
+  function pct(n,d){ return d>0?Math.round(n/d*100):0; }
+
+  var state={ selM:null, selY:null, groups:null, data:null, trendMode:'combined' };
+  window.SuperDash={ render:render, setMonth:setMonth, player:openPlayer, closePlayer:closePlayer, trendMode:setTrendMode };
+
+  function setMonth(m,y){ state.selM=m; state.selY=y; render(state.groups); }
+  function setTrendMode(mode){ state.trendMode=mode; var t=document.getElementById('sdTrendsInner'); if(t&&state.data) t.innerHTML=buildTrendsInner(state.data); }
+
+  async function render(groups){
+    var root=document.getElementById('superDashRoot'); if(!root) return;
+    state.groups=groups;
+    var now=new Date();
+    if(state.selM==null){ state.selM=now.getMonth()+1; state.selY=now.getFullYear(); }
+    root.innerHTML='<div class="tmuted" style="padding:28px;text-align:center">Loading cockpit…</div>';
+    try{
+      var data=await fetchAll(groups, state.selM, state.selY);
+      state.data=data;
+      injectStyle();
+      root.innerHTML=buildHTML(data);
+    }catch(e){ console.error('[SuperDash]',e); root.innerHTML='<div class="card" style="border:1px solid var(--red)"><div style="color:var(--red)">Cockpit failed to load: '+E(e.message||e)+'</div></div>'; }
+  }
+
+  // ── DATA ───────────────────────────────────────────────────────────────
+  async function fetchAll(groups, selM, selY){
+    var now=new Date(), todayMid=midnight(now);
+    var curM=now.getMonth()+1, curY=now.getFullYear();
+    // Month set: selected + its prior, current + its prior (covers rolling
+    // 7/14-day windows that cross a month boundary). Deduped.
+    var want={}, add=function(m,y){ want[y+'-'+m]={m:m,y:y}; };
+    add(selM,selY); var ps=prevMonth(selM,selY); add(ps.m,ps.y);
+    add(curM,curY); var pc=prevMonth(curM,curY); add(pc.m,pc.y);
+    var monthList=Object.keys(want).map(function(k){return want[k];});
+    var logSnaps=await Promise.all(monthList.map(function(mo){
+      return db.collection('logs').where('month','==',mo.m).where('year','==',mo.y).get();
+    }));
+    var logs=[];
+    logSnaps.forEach(function(sn){ sn.docs.forEach(function(dd){
+      var l=dd.data(); if(l.voided) return;
+      if(!l.year||!l.month||!l.day) return;
+      logs.push({ id:dd.id, groupCode:l.groupCode, player:l.player, team:l.team,
+        workouts:Array.isArray(l.workouts)?l.workouts:(l.workout?[l.workout]:[]),
+        y:l.year, m:l.month, d:l.day, dateStr:ymd(l.year,l.month,l.day),
+        userId:l.userId||null }); });
+    });
+
+    // Per group: seasons list → current-season roster + latest archived snapshot.
+    var groupInfo={};
+    await Promise.all(groups.map(async function(g){
+      var seasons=[];
+      try{ var ss=await db.collection('groups').doc(g.code).collection('seasons').get();
+        seasons=ss.docs.map(function(dd){return {id:dd.id,...dd.data()};}); }catch(e){}
+      var cur=seasons.find(function(s){return s.id===g.currentSeasonId;})||null;
+      var archived=seasons.filter(function(s){return s.status==='archived' && s.snapshotAt;})
+        .sort(function(a,b){ return (b.year-a.year)||(b.month-a.month); })[0]||null;
+      // tabClicks for the SELECTED month
+      var selKey=ymKey(selY,selM), tabs=null;
+      try{ var tc=await db.collection('analytics').doc(g.code).collection('tabClicks').doc(selKey).get();
+        if(tc.exists) tabs=tc.data(); }catch(e){}
+      groupInfo[g.code]={ name:g.name||g.code, roster:(cur&&cur.roster)||[], currentSeasonId:g.currentSeasonId||null,
+        archived:archived, tabs:tabs };
+    }));
+
+    return { now:now, todayMid:todayMid, curM:curM, curY:curY, selM:selM, selY:selY,
+             isCurrentMonth:(selM===curM&&selY===curY), logs:logs, groups:groups, groupInfo:groupInfo };
+  }
+  function ymKey(y,m){ return y+'-'+String(m).padStart(2,'0'); }
+
+  // Set of logged dateStrs for (group,player) and for player-across-groups.
+  function buildDaySets(data){
+    var gp={}, byGroup={}, groupAll={};
+    data.logs.forEach(function(l){
+      var k=l.groupCode+'||'+l.player;
+      (gp[k]||(gp[k]=new Set())).add(l.dateStr);
+      (groupAll[l.groupCode]||(groupAll[l.groupCode]=new Set())).add(l.dateStr);
+    });
+    return { gp:gp };
+  }
+  function runEndingAt(set, endDate){
+    var n=0, cur=new Date(endDate);
+    while(set.has(ymd(cur.getFullYear(),cur.getMonth()+1,cur.getDate()))){ n++; cur.setDate(cur.getDate()-1); }
+    return n;
+  }
+  function currentStreak(set, todayMid){
+    var t=todayMid, y=new Date(todayMid); y.setDate(y.getDate()-1);
+    var tStr=ymd(t.getFullYear(),t.getMonth()+1,t.getDate());
+    var yStr=ymd(y.getFullYear(),y.getMonth()+1,y.getDate());
+    if(set.has(tStr)) return runEndingAt(set,t);
+    if(set.has(yStr)) return runEndingAt(set,y);
+    return 0;
+  }
+
+  // ── BUILD ──────────────────────────────────────────────────────────────
+  function buildHTML(data){
+    var sets=buildDaySets(data);
+    return monthSelector(data)
+      + buildPulse(data,sets)
+      + buildNeedsAttention(data,sets)
+      + buildGroupHealth(data,sets)
+      + buildTrends(data)
+      + buildChampions(data,sets);
+  }
+
+  function monthSelector(data){
+    // Options: last 6 months up to current.
+    var opts='';
+    var m=data.curM, y=data.curY;
+    for(var i=0;i<6;i++){
+      var sel=(m===data.selM&&y===data.selY)?' selected':'';
+      opts+='<option value="'+y+'-'+m+'"'+sel+'>'+MONTHS[m-1]+' '+y+'</option>';
+      var p=prevMonth(m,y); m=p.m; y=p.y;
+    }
+    var note=data.isCurrentMonth?'':'<span style="color:var(--orange);font-size:11px;margin-left:8px">Historical view — Pulse &amp; Needs Attention stay live</span>';
+    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">'
+      +'<span style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Month</span>'
+      +'<select onchange="(function(v){var p=v.split(\'-\');window.SuperDash.setMonth(+p[1],+p[0]);})(this.value)" style="width:auto;margin:0;padding:6px 10px;font-size:13px">'+opts+'</select>'
+      +note+'</div>';
+  }
+
+  // ── 1. PULSE (always live/today) ──
+  function buildPulse(data,sets){
+    var tm=data.todayMid, todayStr=ymd(data.now.getFullYear(),data.now.getMonth()+1,data.now.getDate());
+    var logsToday=0, wk=0, lastWk=0, activeWk=new Set();
+    data.logs.forEach(function(l){
+      var da=daysAgoOf(l.dateStr,tm);
+      if(l.dateStr===todayStr) logsToday++;
+      if(da>=0&&da<=6){ wk++; activeWk.add(l.player); }
+      else if(da>=7&&da<=13){ lastWk++; }
+    });
+    // At-risk: current members whose most-recent log is >=4 days ago (or never).
+    var atRisk=computeAtRisk(data,sets).length;
+    var chg=lastWk>0?Math.round((wk-lastWk)/lastWk*100):(wk>0?100:0);
+    var arrow=wk>=lastWk?'▲':'▼', col=wk>=lastWk?'var(--green)':'var(--red)';
+    function tile(v,label,sub,c){ return '<div class="sd-tile"><div class="sd-tile-v" style="color:'+(c||'var(--gold)')+'">'+v+'</div><div class="sd-tile-l">'+label+'</div>'+(sub?'<div class="sd-tile-s">'+sub+'</div>':'')+'</div>'; }
+    return '<div class="shdr" style="margin-top:0">Pulse <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">· live now</span></div>'
+      +'<div class="sd-pulse">'
+      + tile(logsToday,'Logs today','all groups')
+      + tile(activeWk.size,'Active this week','unique people')
+      + tile(wk+' <span style="font-size:13px;color:'+col+'">'+arrow+Math.abs(chg)+'%</span>','Logs this week','vs '+lastWk+' last wk')
+      + tile(atRisk,'At-risk', '0 logs in 4+ days', atRisk>0?'var(--red)':'var(--green)')
+      +'</div>';
+  }
+
+  // ── 2. NEEDS ATTENTION (always live) ──
+  function computeAtRisk(data,sets){
+    var tm=data.todayMid, out=[];
+    data.groups.forEach(function(g){
+      var gi=data.groupInfo[g.code]; if(!gi) return;
+      gi.roster.forEach(function(p){
+        if(!p||!p.name) return;
+        var set=sets.gp[g.code+'||'+p.name];
+        var lastAgo=Infinity;
+        if(set){ set.forEach(function(ds){ var a=daysAgoOf(ds,tm); if(a>=0&&a<lastAgo) lastAgo=a; }); }
+        if(lastAgo>=4){ out.push({ name:p.name, group:gi.name, code:g.code, daysSilent:(lastAgo===Infinity?null:lastAgo) }); }
+      });
+    });
+    out.sort(function(a,b){ var av=a.daysSilent==null?1e9:a.daysSilent, bv=b.daysSilent==null?1e9:b.daysSilent; return bv-av; });
+    return out;
+  }
+  function computeDanger(data,sets){
+    var tm=data.todayMid, y=new Date(tm); y.setDate(y.getDate()-1);
+    var todayStr=ymd(tm.getFullYear(),tm.getMonth()+1,tm.getDate());
+    var yStr=ymd(y.getFullYear(),y.getMonth()+1,y.getDate());
+    var out=[];
+    data.groups.forEach(function(g){
+      var gi=data.groupInfo[g.code]; if(!gi) return;
+      gi.roster.forEach(function(p){
+        if(!p||!p.name) return;
+        var set=sets.gp[g.code+'||'+p.name]; if(!set) return;
+        if(set.has(yStr) && !set.has(todayStr)){
+          var run=runEndingAt(set,y);
+          if(run>=3) out.push({ name:p.name, group:gi.name, code:g.code, streak:run });
+        }
+      });
+    });
+    out.sort(function(a,b){ return b.streak-a.streak; });
+    return out;
+  }
+  function nameLink(name){ return '<span class="sd-name" onclick="window.SuperDash.player(\''+(window.escForInlineJsAttr?window.escForInlineJsAttr(name):E(name))+'\')">'+E(name)+'</span>'; }
+  function buildNeedsAttention(data,sets){
+    var risk=computeAtRisk(data,sets), danger=computeDanger(data,sets);
+    var riskRows=risk.length? risk.map(function(r){
+      return '<div class="sd-row"><div>'+nameLink(r.name)+' <span class="sd-sub">'+E(r.group)+'</span></div>'
+        +'<div class="sd-silent">'+(r.daysSilent==null?'never logged':r.daysSilent+'d silent')+'</div></div>';
+    }).join('') : '<div class="tmuted" style="padding:8px 0">Nobody is at-risk — everyone logged within 4 days. 🎉</div>';
+    var dangerRows=danger.length? danger.map(function(r){
+      return '<div class="sd-row"><div>'+nameLink(r.name)+' <span class="sd-sub">'+E(r.group)+'</span></div>'
+        +'<div class="sd-streak">🔥 '+r.streak+' · nudge tonight</div></div>';
+    }).join('') : '<div class="tmuted" style="padding:8px 0">No streaks in danger right now.</div>';
+    return '<div class="shdr">Needs Attention</div>'
+      +'<div class="card sd-attn" style="border:1px solid '+(risk.length?'var(--red)':'var(--border)')+'">'
+        +'<div class="sd-attn-h">At-risk — 0 logs in 4+ days ('+risk.length+')</div>'+riskRows+'</div>'
+      +'<div class="card" style="margin-top:10px">'
+        +'<div class="sd-attn-h" style="color:var(--orange)">Streaks in danger — logged yesterday, not today, streak ≥3 ('+danger.length+')</div>'+dangerRows+'</div>';
+  }
+
+  // ── 3. GROUP HEALTH ──
+  function buildGroupHealth(data,sets){
+    var tm=data.todayMid, cur=data.isCurrentMonth;
+    var rows=data.groups.map(function(g){
+      var gi=data.groupInfo[g.code]; if(!gi) return null;
+      var members=gi.roster.length;
+      var activeSet=new Set(), periodLogs=0, priorLogs=0, groupLastAgo=Infinity;
+      var topDays={};
+      data.logs.forEach(function(l){
+        if(l.groupCode!==g.code) return;
+        var a=daysAgoOf(l.dateStr,tm);
+        if(a>=0&&a<groupLastAgo) groupLastAgo=a;
+        var inPeriod, inPrior;
+        if(cur){ inPeriod=(a>=0&&a<=6); inPrior=(a>=7&&a<=13); }
+        else {
+          inPeriod=(l.m===data.selM&&l.y===data.selY);
+          var pm=prevMonth(data.selM,data.selY); inPrior=(l.m===pm.m&&l.y===pm.y);
+        }
+        if(inPeriod){ periodLogs++; activeSet.add(l.player); (topDays[l.player]||(topDays[l.player]=new Set())).add(l.dateStr); }
+        if(inPrior) priorLogs++;
+      });
+      var top=Object.keys(topDays).map(function(n){return [n,topDays[n].size];}).sort(function(a,b){return b[1]-a[1];})[0];
+      var wow=priorLogs>0?Math.round((periodLogs-priorLogs)/priorLogs*100):(periodLogs>0?100:0);
+      var wowUp=periodLogs>=priorLogs;
+      // rollover status
+      var roll='current', rollCol='var(--muted)';
+      if(gi.currentSeasonId){ var pp=gi.currentSeasonId.split('-'); var sy=+pp[0], sm=+pp[1];
+        if(sy<data.curY||(sy===data.curY&&sm<data.curM)){ roll='due ('+gi.currentSeasonId+')'; rollCol='var(--orange)'; } }
+      return { code:g.code, name:gi.name, members:members, activePct:pct(activeSet.size,members),
+        periodLogs:periodLogs, wow:wow, wowUp:wowUp, top:top?top[0]:'—',
+        lastAgo:(groupLastAgo===Infinity?null:groupLastAgo), roll:roll, rollCol:rollCol };
+    }).filter(Boolean).sort(function(a,b){ return b.activePct-a.activePct || b.periodLogs-a.periodLogs; });
+
+    var periodLbl=cur?'this wk':MONTHS[data.selM-1].slice(0,3);
+    var body=rows.map(function(r){
+      return '<tr>'
+        +'<td>'+nameLinkGroup(r.name)+'</td>'
+        +'<td class="num">'+r.members+'</td>'
+        +'<td class="num" style="color:'+(r.activePct>=50?'var(--green)':r.activePct>=25?'var(--gold)':'var(--red)')+'">'+r.activePct+'%</td>'
+        +'<td class="num">'+r.periodLogs+'</td>'
+        +'<td class="num" style="color:'+(r.wowUp?'var(--green)':'var(--red)')+'">'+(r.wowUp?'▲':'▼')+Math.abs(r.wow)+'%</td>'
+        +'<td>'+nameLink(r.top)+'</td>'
+        +'<td class="num">'+(r.lastAgo==null?'—':r.lastAgo+'d')+'</td>'
+        +'<td style="color:'+r.rollCol+';font-size:11px">'+r.roll+'</td>'
+        +'</tr>';
+    }).join('');
+    return '<div class="shdr">Group Health</div>'
+      +'<div class="card" style="padding:6px 4px;overflow-x:auto">'
+      +'<table class="sd-table"><thead><tr>'
+      +'<th>Group</th><th class="num">Mem</th><th class="num">Active</th><th class="num">Logs '+periodLbl+'</th><th class="num">WoW</th><th>Top</th><th class="num">Silent</th><th>Season</th>'
+      +'</tr></thead><tbody>'+(body||'<tr><td colspan="8" class="tmuted">No groups</td></tr>')+'</tbody></table></div>';
+  }
+  function nameLinkGroup(name){ return '<span style="font-weight:700">'+E(name)+'</span>'; }
+
+  // ── 4. TRENDS ──
+  function buildTrends(data){
+    return '<div class="shdr">Trends · '+MONTHS[data.selM-1]+' '+data.selY+'</div>'
+      +'<div class="card"><div id="sdTrendsInner">'+buildTrendsInner(data)+'</div></div>';
+  }
+  function buildTrendsInner(data){
+    var daysIn=new Date(data.selY,data.selM,0).getDate();
+    // Combined daily counts + per-group daily counts
+    var combined=new Array(daysIn+1).fill(0);
+    var perGroup={};
+    data.logs.forEach(function(l){
+      if(l.m!==data.selM||l.y!==data.selY) return;
+      combined[l.d]=(combined[l.d]||0)+1;
+      (perGroup[l.groupCode]||(perGroup[l.groupCode]=new Array(daysIn+1).fill(0)))[l.d]++;
+    });
+    var maxC=Math.max(1,...combined.slice(1));
+    var toggle='<div style="display:flex;gap:6px;margin-bottom:10px">'
+      +tb('combined','Combined')+tb('group','By group')+'</div>';
+    function tb(mode,label){ var on=state.trendMode===mode; return '<button class="btn btn-surface btn-sm" style="flex:0 0 auto;margin:0;'+(on?'border-color:var(--gold);color:var(--gold)':'')+'" onclick="window.SuperDash.trendMode(\''+mode+'\')">'+label+'</button>'; }
+    var chart;
+    if(state.trendMode==='group'){
+      var codes=Object.keys(perGroup);
+      chart=codes.length? codes.map(function(c){
+        var gi=data.groupInfo[c], arr=perGroup[c], mx=Math.max(1,...arr.slice(1));
+        return '<div style="margin-bottom:10px"><div style="font-size:11px;color:var(--muted);margin-bottom:3px">'+E(gi?gi.name:c)+' · '+arr.reduce(function(s,n){return s+n;},0)+' logs</div>'+bars(arr,daysIn,mx)+'</div>';
+      }).join('') : '<div class="tmuted">No logs this month.</div>';
+    } else {
+      chart=bars(combined,daysIn,maxC)+'<div style="font-size:11px;color:var(--muted);margin-top:4px;text-align:center">Logs per day · '+combined.reduce(function(s,n){return s+n;},0)+' total</div>';
+    }
+    // Workout distribution
+    var wc={}, wt=0;
+    data.logs.forEach(function(l){ if(l.m!==data.selM||l.y!==data.selY) return;
+      l.workouts.forEach(function(w){ var lab=String(w||'').trim(); if(!lab) return; var k=lab.toLowerCase(); (wc[k]||(wc[k]={label:lab,n:0})).n++; wt++; }); });
+    var wdist=Object.keys(wc).map(function(k){return wc[k];}).sort(function(a,b){return b.n-a.n;}).slice(0,8);
+    var wdHtml=wdist.length? wdist.map(function(w){ var p=pct(w.n,wt);
+      return '<div class="sd-wd"><div class="sd-wd-l">'+E(w.label)+'</div><div class="sd-wd-bar"><div style="width:'+p+'%"></div></div><div class="sd-wd-n">'+w.n+' · '+p+'%</div></div>';
+    }).join('') : '<div class="tmuted">No workouts logged this month.</div>';
+    // Tab clicks per group (selected month)
+    var tabHtml=data.groups.map(function(g){
+      var gi=data.groupInfo[g.code]; if(!gi) return '';
+      if(!gi.tabs){ return '<div class="sd-tabline"><b>'+E(gi.name)+'</b> <span class="tmuted">no tab data for '+MONTHS[data.selM-1].slice(0,3)+'</span></div>'; }
+      var ent=Object.keys(gi.tabs).map(function(k){return [k,gi.tabs[k]];}).filter(function(e){return typeof e[1]==='number';}).sort(function(a,b){return b[1]-a[1];});
+      var tot=ent.reduce(function(s,e){return s+e[1];},0)||1;
+      var str=ent.map(function(e){return (TAB_LABELS[e[0]]||e[0])+' '+pct(e[1],tot)+'%';}).join(' · ');
+      return '<div class="sd-tabline"><b>'+E(gi.name)+'</b> '+str+'</div>';
+    }).join('');
+    return toggle+chart
+      +'<div class="sd-subh">Workout types · '+MONTHS[data.selM-1]+'</div>'+wdHtml
+      +'<div class="sd-subh">Tab usage · '+MONTHS[data.selM-1]+'</div>'+tabHtml;
+  }
+  function bars(arr,daysIn,mx){
+    var b='<div class="sd-bars">';
+    for(var d=1; d<=daysIn; d++){ var h=Math.round((arr[d]||0)/mx*100); b+='<div class="sd-bar" title="'+d+': '+(arr[d]||0)+'"><div style="height:'+h+'%"></div></div>'; }
+    return b+'</div>';
+  }
+
+  // ── 5. CHAMPIONS ──
+  function buildChampions(data,sets){
+    var tm=data.todayMid;
+    // top current streaks (from logs, live)
+    var streaks=[];
+    Object.keys(sets.gp).forEach(function(k){ var parts=k.split('||'); var cs=currentStreak(sets.gp[k],tm);
+      if(cs>0) streaks.push({ code:parts[0], name:parts[1], streak:cs }); });
+    streaks.sort(function(a,b){return b.streak-a.streak;});
+    // top loggers this selected month (distinct days per group,player)
+    var lg={};
+    data.logs.forEach(function(l){ if(l.m!==data.selM||l.y!==data.selY) return; var k=l.groupCode+'||'+l.player; (lg[k]||(lg[k]=new Set())).add(l.dateStr); });
+    var loggers=Object.keys(lg).map(function(k){var p=k.split('||');return {code:p[0],name:p[1],days:lg[k].size};}).sort(function(a,b){return b.days-a.days;});
+    var gname=function(c){ var gi=data.groupInfo[c]; return gi?gi.name:c; };
+    function list(arr,fmt){ return arr.slice(0,5).map(function(r,i){
+      return '<div class="sd-row"><div><span class="sd-rank">'+(i+1)+'</span> '+nameLink(r.name)+' <span class="sd-sub">'+E(gname(r.code))+'</span></div><div style="font-weight:800;color:var(--gold)">'+fmt(r)+'</div></div>';
+    }).join('')||'<div class="tmuted" style="padding:6px 0">—</div>'; }
+    // last completed season winners per group
+    var winRows=data.groups.map(function(g){
+      var gi=data.groupInfo[g.code]; if(!gi) return '';
+      var a=gi.archived;
+      if(!a||!a.badgesAwarded){ return '<div class="sd-row"><div><b>'+E(gi.name)+'</b></div><div class="tmuted" style="font-size:12px">no completed season yet</div></div>'; }
+      var sw=(a.badgesAwarded.find(function(b){return (b.badges||[]).includes('season_winner');})||{}).name;
+      var tw=(a.teamStandings&&a.teamStandings[0])?a.teamStandings[0].team:null;
+      var lbl=MONTHS[(a.month||1)-1].slice(0,3)+' '+a.year;
+      return '<div class="sd-row"><div><b>'+E(gi.name)+'</b> <span class="sd-sub">'+lbl+'</span></div>'
+        +'<div style="font-size:12px">'+(sw?'🥇 '+E(sw):'—')+(tw?' · 🏆 Team '+E(tw):'')+'</div></div>';
+    }).join('');
+    return '<div class="shdr">Champions</div>'
+      +'<div class="card"><div class="sd-subh" style="margin-top:0">Top current streaks <span class="tmuted" style="font-weight:400">(from logs)</span></div>'+list(streaks,function(r){return '🔥 '+r.streak;})+'</div>'
+      +'<div class="card" style="margin-top:10px"><div class="sd-subh" style="margin-top:0">Top loggers · '+MONTHS[data.selM-1]+'</div>'+list(loggers,function(r){return r.days+' days';})+'</div>'
+      +'<div class="card" style="margin-top:10px"><div class="sd-subh" style="margin-top:0">Last completed season</div>'+winRows+'</div>';
+  }
+
+  // ── PLAYER DRILL-DOWN ──
+  async function openPlayer(name){
+    injectStyle();
+    var ov=document.getElementById('sdModal');
+    if(!ov){ ov=document.createElement('div'); ov.id='sdModal'; ov.className='sd-modal'; document.body.appendChild(ov); }
+    ov.innerHTML='<div class="sd-modal-card"><div class="tmuted">Loading '+E(name)+'…</div></div>';
+    ov.style.display='flex';
+    try{
+      var data=state.data; var tm=data.todayMid;
+      var nlc=name.toLowerCase();
+      // groups they're a current member of
+      var groups=[]; var userId=null;
+      data.groups.forEach(function(g){ var gi=data.groupInfo[g.code]; if(!gi) return;
+        var entry=gi.roster.find(function(p){return p&&p.name&&p.name.toLowerCase()===nlc;});
+        if(entry){ groups.push(gi.name); if(entry.userId) userId=entry.userId; } });
+      // logs (all fetched months) for this name, across groups
+      var mine=data.logs.filter(function(l){return l.player&&l.player.toLowerCase()===nlc;});
+      var monthLogs=mine.filter(function(l){return l.m===data.selM&&l.y===data.selY;});
+      // combined day set across groups → streak (live)
+      var allDays=new Set(); mine.forEach(function(l){allDays.add(l.dateStr);});
+      var curStreakLogs=currentStreak(allDays,tm);
+      var lastAgo=Infinity; allDays.forEach(function(ds){var a=daysAgoOf(ds,tm); if(a>=0&&a<lastAgo)lastAgo=a;});
+      // users doc (lifetime) where it exists
+      var stored=null;
+      if(userId){ try{ var us=await db.collection('users').doc(userId).get(); if(us.exists) stored=(us.data().stats)||{}; }catch(e){} }
+      var last10=mine.slice().sort(function(a,b){return a.dateStr<b.dateStr?1:-1;}).slice(0,10);
+      var last10Html=last10.map(function(l){ return '<div class="sd-row"><div>'+l.dateStr+' <span class="sd-sub">'+E(data.groupInfo[l.groupCode]?data.groupInfo[l.groupCode].name:l.groupCode)+'</span></div><div style="font-size:12px">'+E(l.workouts.join(', ')||'—')+'</div></div>'; }).join('')||'<div class="tmuted">No logs in loaded window.</div>';
+      var streakLine = stored && (stored.longestStreak!=null||stored.currentStreak!=null)
+        ? 'Current <b>'+curStreakLogs+'</b> (from logs) · Longest <b>'+(stored.longestStreak||0)+'</b> (profile)'
+        : 'Current <b>'+curStreakLogs+'</b> · Longest <b>'+longestFrom(allDays)+'</b> <span class="tmuted">(from logs)</span>';
+      ov.innerHTML='<div class="sd-modal-card">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div style="font-size:20px;font-weight:800">'+E(name)+'</div><button class="btn btn-surface btn-sm" style="margin:0" onclick="window.SuperDash.closePlayer()">Close</button></div>'
+        +'<div class="sd-sub" style="margin-bottom:12px">'+groups.map(E).join(' · ')+(userId?'':' <span class="tmuted">· no profile/userId</span>')+'</div>'
+        +'<div class="sd-pulse" style="margin-bottom:14px">'
+          +'<div class="sd-tile"><div class="sd-tile-v">'+monthLogs.length+'</div><div class="sd-tile-l">Logs '+MONTHS[data.selM-1].slice(0,3)+'</div></div>'
+          +'<div class="sd-tile"><div class="sd-tile-v" style="color:var(--orange)">'+curStreakLogs+'</div><div class="sd-tile-l">Current streak</div></div>'
+          +'<div class="sd-tile"><div class="sd-tile-v" style="color:'+(lastAgo>=4?'var(--red)':'var(--green)')+'">'+(lastAgo===Infinity?'∞':lastAgo)+'</div><div class="sd-tile-l">Days silent</div></div>'
+          +'<div class="sd-tile"><div class="sd-tile-v">'+(stored&&stored.totalWorkouts!=null?stored.totalWorkouts:mine.length)+'</div><div class="sd-tile-l">'+(stored&&stored.totalWorkouts!=null?'Total (profile)':'Logs (window)')+'</div></div>'
+        +'</div>'
+        +'<div class="sd-subh" style="margin-top:0">Streaks</div><div style="font-size:13px;margin-bottom:12px">'+streakLine+'</div>'
+        +'<div class="sd-subh">Last 10 logs</div>'+last10Html
+        +'</div>';
+    }catch(e){ console.error('[SuperDash.player]',e); ov.innerHTML='<div class="sd-modal-card"><div style="color:var(--red)">Could not load player.</div><button class="btn btn-surface btn-sm" onclick="window.SuperDash.closePlayer()">Close</button></div>'; }
+  }
+  function longestFrom(set){ var arr=[...set].sort(); if(!arr.length)return 0; var lo=1,run=1; for(var i=1;i<arr.length;i++){ var diff=Math.round((parseYmd(arr[i])-parseYmd(arr[i-1]))/86400000); run=diff===1?run+1:1; if(run>lo)lo=run; } return lo; }
+  function closePlayer(){ var ov=document.getElementById('sdModal'); if(ov) ov.style.display='none'; }
+
+  // ── STYLE ──
+  function injectStyle(){
+    if(document.getElementById('sdStyle')) return;
+    var s=document.createElement('style'); s.id='sdStyle';
+    s.textContent=
+      '.sd-pulse{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}'
+      +'.sd-tile{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center}'
+      +'.sd-tile-v{font-size:24px;font-weight:900;color:var(--gold);line-height:1.1}'
+      +'.sd-tile-l{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-top:3px}'
+      +'.sd-tile-s{font-size:10px;color:var(--muted);margin-top:1px}'
+      +'.sd-attn-h{font-size:12px;font-weight:700;color:var(--red);margin-bottom:6px}'
+      +'.sd-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)}'
+      +'.sd-row:last-child{border-bottom:none}'
+      +'.sd-name{font-weight:700;color:var(--text);cursor:pointer;text-decoration:underline;text-decoration-color:var(--muted);text-underline-offset:2px}'
+      +'.sd-name:active{color:var(--gold)}'
+      +'.sd-sub{font-size:11px;color:var(--muted);font-weight:400}'
+      +'.sd-silent{font-size:12px;font-weight:700;color:var(--red);white-space:nowrap}'
+      +'.sd-streak{font-size:12px;font-weight:700;color:var(--orange);white-space:nowrap}'
+      +'.sd-table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}'
+      +'.sd-table th{text-align:left;color:var(--muted);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.4px;padding:6px 8px;border-bottom:1px solid var(--border)}'
+      +'.sd-table td{padding:8px;border-bottom:1px solid var(--border)}'
+      +'.sd-table td.num,.sd-table th.num{text-align:right;font-variant-numeric:tabular-nums}'
+      +'.sd-bars{display:flex;align-items:flex-end;gap:2px;height:90px;padding-top:6px}'
+      +'.sd-bar{flex:1;min-width:2px;display:flex;align-items:flex-end;height:100%}'
+      +'.sd-bar>div{width:100%;background:var(--gold);border-radius:2px 2px 0 0;min-height:1px;opacity:.85}'
+      +'.sd-subh{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:16px 0 8px}'
+      +'.sd-wd{display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:12px}'
+      +'.sd-wd-l{width:90px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
+      +'.sd-wd-bar{flex:1;background:var(--surface);border-radius:5px;height:9px;overflow:hidden}'
+      +'.sd-wd-bar>div{height:100%;background:var(--gold);border-radius:5px}'
+      +'.sd-wd-n{width:64px;flex:none;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}'
+      +'.sd-tabline{font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);color:var(--muted)}'
+      +'.sd-tabline:last-child{border-bottom:none}.sd-tabline b{color:var(--text)}'
+      +'.sd-rank{display:inline-block;width:18px;color:var(--muted);font-weight:800}'
+      +'.sd-modal{position:fixed;inset:0;z-index:10002;display:none;align-items:flex-start;justify-content:center;overflow-y:auto;padding:24px 14px;background:rgba(6,6,9,.9);backdrop-filter:blur(8px)}'
+      +'.sd-modal-card{width:100%;max-width:440px;margin:auto;background:#121218;border:1px solid rgba(212,168,67,.28);border-radius:20px;padding:20px}';
+    document.head.appendChild(s);
+  }
 })();
 </script>
 </body>
