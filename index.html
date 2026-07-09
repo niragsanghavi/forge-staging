@@ -94,6 +94,7 @@
     <div style="display:flex;align-items:center;gap:10px">
       <button class="theme-toggle" id="connResetBtn" onclick="confirmConnReset()" title="Fix connection issues" aria-label="Fix connection issues" style="opacity:.55"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></button>
       <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark">🌙</button>
+      <button class="theme-toggle" onclick="showTab('profile')" title="Profile">👤</button>
       <div class="nav-user" onclick="promptSwitch()">
         <div class="nav-av" id="navAv"></div>
         <span class="nav-nm" id="navNm"></span>
@@ -273,6 +274,15 @@
       <select id="aPlayer"><option value="">Select player</option></select>
       <button class="btn btn-gold" onclick="award30()">Award +50 Pts</button>
     </div>
+  </div>
+
+  <!-- PROFILE -->
+  <div class="page" id="page-profile">
+    <div class="page-title" style="padding-bottom:4px">Profile</div>
+    <div class="tmuted" style="margin-bottom:16px;font-size:12px">Your stats across every group</div>
+    <div class="card" id="profileStatsCard"><div class="tmuted">Loading…</div></div>
+    <div class="shdr">Past Seasons</div>
+    <div class="card" id="profileSeasonsCard"><div class="tmuted">Loading…</div></div>
   </div>
 
   <!-- IRON PLEDGE -->
@@ -962,7 +972,7 @@ function promptSwitch(){
     const remaining = removeSession(groupCode);
     const next = remaining[0];
     groupCode = next.code; me = next.player; setActiveCode(next.code);
-    allLogs=[]; bonus30=[]; flags=[]; reactions=[]; activeTwists={}; jackAwards=[]; bets={}; ironPledgeBonuses=[]; twistWindows=[]; adminUnlocked=false;
+    allLogs=[]; bonus30=[]; flags=[]; reactions=[]; activeTwists={}; jackAwards=[]; bets={}; ironPledgeBonuses=[]; twistWindows=[]; adminUnlocked=false; _myGoals=null;
     showTab('home');
     loadGroup(groupCode, true);
   } else {
@@ -1022,7 +1032,7 @@ function handleDeadGroup(code, msg){
   if(remaining.length){
     const next = remaining[0];
     groupCode = next.code; me = next.player; setActiveCode(next.code);
-    allLogs=[]; bonus30=[]; flags=[]; reactions=[]; activeTwists={}; jackAwards=[]; bets={}; ironPledgeBonuses=[]; twistWindows=[]; adminUnlocked=false;
+    allLogs=[]; bonus30=[]; flags=[]; reactions=[]; activeTwists={}; jackAwards=[]; bets={}; ironPledgeBonuses=[]; twistWindows=[]; adminUnlocked=false; _myGoals=null;
     loadGroup(groupCode, true);
   } else {
     showScreen('onboard'); showObStep(1);
@@ -1083,7 +1093,7 @@ function switchGroup(code){
   season = null; seasonId = null;
   setActiveCode(code);
   groupCode = s.code; me = s.player;
-  allLogs=[]; bonus30=[]; flags=[]; reactions=[]; activeTwists={}; jackAwards=[]; bets={}; ironPledgeBonuses=[]; twistWindows=[]; adminUnlocked=false;
+  allLogs=[]; bonus30=[]; flags=[]; reactions=[]; activeTwists={}; jackAwards=[]; bets={}; ironPledgeBonuses=[]; twistWindows=[]; adminUnlocked=false; _myGoals=null;
   ['heroCard','nudgeCard','streakCardHighlight','roleBar','hStats','twistBanner','calGrid','streakCard','teamStand','indLb','ptsBk','feedList','globalConsentCard'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=''; });
   showTab('home');
   loadGroup(groupCode, true);
@@ -1379,17 +1389,44 @@ function renderHome(){
 }
 
 // ── PERSONAL MONTHLY GOAL RING ────────────────────────────────────────────
-// Stored entirely in localStorage — never touches Firestore.
-// Key: forge_goal_{groupCode}_{YYYY-MM}
+// Stored on users/{userId}.monthlyGoals.{groupCode}_{YYYY-MM} (rev-3
+// addendum) — was localStorage-only before, which reset on every device and
+// is exactly why nobody used it. Loaded once per session (no live listener;
+// a goal changes rarely) and cached in _myGoals; every render after the
+// first reads the cache synchronously. On first load, an existing
+// localStorage value for this exact key is migrated forward rather than
+// dropped, then cleared locally.
+let _myGoals = null;   // null = not yet loaded this session
 function _goalKey(){
   if(!season||!groupCode) return null;
-  return `forge_goal_${groupCode}_${season.year}-${String(season.month).padStart(2,'0')}`;
+  return `${groupCode}_${season.year}-${String(season.month).padStart(2,'0')}`;
+}
+async function _loadMyGoals(){
+  if(!me||!me.userId) return;
+  _myGoals = {};   // set immediately so a concurrent renderGoalRing() call mid-fetch doesn't refetch
+  try{
+    const uSnap = await db.collection('users').doc(me.userId).get();
+    _myGoals = (uSnap.exists && uSnap.data().monthlyGoals) || {};
+  }catch(e){ logErr('_loadMyGoals', e); _myGoals = {}; }
+
+  const key = _goalKey();
+  if(key && _myGoals[key]==null){
+    const legacy = parseInt(localStorage.getItem(`forge_goal_${key}`));
+    if(legacy>0){
+      _myGoals[key] = legacy;
+      db.collection('users').doc(me.userId).set({ monthlyGoals: {[key]: legacy} }, {merge:true})
+        .then(()=>localStorage.removeItem(`forge_goal_${key}`))
+        .catch(e=>logErr('_loadMyGoals: migration write failed', e));
+    }
+  }
+  renderGoalRing();
 }
 function renderGoalRing(){
   const el=document.getElementById('goalRingCard');
   if(!el||!season||!me) return;
   const key=_goalKey(); if(!key) return;
-  const goal=parseInt(localStorage.getItem(key))||0;
+  if(_myGoals===null){ _loadMyGoals(); el.innerHTML='<div class="card"><div class="tmuted">Loading…</div></div>'; return; }
+  const goal=_myGoals[key]||0;
   const sc=score(me.name);
   const wo=sc.wo;
 
@@ -1439,8 +1476,8 @@ function renderGoalRing(){
 }
 
 function openGoalInput(){
-  const key=_goalKey(); if(!key) return;
-  const goal=parseInt(localStorage.getItem(key))||0;
+  const key=_goalKey(); if(!key||_myGoals===null) return;
+  const goal=_myGoals[key]||0;
   if(!goal){
     // No goal yet — replace the placeholder card with an inline input form
     const el=document.getElementById('goalRingCard');
@@ -1468,12 +1505,14 @@ function closeGoalInput(){
 }
 
 function saveGoalInput(){
-  const key=_goalKey(); if(!key) return;
+  const key=_goalKey(); if(!key||!me?.userId||_myGoals===null) return;
   const inp=document.getElementById('goalInput');
   const val=parseInt(inp?.value);
   if(!val||val<1||val>31){toast('Enter a goal between 1 and 31 workouts.','error');return;}
-  const oldGoal=parseInt(localStorage.getItem(key))||0;
-  localStorage.setItem(key,val);
+  const oldGoal=_myGoals[key]||0;
+  _myGoals[key]=val;   // optimistic — render doesn't wait on the write
+  db.collection('users').doc(me.userId).set({ monthlyGoals: {[key]: val} }, {merge:true})
+    .catch(e=>logErr('saveGoalInput', e));
   if(oldGoal>0&&val<oldGoal){
     toast('Setting the bar lower. Efficiency, not defeat.');
   } else if(oldGoal>0&&val>oldGoal){
@@ -1482,6 +1521,123 @@ function saveGoalInput(){
     toast(`Goal set: ${val} workouts this month.`,'success');
   }
   renderGoalRing();
+}
+
+// ── PROFILE TAB ───────────────────────────────────────────────────────────
+const PROFILE_MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const PROFILE_BADGE_LABELS={ season_winner:'🥇 Season Winner', team_winner:'🏆 Team Winner' };
+function profileOrdinal(n){ const s=['th','st','nd','rd'], v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); }
+
+let _profileSeasonsCache=[];   // populated by renderProfile(), read by openArchivedRecap()
+
+async function renderProfile(){
+  const statsEl=document.getElementById('profileStatsCard');
+  const seasonsEl=document.getElementById('profileSeasonsCard');
+  if(!statsEl||!seasonsEl) return;
+  if(!me||!me.userId){
+    statsEl.innerHTML='<div class="tmuted">Still setting up your profile — give it a moment and reopen this tab.</div>';
+    seasonsEl.innerHTML='';
+    return;
+  }
+  statsEl.innerHTML='<div class="tmuted">Loading…</div>';
+  seasonsEl.innerHTML='<div class="tmuted">Loading…</div>';
+  try{
+    const uSnap = await db.collection('users').doc(me.userId).get();
+    const stats = (uSnap.exists && uSnap.data().stats) || {};
+
+    // Display-time freshness: a streak only lives in the stored fields as of
+    // the LAST submit, so if more than a day has passed since lastLoggedDay,
+    // show it as broken NOW rather than waiting for the next log to correct
+    // it — same "is this actually still alive" check the group-scoped Heat
+    // already does at render time, just derived from the stored date instead
+    // of a live day-set (no extra read needed, lastLoggedDay is already here).
+    let displayedStreak = stats.currentStreak||0;
+    if(stats.lastLoggedDay){
+      const today=new Date();
+      const lastDate=new Date(stats.lastLoggedDay+'T00:00:00');
+      const todayDate=new Date(today.getFullYear(),today.getMonth(),today.getDate());
+      const daysSince=Math.round((todayDate-lastDate)/86400000);
+      if(daysSince>1) displayedStreak=0;
+    } else {
+      displayedStreak=0;
+    }
+
+    const badgeCounts=stats.badgeCounts||{};
+    const totalBadges=Object.values(badgeCounts).reduce((s,n)=>s+n,0);
+    const badgeLines=Object.entries(badgeCounts).filter(([,n])=>n>0)
+      .map(([k,n])=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px"><span>${PROFILE_BADGE_LABELS[k]||esc(k)}</span><b style="color:var(--gold)">${n}</b></div>`).join('');
+
+    statsEl.innerHTML=`
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:${badgeLines?'14px':'0'}">
+        <div style="background:var(--gold-l);border-radius:10px;padding:12px;text-align:center">
+          <div style="font-size:24px;font-weight:900;color:var(--gold)">${stats.totalWorkouts||0}</div>
+          <div style="font-size:10px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Workouts logged</div>
+        </div>
+        <div style="background:var(--orange-l);border-radius:10px;padding:12px;text-align:center">
+          <div style="font-size:24px;font-weight:900;color:var(--orange)">${displayedStreak}<span style="font-size:12px"> d</span></div>
+          <div style="font-size:10px;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Current streak</div>
+        </div>
+        <div style="background:var(--green-l);border-radius:10px;padding:12px;text-align:center">
+          <div style="font-size:24px;font-weight:900;color:var(--green)">${stats.longestStreak||0}<span style="font-size:12px"> d</span></div>
+          <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Longest streak</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
+          <div style="font-size:24px;font-weight:900;color:var(--text)">${stats.seasonsPlayed||0}</div>
+          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Seasons played</div>
+        </div>
+      </div>
+      ${badgeLines?`<div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Badges (${totalBadges})</div>${badgeLines}`:''}
+    `;
+
+    const seasonsSnap = await db.collection('users').doc(me.userId).collection('seasons').get();
+    _profileSeasonsCache = seasonsSnap.docs.map(d=>({id:d.id, ...d.data()}))
+      .sort((a,b)=> (b.year-a.year) || (b.month-a.month));
+    if(!_profileSeasonsCache.length){
+      seasonsEl.innerHTML='<div class="tmuted">No completed seasons yet — this fills in after your first month-end rollover.</div>';
+      return;
+    }
+    seasonsEl.innerHTML=_profileSeasonsCache.map((s,i)=>{
+      const teamResult = s.teamRank ? `Team ${esc(s.team)} · ${profileOrdinal(s.teamRank)}` : '';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="openArchivedRecap(${i})">
+        <div style="font-size:13px;font-weight:600">${esc(s.groupName||s.groupCode)} <span style="color:var(--muted);font-weight:400">— ${PROFILE_MONTH_NAMES[(s.month||1)-1]} ${s.year}</span></div>
+        <div style="font-size:12px;color:var(--gold);font-weight:700;flex-shrink:0;margin-left:10px;white-space:nowrap">#${s.rank||'?'}${teamResult?' · '+teamResult:''} ›</div>
+      </div>`;
+    }).join('');
+  }catch(e){
+    logErr('renderProfile', e);
+    statsEl.innerHTML='<div class="tmuted">Could not load profile — check connection.</div>';
+    seasonsEl.innerHTML='';
+  }
+}
+
+function openArchivedRecap(i){
+  const s=_profileSeasonsCache[i]; if(!s) return;
+  const d=buildRecapDataFromArchive(s);
+  if(window.__recapShowFromData) window.__recapShowFromData(d);
+}
+
+// Maps a users/{userId}/seasons/{code}_{sid} archive doc (S2's snapshot writer
+// output — rank/total/wo/streak/team/teamRank/badges only, no group-wide
+// data like other players' scores or workout-type breakdowns, since none of
+// that survives archival) onto the SAME data shape the live recap IIFE's
+// buildHTML()/generateImage() consume. Fields the archive can't know
+// (winningTeam, top3, totalWorkouts, topWorkout, myTopWorkouts) are left
+// null/empty — both render functions already skip those sections when absent.
+function buildRecapDataFromArchive(s){
+  const badges=s.badges||[];
+  return {
+    groupName: s.groupName || s.groupCode || 'Forge',
+    groupCode: s.groupCode || '', seasonId: s.sid || '',
+    monthName: PROFILE_MONTH_NAMES[(s.month||1)-1] || '', year: s.year || '',
+    nextMonthName: PROFILE_MONTH_NAMES[(s.month||1)%12] || '',
+    winningTeam: null, top3: [], longest: null, climber: null,
+    totalWorkouts: null, topWorkout: null,
+    meName: (me&&me.name)||'', myWo: s.wo||0,
+    myTotal: (s.total!=null?s.total:null), myStreak: (s.streak!=null?s.streak:null), badges,
+    myTopWorkouts: [],
+    myTeamResult: s.team ? { team:s.team, rank:s.teamRank||null, total:null, gapToFirst:null, won:badges.includes('team_winner') } : null,
+    achievements: { topScorer: badges.includes('season_winner'), biggestClimber:false, longestStreak:false }
+  };
 }
 
 function showCalTip(el,text){
@@ -1630,6 +1786,48 @@ function addCustom(){
 function updateSel(){ const w=document.getElementById('selPrev'),l=document.getElementById('selList'); if(selW.length===0){w.classList.add('hidden');return;} w.classList.remove('hidden'); l.textContent=selW.join(' · '); }
 function updBtn(){ document.getElementById('subBtn').disabled=selW.length===0; }
 
+function ymdOf(year,month,day){ return `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`; }
+
+// Cross-group streak (NORTHSTAR §2.1 rev-3 addendum): counts calendar days on
+// which this person logged at least once, in ANY group — never per-group, and
+// never more than once for the same day even if today's submit broadcast to
+// several groups at once (that's still ONE call to this function; see
+// submitLog's single fire-and-forget call site). Keyed off the WORKOUT'S
+// calendar date, not wall-clock "now": a backlogged day earlier than the
+// stored lastLoggedDay is a deliberate no-op for streak purposes — filling in
+// an older gap doesn't retroactively move or repair the streak's tip. A
+// transaction because the next value depends on the previous one (reset vs.
+// continue can't be expressed as a blind increment).
+async function updateStreakAndStats(userId, year, month, day){
+  const logDate = new Date(year, month-1, day);
+  const logStr = ymdOf(year, month, day);
+  const uRef = db.collection('users').doc(userId);
+  await db.runTransaction(async tx=>{
+    const snap = await tx.get(uRef);
+    const stats = (snap.exists && snap.data().stats) || {};
+    const lastStr = stats.lastLoggedDay || null;
+    let currentStreak = stats.currentStreak || 0;
+    let newLastStr = lastStr;
+    if(lastStr === logStr){
+      // Already counted today (this exact group, another group in the same
+      // broadcast, or a separate earlier submit today) — no change.
+    } else if(lastStr === null){
+      currentStreak = 1; newLastStr = logStr;
+    } else {
+      const lastDate = new Date(lastStr+'T00:00:00');
+      const dayDiff = Math.round((logDate - lastDate) / 86400000);
+      if(dayDiff === 1){ currentStreak = currentStreak + 1; newLastStr = logStr; }
+      else if(dayDiff > 1){ currentStreak = 1; newLastStr = logStr; }
+      // dayDiff < 0 (backlog behind the current tip): leave streak/lastLoggedDay untouched.
+    }
+    const longestStreak = Math.max(stats.longestStreak || 0, currentStreak);
+    tx.set(uRef, {
+      lastActiveAt: firebase.firestore.FieldValue.serverTimestamp(),
+      stats: { totalWorkouts:(stats.totalWorkouts||0)+1, currentStreak, longestStreak, lastLoggedDay:newLastStr }
+    }, {merge:true});
+  });
+}
+
 async function submitLog(){
   const btn=document.getElementById('subBtn');
   btn.disabled=true; btn.textContent='Saving...';
@@ -1702,16 +1900,12 @@ async function submitLog(){
     // each of those is wrapped separately so one failing can't skip the rest.
     try {
       // S1 identity layer: single fire-and-forget merge-update per log submit
-      // (NORTHSTAR §2.1's exact write path — lastActiveAt + totalWorkouts
-      // only; no activity/heatmap/streak writes, those are cut this sprint).
-      // Once per submit regardless of how many groups it posted to — this is
-      // USER-scoped, not per-group. No-ops until me.userId exists (self-heal
-      // or migration backfills it).
+      // (NORTHSTAR §2.1's write path). Once per submit regardless of how many
+      // groups it posted to — this is USER-scoped, not per-group. No-ops
+      // until me.userId exists (self-heal or migration backfills it).
       if(me.userId){
-        db.collection('users').doc(me.userId).set({
-          lastActiveAt: firebase.firestore.FieldValue.serverTimestamp(),
-          stats: { totalWorkouts: firebase.firestore.FieldValue.increment(1) }
-        }, {merge:true}).catch(e=>logErr('submitLog: users-doc write failed', e));
+        updateStreakAndStats(me.userId, season.year, season.month, selDay)
+          .catch(e=>logErr('submitLog: users-doc write failed', e));
       }
 
       if(activeTwists['jack_of_all_trades']?.enabled){
@@ -3801,6 +3995,7 @@ async function showTab(t){
   if(t==='global') loadGlobal();
   if(t==='pledge') renderIronPledgePage();
   if(t==='log') buildDayStrip();
+  if(t==='profile') renderProfile();
   trackTabClick(t); // fire-and-forget — no await
 }
 
@@ -4073,6 +4268,16 @@ if('serviceWorker' in navigator){
     // 2) Personal line
     html += '<div class="recap-personal">You logged <b>'+d.myWo+'</b> workout'+(d.myWo===1?'':'s')+' this month</div>';
 
+    // 2b) Your season stats (myTotal/myStreak) — only set by archived-recap
+    // callers (Profile tab); computeRecap() never sets these, so this section
+    // never appears on the live end-of-month recap. Purely additive.
+    if(d.myTotal!=null || (d.myStreak!=null && d.myStreak>0)){
+      html += '<div class="recap-sec">'+
+        (d.myTotal!=null?'<div class="recap-stat"><span>Points earned</span><b>'+d.myTotal+'</b></div>':'')+
+        (d.myStreak!=null && d.myStreak>0?'<div class="recap-stat"><span>Streak at season end</span><b>'+d.myStreak+' day'+(d.myStreak===1?'':'s')+'</b></div>':'')+
+        '</div>';
+    }
+
     // 3) Your Top 3 workouts (viewing player's own logs)
     if(d.myTopWorkouts && d.myTopWorkouts.length){
       html += '<div class="recap-sec"><div class="recap-h">Your top '+d.myTopWorkouts.length+' workout'+(d.myTopWorkouts.length===1?'':'s')+'</div>';
@@ -4109,11 +4314,15 @@ if('serviceWorker' in navigator){
       var wcL = d.winningTeam ? teamHex(d.winningTeam.team) : '#d4a843';
       var winnerName = d.winningTeam ? ('Team '+rEsc(d.winningTeam.team)) : 'Another team';
       var gap = d.myTeamResult.gapToFirst;
+      // gap is null for archived recaps (only this player's own rank survives
+      // to the archive, not every team's totals) — omit the phrase rather
+      // than print "null points behind". Live recap always has a real gap.
+      var gapPhrase = (gap!=null) ? (', just '+gap+' point'+(gap===1?'':'s')+' behind') : '';
       html += '<div class="recap-sec recap-winner" style="border-color:'+wcL+'55">'+
         crownSVG(wcL)+
         '<div class="rw-body"><div class="rw-team" style="color:'+wcL+'">'+winnerName+' wins this month</div>'+
         '<div class="rw-sub">Your team (Team '+rEsc(d.myTeamResult.team)+') came '+ordinal(d.myTeamResult.rank)+
-          ' place, just '+gap+' point'+(gap===1?'':'s')+' behind. '+rEsc(d.monthName)+
+          ' place'+gapPhrase+'. '+rEsc(d.monthName)+
           ' may be over, but tomorrow is a fresh start.</div>'+
         '</div></div>';
     } else if(d.winningTeam){
@@ -4136,11 +4345,14 @@ if('serviceWorker' in navigator){
       html += '</div>';
     }
 
-    // 7) Group totals
-    html += '<div class="recap-sec"><div class="recap-h">The group</div>'+
-      '<div class="recap-stat"><span>Workouts logged</span><b>'+d.totalWorkouts+'</b></div>'+
-      (d.topWorkout?'<div class="recap-stat"><span>Most popular</span><b>'+rEsc(d.topWorkout.label)+' ('+d.topWorkout.n+')</b></div>':'')+
-      '</div>';
+    // 7) Group totals — archived recaps don't have group-wide totals, so this
+    // whole section is skipped rather than printing "undefined".
+    if(d.totalWorkouts!=null || d.topWorkout){
+      html += '<div class="recap-sec"><div class="recap-h">The group</div>'+
+        (d.totalWorkouts!=null?'<div class="recap-stat"><span>Workouts logged</span><b>'+d.totalWorkouts+'</b></div>':'')+
+        (d.topWorkout?'<div class="recap-stat"><span>Most popular</span><b>'+rEsc(d.topWorkout.label)+' ('+d.topWorkout.n+')</b></div>':'')+
+        '</div>';
+    }
 
     // 8) Buttons
     html += '<div class="recap-btns">'+
@@ -4204,7 +4416,10 @@ if('serviceWorker' in navigator){
       ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(140,310); ctx.lineTo(S-140,310); ctx.stroke();
 
-      // Winning team
+      // Winning team (live recap) — or, when the group-wide winner isn't
+      // known (archived recap: only this player's own team/rank survived),
+      // a leaner "YOUR TEAM" block in the same slot so the layout never
+      // shows a gap where the live recap always has content.
       if(d.winningTeam){
         var wc = teamHex(d.winningTeam.team);
         ctx.fillStyle = '#9a9aa3'; ctx.font = '700 24px '+FONT;
@@ -4213,43 +4428,74 @@ if('serviceWorker' in navigator){
         ctx.fillText('Team '+d.winningTeam.team, S/2, 446);
         ctx.fillStyle = '#c8c8d0'; ctx.font = '500 28px '+FONT;
         ctx.fillText(d.winningTeam.total+' avg pts', S/2, 488);
+      } else if(d.myTeamResult){
+        var mtc = teamHex(d.myTeamResult.team);
+        ctx.fillStyle = '#9a9aa3'; ctx.font = '700 24px '+FONT;
+        ctx.fillText('YOUR TEAM', S/2, 380);
+        ctx.fillStyle = mtc; ctx.font = '800 58px '+FONT;
+        ctx.fillText('Team '+d.myTeamResult.team, S/2, 446);
+        ctx.fillStyle = '#c8c8d0'; ctx.font = '500 28px '+FONT;
+        ctx.fillText(d.myTeamResult.won ? 'Won this season 🏆' : ('Finished '+ordinal(d.myTeamResult.rank||0)), S/2, 488);
       }
 
-      // Top 3 — left aligned list
+      // Top 3 (live recap) — or, when other players' scores aren't archived,
+      // this player's own season stats in the same slot.
       var top = d.top3 || [];
       ctx.textAlign = 'left';
-      ctx.fillStyle = '#9a9aa3'; ctx.font = '700 24px '+FONT;
-      ctx.fillText('TOP PERFORMERS', 150, 568);
       var rowY = 628;
-      top.forEach(function(p,i){
-        var c = MEDAL[i] || '#9a9aa3';
-        ctx.beginPath(); ctx.arc(176, rowY-10, 22, 0, Math.PI*2);
-        ctx.strokeStyle = c; ctx.lineWidth = 4; ctx.stroke();
-        ctx.fillStyle = c; ctx.textAlign = 'center'; ctx.font = '800 26px '+FONT;
-        ctx.fillText(String(i+1), 176, rowY-1);
-        ctx.textAlign = 'left'; ctx.fillStyle = '#f5f5f7'; ctx.font = '600 38px '+FONT;
-        ctx.fillText(fit(p.name, 560), 224, rowY);
-        ctx.textAlign = 'right'; ctx.fillStyle = '#d4a843'; ctx.font = '800 38px '+FONT;
-        ctx.fillText(p.total+' pts', S-150, rowY);
-        ctx.textAlign = 'left';
-        rowY += 78;
-      });
+      if(top.length){
+        ctx.fillStyle = '#9a9aa3'; ctx.font = '700 24px '+FONT;
+        ctx.fillText('TOP PERFORMERS', 150, 568);
+        top.forEach(function(p,i){
+          var c = MEDAL[i] || '#9a9aa3';
+          ctx.beginPath(); ctx.arc(176, rowY-10, 22, 0, Math.PI*2);
+          ctx.strokeStyle = c; ctx.lineWidth = 4; ctx.stroke();
+          ctx.fillStyle = c; ctx.textAlign = 'center'; ctx.font = '800 26px '+FONT;
+          ctx.fillText(String(i+1), 176, rowY-1);
+          ctx.textAlign = 'left'; ctx.fillStyle = '#f5f5f7'; ctx.font = '600 38px '+FONT;
+          ctx.fillText(fit(p.name, 560), 224, rowY);
+          ctx.textAlign = 'right'; ctx.fillStyle = '#d4a843'; ctx.font = '800 38px '+FONT;
+          ctx.fillText(p.total+' pts', S-150, rowY);
+          ctx.textAlign = 'left';
+          rowY += 78;
+        });
+      } else if(d.myTotal!=null || d.myWo!=null || (d.myStreak!=null && d.myStreak>0)){
+        ctx.fillStyle = '#9a9aa3'; ctx.font = '700 24px '+FONT;
+        ctx.fillText('YOUR SEASON', 150, 568);
+        function statRow(label,val){
+          ctx.textAlign='left'; ctx.fillStyle='#c8c8d0'; ctx.font='500 30px '+FONT;
+          ctx.fillText(label, 150, rowY);
+          ctx.textAlign='right'; ctx.fillStyle='#d4a843'; ctx.font='800 34px '+FONT;
+          ctx.fillText(String(val), S-150, rowY);
+          ctx.textAlign='left';
+          rowY += 56;
+        }
+        if(d.myTotal!=null) statRow('Total points', d.myTotal);
+        statRow('Workouts logged', d.myWo||0);
+        if(d.myStreak!=null && d.myStreak>0) statRow('Streak at season end', d.myStreak+' day'+(d.myStreak===1?'':'s'));
+        if(d.badges && d.badges.length) statRow('Badges earned', d.badges.length);
+      }
 
-      // Group totals
-      var ty = rowY + 36;
-      ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(150,ty-30); ctx.lineTo(S-150,ty-30); ctx.stroke();
-      ctx.fillStyle = '#c8c8d0'; ctx.font = '500 30px '+FONT;
-      ctx.fillText('Workouts logged', 150, ty+18);
-      ctx.textAlign = 'right'; ctx.fillStyle = '#f5f5f7'; ctx.font = '800 30px '+FONT;
-      ctx.fillText(String(d.totalWorkouts), S-150, ty+18);
-      ctx.textAlign = 'left';
-      if(d.topWorkout){
-        ctx.fillStyle = '#c8c8d0'; ctx.font = '500 30px '+FONT;
-        ctx.fillText('Most popular', 150, ty+68);
-        ctx.textAlign = 'right'; ctx.fillStyle = '#f5f5f7'; ctx.font = '800 30px '+FONT;
-        ctx.fillText(fit(d.topWorkout.label+' ('+d.topWorkout.n+')', 560), S-150, ty+68);
-        ctx.textAlign = 'left';
+      // Group totals — archived recaps have neither field, so the whole
+      // section (including its divider) is skipped rather than showing 0s.
+      if(d.totalWorkouts!=null || d.topWorkout){
+        var ty = rowY + 36;
+        ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(150,ty-30); ctx.lineTo(S-150,ty-30); ctx.stroke();
+        if(d.totalWorkouts!=null){
+          ctx.fillStyle = '#c8c8d0'; ctx.font = '500 30px '+FONT;
+          ctx.fillText('Workouts logged', 150, ty+18);
+          ctx.textAlign = 'right'; ctx.fillStyle = '#f5f5f7'; ctx.font = '800 30px '+FONT;
+          ctx.fillText(String(d.totalWorkouts), S-150, ty+18);
+          ctx.textAlign = 'left';
+        }
+        if(d.topWorkout){
+          ctx.fillStyle = '#c8c8d0'; ctx.font = '500 30px '+FONT;
+          ctx.fillText('Most popular', 150, ty+68);
+          ctx.textAlign = 'right'; ctx.fillStyle = '#f5f5f7'; ctx.font = '800 30px '+FONT;
+          ctx.fillText(fit(d.topWorkout.label+' ('+d.topWorkout.n+')', 560), S-150, ty+68);
+          ctx.textAlign = 'left';
+        }
       }
 
       // forge wordmark
@@ -4314,6 +4560,10 @@ if('serviceWorker' in navigator){
   window.addEventListener('load', function(){
     try{ setTimeout(syncRecapBtn, 2000); setInterval(syncRecapBtn, 10000); }catch(e){}
   });
+
+  // Profile tab (on-demand recap for archived seasons) needs to open this
+  // same modal from OUTSIDE this IIFE. One hook, nothing else exposed.
+  window.__recapShowFromData = function(d){ try{ showModal(d); }catch(e){} };
 })();
 </script>
 </body>
