@@ -95,6 +95,16 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // S5 §7.1: 🔥 reactions — deterministic {logId}_{sanitizedPlayer} IDs make
+    // create-then-delete the whole lifecycle; never updated (there's nothing
+    // to edit about a reaction, just add or remove it).
+    match /reactions/{id} {
+      allow read:   if isAuthed();
+      allow create: if isAuthed();
+      allow delete: if isAuthed();
+      allow update: if false;
+    }
+
     // Iron Pledge results — written by admin action, immutable thereafter
     match /bonuses_iron_pledge/{id} {
       allow read:   if isAuthed();
