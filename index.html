@@ -3150,17 +3150,32 @@ async function runUserMigration(dryRun){
     });
     const resolvedUsers = [];
     const claimed = new Set();
+    const sharedDeviceClusters = [];   // uid across 2+ groups but DIFFERENT names — never auto-merged
     byUid.forEach(group => {
-      // "Same uid in 2+ GROUPS" is the spec's exact bar for auto-merge (one
-      // device joined multiple groups — strong evidence of one person). Same
-      // uid within a SINGLE group but different names is a weaker signal
-      // (e.g. one device used to register two roster entries) and does not
-      // clear that bar — each entry stays its own candidate instead of being
-      // silently folded together, per "never merge on anything but exact
-      // cross-group uid match."
-      if(new Set(group.map(e=>e.groupCode)).size >= 2){
+      // "Same uid in 2+ GROUPS" was the spec's original bar for auto-merge (one
+      // device joined multiple groups — presumed one person). The 9 Jul 2026
+      // prod audit disproved that presumption: a single phone here registers
+      // whole families/friend-groups — device uid a0ez2IiD… carried SIX
+      // different people (Nirag/Tanmmay/Vidhita/Riya/Bhavika/Tanish) across all
+      // four groups. Merging on uid alone would have collapsed them into one
+      // identity. So the bar is now BOTH conditions: same uid across 2+ groups
+      // AND every entry in the cluster shares the same name (case-insensitive).
+      // A mismatched-name cluster is NOT auto-merged — each entry falls through
+      // to the per-entry path below (Pass 3's uidOwnerCount then correctly
+      // refuses to reuse the shared uid as any one entry's doc-id, minting a
+      // fresh id per person) — and the cluster is surfaced for manual review.
+      const spansMultipleGroups = new Set(group.map(e=>e.groupCode)).size >= 2;
+      if(!spansMultipleGroups) return;   // single-group uid clusters handled by the per-entry fallback
+      const allSameName = new Set(group.map(e=>e.nameLower)).size === 1;
+      if(allSameName){
         resolvedUsers.push({ entries: group });
         group.forEach(e=>claimed.add(e));
+      } else {
+        sharedDeviceClusters.push({
+          uid: group[0].uid,
+          entries: group.map(e=>`${e.name} (${e.groupCode})`)
+        });
+        // deliberately NOT claimed — each entry becomes its own resolvedUser below.
       }
     });
     activeEntries.filter(e=>!claimed.has(e)).forEach(e=>{ resolvedUsers.push({ entries:[e] }); });
@@ -3176,10 +3191,14 @@ async function runUserMigration(dryRun){
         }
       }
     }
-    log(`Pass 2: ${resolvedUsers.length} distinct user(s) to create, ${mergeCandidates.length} merge-candidate pair(s) flagged (not auto-merged).`);
+    log(`Pass 2: ${resolvedUsers.length} distinct user(s) to create, ${mergeCandidates.length} name+pin merge-candidate pair(s) flagged, ${sharedDeviceClusters.length} shared-device cluster(s) split (not auto-merged).`);
     if(mergeCandidates.length){
-      console.log('%c[Migration] MERGE-CANDIDATES — manual review only, never auto-merge:','font-weight:bold;color:#f59e0b');
+      console.log('%c[Migration] MERGE-CANDIDATES (name+pin match) — manual review only, never auto-merge:','font-weight:bold;color:#f59e0b');
       console.table(mergeCandidates);
+    }
+    if(sharedDeviceClusters.length){
+      console.log('%c[Migration] SHARED-DEVICE CLUSTERS — one uid, DIFFERENT people; split into separate users (NOT merged). Review if any are actually the same person:','font-weight:bold;color:#f59e0b');
+      sharedDeviceClusters.forEach(c=>console.log(`   uid ${String(c.uid).slice(0,10)}…  ->  ${c.entries.join('  |  ')}`));
     }
 
     function seasonsPlayedFor(entry){
