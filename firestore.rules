@@ -68,11 +68,17 @@ service cloud.firestore {
     }
 
     // ── TOP-LEVEL LOG COLLECTIONS ─────────────────────────────────────────
+    // Tombstone model (NORTHSTAR §5.3): a log is never truly deletable —
+    // "removing" one just sets voided/voidedBy/voidedAt, and every read site
+    // in the app filters voided:true out. update is scoped to EXACTLY those
+    // three fields so a void can never be used to rewrite a log's actual
+    // content (workouts/day/player/etc are frozen from the moment of create).
     match /logs/{id} {
       allow read:   if isAuthed();
       allow create: if isAuthed();
-      allow delete: if isAuthed();
-      allow update: if false;
+      allow delete: if false;
+      allow update: if isAuthed()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['voided','voidedBy','voidedAt']);
     }
 
     match /bonuses_30day/{id} {
