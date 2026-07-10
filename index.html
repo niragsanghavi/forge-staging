@@ -534,17 +534,133 @@ function mondayOfISOWeek(weekStr){
 // plus the active group's code. No cross-device identity (deferred) — each
 // device joins each group independently.
 const MAX_GROUPS = 3;
-// One place to surface errors. Logs a tagged, searchable line to the browser
-// console (DevTools) so a failure leaves a trace instead of vanishing.
-function logErr(where, e){ console.error('[Forge] '+where, e); }
+// ── ERROR LOGGING ───────────────────────────────────────────────────────────
+// One place to surface errors: a tagged, searchable console line (DevTools) AND
+// — via ForgeErr — a structured record shipped to errorLogs/ so a failure on a
+// real device leaves a trace we can actually read from the Command Center.
+window.FORGE_BUILD = 'forge-v22';
+
+// Structured error pipeline. Self-contained; never throws, never recurses into
+// itself (a failed errorLogs write is SWALLOWED, not re-reported), and is
+// rate-limited so one looping error can't blow Firestore quota.
+window.ForgeErr = (function(){
+  const SESSION_CAP = 30;      // hard cap on errorLogs writes per page load
+  const DEDUPE_MS   = 60000;   // suppress an identical error within this window
+  let sessionCount = 0;
+  const lastSent = new Map();  // dedupe key -> last-sent clientTs
+
+  function trunc(s, n){ s = String(s==null?'':s); return s.length>n ? s.slice(0,n)+'…' : s; }
+
+  // Best-effort Safari-private / blocked-storage probe. Never throws.
+  function privacySignal(){
+    try { const k='__forge_probe__'; localStorage.setItem(k,'1'); localStorage.removeItem(k); }
+    catch(e){ return 'storage-blocked'; }
+    return 'ok';
+  }
+
+  // Full environment context — attached to EVERY entry so the Safari/PWA issues
+  // can be correlated against specific device / privacy / install configs.
+  function envContext(){
+    const nav = (typeof navigator!=='undefined') ? navigator : {};
+    let displayStandalone = false;
+    try { displayStandalone = !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches); } catch(e){}
+    const iosStandalone = (nav.standalone === true); // iOS home-screen PWA signal
+    return {
+      userAgent: trunc(nav.userAgent||'', 300),
+      iosStandalone: iosStandalone,
+      displayStandalone: displayStandalone,
+      installedPWA: iosStandalone || displayStandalone,
+      viewport: (window.innerWidth||0)+'x'+(window.innerHeight||0),
+      dpr: window.devicePixelRatio||1,
+      lang: nav.language||null,
+      online: (typeof nav.onLine==='boolean') ? nav.onLine : null,
+      privacy: privacySignal(),
+      swActive: !!(nav.serviceWorker && nav.serviceWorker.controller),
+      build: window.FORGE_BUILD||null
+    };
+  }
+
+  function report(type, message, opts){
+    opts = opts || {};
+    try {
+      const shortMsg = trunc(message, 120);
+      const key = type+'|'+(opts.context||'')+'|'+shortMsg;
+      const now = Date.now();
+      const prev = lastSent.get(key);
+      if(prev && (now-prev) < DEDUPE_MS) return;   // identical error, too soon
+      if(sessionCount >= SESSION_CAP) return;       // session budget spent
+      lastSent.set(key, now);
+      sessionCount++;
+
+      let gc=null, pl=null, uid2=null;
+      try { gc  = (typeof groupCode!=='undefined' && groupCode) || null; } catch(e){}
+      try { pl  = (typeof me!=='undefined' && me && me.name)   || null; } catch(e){}
+      try { uid2= (typeof me!=='undefined' && me && me.userId) || null; } catch(e){}
+
+      const rec = {
+        type: type,                                  // 'error' | 'session_lost'
+        message: trunc(message, 500),
+        stack: trunc(opts.stack||'', 1500),
+        context: trunc(opts.context||'', 200),
+        groupCode: gc,
+        player: pl,
+        userId: uid2,
+        uid: (window.currentUid||null),
+        env: envContext(),
+        url: trunc((location&&location.href)||'', 300),
+        clientTs: now,
+        ts: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      // Fire-and-forget. The failure path is SWALLOWED (never logErr'd) — a
+      // failing logger must not loop on its own error.
+      db.collection('errorLogs').add(rec).catch(function(){});
+    } catch(e){ /* the logger must never itself throw */ }
+  }
+
+  // Global catch-alls. Ordinary user mistakes (wrong code/PIN) don't throw and
+  // never reach here — only genuine faults do.
+  try {
+    window.addEventListener('error', function(ev){
+      const err = ev && ev.error;
+      const msg = (err && err.message) || (ev && ev.message) || 'uncaught error';
+      let ctx = 'window.onerror';
+      try { if(ev && ev.filename) ctx += ' @'+String(ev.filename).split('/').pop()+':'+ev.lineno; } catch(e){}
+      report('error', msg, { context: ctx, stack: (err && err.stack) || '' });
+    });
+    window.addEventListener('unhandledrejection', function(ev){
+      const r = ev && ev.reason;
+      const msg = (r && (r.message||r.code)) || String(r||'unhandled rejection');
+      report('error', msg, { context:'unhandledrejection', stack:(r && r.stack) || '' });
+    });
+  } catch(e){}
+
+  return { report: report, env: envContext };
+})();
+
+// logErr keeps its console trace AND now feeds the structured pipeline, so every
+// existing catch site that already calls logErr ships an errorLogs record too —
+// wrapping the existing catch points without swallowing anything.
+function logErr(where, e){
+  console.error('[Forge] '+where, e);
+  try { window.ForgeErr && window.ForgeErr.report('error', (e && (e.message||e.code)) || String(e||where), { context: where, stack: (e && e.stack) || '' }); }
+  catch(_){}
+}
 function getSessions(){ try { return JSON.parse(localStorage.getItem('forge_sessions')||'[]'); } catch(e){ logErr('getSessions: bad localStorage', e); return []; } }
-function saveSessions(list){ localStorage.setItem('forge_sessions', JSON.stringify(list)); }
+function saveSessions(list){ try { localStorage.setItem('forge_sessions', JSON.stringify(list)); } catch(e){ logErr('saveSessions: storage blocked (Safari private mode?)', e); } }
 function getActiveCode(){ return localStorage.getItem('forge_active'); }
-function setActiveCode(code){ localStorage.setItem('forge_active', code); }
+function setActiveCode(code){ try { localStorage.setItem('forge_active', code); } catch(e){ logErr('setActiveCode: storage blocked (Safari private mode?)', e); } }
 function upsertSession(code, player, name){
   const list = getSessions();
   const i = list.findIndex(s=>s.code===code);
-  const entry = { code, player, name: name || (i>=0 && list[i].name) || code };
+  // Persist the session WITHOUT the plaintext PIN. The app never reads
+  // player.pin after resume — login always re-verifies against the freshly
+  // loaded season.roster (submitPinEntry), so keeping the PIN in localStorage was
+  // pure exposure. Stripping it BOTH reduces that exposure AND lets us safely
+  // request durable storage (navigator.storage.persist at boot) without making a
+  // plaintext credential more persistent.
+  const safePlayer = player ? Object.assign({}, player) : player;
+  if(safePlayer && 'pin' in safePlayer) delete safePlayer.pin;
+  const entry = { code, player: safePlayer, name: name || (i>=0 && list[i].name) || code };
   if(i>=0) list[i] = entry; else list.push(entry);
   saveSessions(list);
   setActiveCode(code);
@@ -607,6 +723,12 @@ function confirmConnReset(){
 
 // ── BOOT ──────────────────────────────────────────────────────────────────
 window.onload = () => {
+  // Ask the browser to keep our storage (the localStorage session + Firebase's
+  // IndexedDB auth) from being auto-evicted — the standard PWA-durability lever
+  // and the real mitigation for "installed PWA forgot me" (Issue 2). Safe: after
+  // the pin-strip in upsertSession the durable store holds no credential, only
+  // group codes, a display name, and an anonymous token. Best-effort, never throws.
+  try { if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function(){}); } catch(e){}
   // Establish the anonymous auth session FIRST, before any Firestore read.
   // Everything downstream (loadGroup, loadSuperAdmin, verifyCode) issues
   // Firestore queries, so they must not run until we have a UID.
@@ -649,6 +771,21 @@ async function bootApp(){
     me = active.player;
     loadGroup(groupCode, true);
   } else {
+    // Phase 2 breadcrumb — a returning user arriving with NO app session is the
+    // "installed PWA forgot me" signal (Issue 2). forge_sessions is already gone,
+    // so we infer "returning" from a persisted anon-auth session and/or our
+    // durable marker, and record WHICH storage survived so localStorage vs
+    // IndexedDB eviction can be told apart in the data (env carries PWA/privacy).
+    try {
+      const authPre = !!window._forgeAuthPreexisting;
+      const seenBefore = !!localStorage.getItem('forge_seen');
+      if(authPre || seenBefore){
+        window.ForgeErr && window.ForgeErr.report('session_lost',
+          'returning user booted with no active app session',
+          { context:'bootApp:no-sessions',
+            stack:'authPreexisting='+authPre+', seenBefore='+seenBefore });
+      }
+    } catch(e){}
     showScreen('onboard');
   }
 }
@@ -1049,6 +1186,7 @@ function handleDeadGroup(code, msg){
 }
 
 function launchApp(){
+  try { localStorage.setItem('forge_seen','1'); } catch(e){}  // durable-ish "has launched before" marker for the session_lost breadcrumb
   window._joinMode = false;
   document.getElementById('joinCancel')?.classList.add('hidden');
   showScreen('app');
@@ -3726,7 +3864,7 @@ async function loadUpdatesAnalytics(){
 // the rest. Default is dark (no attribute = dark via the :root default).
 function applyTheme(theme){
   document.documentElement.setAttribute('data-theme', theme);
-  localStorage.setItem('forge_theme', theme);
+  try { localStorage.setItem('forge_theme', theme); } catch(e){ logErr('setTheme: storage blocked', e); }
   const btn=document.getElementById('themeToggle');
   if(btn) btn.textContent = theme==='light' ? '☀️' : '🌙';
 }
@@ -4823,7 +4961,7 @@ if('serviceWorker' in navigator){
   function pct(n,d){ return d>0?Math.round(n/d*100):0; }
 
   var state={ selM:null, selY:null, groups:null, data:null, trendMode:'combined' };
-  window.SuperDash={ render:render, setMonth:setMonth, player:openPlayer, closePlayer:closePlayer, trendMode:setTrendMode };
+  window.SuperDash={ render:render, setMonth:setMonth, player:openPlayer, closePlayer:closePlayer, trendMode:setTrendMode, errmode:setErrMode, errdetail:openError };
 
   function setMonth(m,y){ state.selM=m; state.selY=y; render(state.groups); }
   function setTrendMode(mode){ state.trendMode=mode; var t=document.getElementById('sdTrendsInner'); if(t&&state.data) t.innerHTML=buildTrendsInner(state.data); }
@@ -4882,8 +5020,21 @@ if('serviceWorker' in navigator){
         archived:archived, tabs:tabs };
     }));
 
+    // Error logs (Phase 3) — recent-first, capped, NOT month-scoped. Degrades to
+    // an empty/denied state if reads are blocked (write-only rules) or the
+    // collection is empty, so the rest of the cockpit is never affected.
+    var errors=[], errorsDenied=false;
+    try{
+      var esnap=await db.collection('errorLogs').orderBy('clientTs','desc').limit(300).get();
+      esnap.docs.forEach(function(dd){ var e=dd.data();
+        errors.push({ id:dd.id, type:e.type||'error', message:e.message||'', stack:e.stack||'',
+          context:e.context||'', groupCode:e.groupCode||null, player:e.player||null,
+          userId:e.userId||null, uid:e.uid||null, env:e.env||{}, url:e.url||'', clientTs:e.clientTs||0 }); });
+    }catch(err){ errorsDenied=true; }
+
     return { now:now, todayMid:todayMid, curM:curM, curY:curY, selM:selM, selY:selY,
-             isCurrentMonth:(selM===curM&&selY===curY), logs:logs, groups:groups, groupInfo:groupInfo };
+             isCurrentMonth:(selM===curM&&selY===curY), logs:logs, groups:groups, groupInfo:groupInfo,
+             errors:errors, errorsDenied:errorsDenied };
   }
   function ymKey(y,m){ return y+'-'+String(m).padStart(2,'0'); }
 
@@ -4919,7 +5070,8 @@ if('serviceWorker' in navigator){
       + buildNeedsAttention(data,sets)
       + buildGroupHealth(data,sets)
       + buildTrends(data)
-      + buildChampions(data,sets);
+      + buildChampions(data,sets)
+      + buildErrors(data);
   }
 
   function monthSelector(data){
@@ -5158,6 +5310,84 @@ if('serviceWorker' in navigator){
       +'<div class="card" style="margin-top:10px"><div class="sd-subh" style="margin-top:0">Last completed season</div>'+winRows+'</div>';
   }
 
+  // ── 6. ERRORS (superadmin diagnostics) ──
+  function errRelTime(ms, now){
+    if(!ms) return '—';
+    var s=Math.max(0,Math.round((now.getTime()-ms)/1000));
+    if(s<60) return s+'s ago';
+    var m=Math.round(s/60); if(m<60) return m+'m ago';
+    var h=Math.round(m/60); if(h<24) return h+'h ago';
+    return Math.round(h/24)+'d ago';
+  }
+  function errDevice(env){
+    env=env||{}; var ua=env.userAgent||'';
+    var os=/iPhone/.test(ua)?'iPhone':/iPad/.test(ua)?'iPad':/Android/.test(ua)?'Android':/Macintosh|Mac OS/.test(ua)?'Mac':/Windows/.test(ua)?'Windows':/Linux/.test(ua)?'Linux':'device';
+    var br=/CriOS/.test(ua)?'Chrome':/FxiOS|Firefox/.test(ua)?'Firefox':/Edg/.test(ua)?'Edge':/Chrome/.test(ua)?'Chrome':/Safari/.test(ua)?'Safari':'';
+    return os+(br?(' '+br):'')+(env.installedPWA?' · PWA':'');
+  }
+  function errGroupList(list){
+    var map={};
+    (list||[]).forEach(function(e){
+      var key=(e.type||'error')+'|'+(e.message||'');
+      if(!map[key]) map[key]={ key:key, type:e.type||'error', message:e.message||'(no message)', count:0, last:0, first:Infinity, items:[] };
+      var g=map[key]; g.count++;
+      if(e.clientTs>g.last) g.last=e.clientTs;
+      if(e.clientTs && e.clientTs<g.first) g.first=e.clientTs;
+      if(g.items.length<30) g.items.push(e);
+    });
+    return Object.keys(map).map(function(k){return map[k];}).sort(function(a,b){return b.last-a.last;});
+  }
+  function buildErrors(data){
+    data._errGroups=errGroupList(data.errors);   // stable indexes for the detail modal
+    if(state.errMode==null) state.errMode='error';
+    return '<div class="shdr">Errors</div><div class="card" id="sdErrCard">'+buildErrorsCard(data)+'</div>';
+  }
+  function buildErrorsCard(data){
+    var groups=data._errGroups||[];
+    var errN=groups.filter(function(g){return g.type==='error';}).reduce(function(n,g){return n+g.count;},0);
+    var slN =groups.filter(function(g){return g.type==='session_lost';}).reduce(function(n,g){return n+g.count;},0);
+    var td=new Date(data.now); td.setHours(0,0,0,0); var todayStart=td.getTime();
+    var todayN=(data.errors||[]).filter(function(e){return e.type==='error'&&e.clientTs>=todayStart;}).length;
+    function tab(mode,label){ var on=state.errMode===mode; return '<button class="btn btn-surface btn-sm" style="flex:0 0 auto;margin:0;'+(on?'border-color:var(--gold);color:var(--gold)':'')+'" onclick="window.SuperDash.errmode(\''+mode+'\')">'+label+'</button>'; }
+    return '<div class="sd-pulse" style="margin-bottom:12px">'
+        +'<div class="sd-tile"><div class="sd-tile-v" style="color:'+(todayN?'var(--red)':'var(--green)')+'">'+todayN+'</div><div class="sd-tile-l">Errors today</div></div>'
+        +'<div class="sd-tile"><div class="sd-tile-v">'+errN+'</div><div class="sd-tile-l">Errors (window)</div></div>'
+      +'</div>'
+      +'<div style="display:flex;gap:8px;margin-bottom:10px">'+tab('error','Errors · '+errN)+tab('session_lost','Session-lost · '+slN)+'</div>'
+      +buildErrorsInner(data,state.errMode);
+  }
+  function buildErrorsInner(data,mode){
+    if(data.errorsDenied) return '<div class="tmuted" style="padding:10px 0;font-size:13px">Error reads are locked by security rules (errorLogs is write-only). View in the Firebase console, or set errorLogs read to isAuthed() to light up this panel.</div>';
+    var rows=(data._errGroups||[]).map(function(g,i){return {g:g,i:i};}).filter(function(x){return x.g.type===mode;});
+    if(!rows.length) return '<div class="tmuted" style="padding:10px 0">'+(mode==='session_lost'?'No session-lost breadcrumbs 🎉':'No errors logged 🎉')+'</div>';
+    return rows.map(function(x){ var g=x.g, it=g.items[0]||{};
+      return '<div class="sd-row sd-errrow" onclick="window.SuperDash.errdetail('+x.i+')">'
+        +'<div style="min-width:0;flex:1"><div class="sd-errmsg">'+E(g.message)+'</div>'
+        +'<div class="sd-sub sd-ell">'+E((it.context||'')+' · '+errDevice(it.env))+'</div></div>'
+        +'<div style="text-align:right;flex:0 0 auto"><div style="font-weight:800;color:var(--orange)">×'+g.count+'</div><div class="sd-sub">'+E(errRelTime(g.last,data.now))+'</div></div>'
+        +'</div>';
+    }).join('');
+  }
+  function setErrMode(mode){ state.errMode=mode; var el=document.getElementById('sdErrCard'); if(el&&state.data) el.innerHTML=buildErrorsCard(state.data); }
+  function openError(idx){
+    injectStyle();
+    var data=state.data; if(!data) return;
+    var g=(data._errGroups||[])[idx]; if(!g) return;
+    var ov=document.getElementById('sdModal');
+    if(!ov){ ov=document.createElement('div'); ov.id='sdModal'; ov.className='sd-modal'; document.body.appendChild(ov); }
+    var it=g.items[0]||{}, env=it.env||{};
+    var rows=[['Type',g.type],['Occurrences',String(g.count)],['First seen',errRelTime(g.first===Infinity?0:g.first,data.now)],['Last seen',errRelTime(g.last,data.now)],['Context',it.context||'—'],['Player',it.player||'—'],['Group',it.groupCode||'—'],['userId',it.userId||'—'],['uid',it.uid||'—'],['Device',errDevice(env)],['Installed PWA',env.installedPWA?'yes':'no'],['iOS standalone',env.iosStandalone?'yes':'no'],['Viewport',env.viewport||'—'],['Privacy probe',env.privacy||'—'],['Online',(env.online==null?'—':(env.online?'yes':'no'))],['SW active',env.swActive?'yes':'no'],['Build',env.build||'—'],['URL',it.url||'—'],['User agent',env.userAgent||'—']]
+      .map(function(r){ return '<div class="sd-erow"><div class="sd-ek">'+E(r[0])+'</div><div class="sd-ev">'+E(r[1])+'</div></div>'; }).join('');
+    var occ=g.items.map(function(e){ return '<div class="sd-row"><div>'+E(errRelTime(e.clientTs,data.now))+'</div><div class="sd-sub">'+E(errDevice(e.env)+(e.player?(' · '+e.player):'')+(e.groupCode?(' · '+e.groupCode):''))+'</div></div>'; }).join('');
+    ov.innerHTML='<div class="sd-modal-card">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px"><div style="font-size:15px;font-weight:800;min-width:0;word-break:break-word">'+E(g.message)+'</div><button class="btn btn-surface btn-sm" style="margin:0;flex:0 0 auto" onclick="window.SuperDash.closePlayer()">Close</button></div>'
+      +'<div class="sd-subh" style="margin-top:0">Detail</div><div class="sd-etable">'+rows+'</div>'
+      +(it.stack?('<div class="sd-subh">Stack</div><pre class="sd-pre">'+E(it.stack)+'</pre>'):'')
+      +'<div class="sd-subh">Recent occurrences</div>'+occ
+      +'</div>';
+    ov.style.display='flex';
+  }
+
   // ── PLAYER DRILL-DOWN ──
   async function openPlayer(name){
     injectStyle();
@@ -5239,6 +5469,15 @@ if('serviceWorker' in navigator){
       +'.sd-tabline{font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);color:var(--muted)}'
       +'.sd-tabline:last-child{border-bottom:none}.sd-tabline b{color:var(--text)}'
       +'.sd-rank{display:inline-block;width:18px;color:var(--muted);font-weight:800}'
+      +'.sd-errrow{cursor:pointer}'
+      +'.sd-errmsg{font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}'
+      +'.sd-ell{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
+      +'.sd-etable{display:flex;flex-direction:column}'
+      +'.sd-erow{display:flex;gap:10px;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px}'
+      +'.sd-erow:last-child{border-bottom:none}'
+      +'.sd-ek{flex:0 0 108px;color:var(--muted);font-weight:700}'
+      +'.sd-ev{flex:1;min-width:0;word-break:break-word;color:var(--text)}'
+      +'.sd-pre{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px;font-size:11px;line-height:1.4;white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto;color:var(--muted)}'
       +'.sd-modal{position:fixed;inset:0;z-index:10002;display:none;align-items:flex-start;justify-content:center;overflow-y:auto;padding:24px 14px;background:rgba(6,6,9,.9);backdrop-filter:blur(8px)}'
       +'.sd-modal-card{width:100%;max-width:440px;margin:auto;background:#121218;border:1px solid rgba(212,168,67,.28);border-radius:20px;padding:20px}';
     document.head.appendChild(s);

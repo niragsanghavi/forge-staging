@@ -48,6 +48,13 @@ db.enablePersistence({synchronizeTabs:true})
     }
   });
 const auth = firebase.auth();
+// Explicit LOCAL (IndexedDB) auth persistence. This is the compat SDK's default
+// already, so it is belt-and-suspenders — guards against future default drift and
+// documents intent. NOTE: this is NOT the fix for "installed PWA forgot me": the
+// app resumes from the localStorage session (forge_sessions), not this auth
+// session, so the real mitigation is storage durability (navigator.storage.persist)
+// plus not evicting it — see index.html. Best-effort; never throws.
+try { auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(){}); } catch(e){}
 
 // ── CONNECTION RESET — recovers a wedged/corrupted local Firebase state ─────
 // Root cause this defends against: Firebase Auth (and, where enabled,
@@ -153,6 +160,10 @@ if(IS_STAGING){
 window.ensureAuth = function(){
   return new Promise((resolve, reject) => {
     const existing = auth.currentUser;
+    // Did a persisted anon session survive this launch? Recorded BEFORE any
+    // signInAnonymously so the session_lost breadcrumb can tell "IndexedDB auth
+    // survived but localStorage was evicted" apart from a fresh first visit.
+    window._forgeAuthPreexisting = !!existing;
     if(existing){ resolve(existing.uid); return; }
     const unsubscribe = auth.onAuthStateChanged(user => {
       if(user){ unsubscribe(); resolve(user.uid); }

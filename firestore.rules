@@ -113,6 +113,27 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ── ERROR LOGS ────────────────────────────────────────────────────────
+    // Client diagnostics: uncaught JS errors, failed Firestore ops, and
+    // session_lost breadcrumbs. WRITE-ONLY from clients — any authed session may
+    // CREATE, but reads are denied outright. These records carry userAgents,
+    // group codes, player names and stack traces, so `read: if isAuthed()` would
+    // be wrong here: anonymous auth hands isAuthed() to every visitor, so that
+    // would make them world-readable. Denying read is the only way to actually
+    // keep an anonymous session from reading errorLogs.
+    //
+    // Consequence: the Command Center Errors panel cannot read these from a
+    // plain client session under these rules — it needs an elevated path
+    // (Firebase console this sprint, or a custom-claim admin per AUTH_UPGRADE).
+    // Flip `read` to isAuthed() ONLY as a deliberate, documented choice that
+    // accepts errorLogs joining the known anon-readable set. Immutable once written.
+    match /errorLogs/{id} {
+      allow create: if isAuthed();
+      allow read:   if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+
     // ── ANALYTICS ─────────────────────────────────────────────────────────
     // Top-level doc per group — never written directly
     match /analytics/{groupCode} {
