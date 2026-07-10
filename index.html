@@ -3495,33 +3495,37 @@ async function runUserMigration(dryRun){
     });
     const resolvedUsers = [];
     const claimed = new Set();
-    const sharedDeviceClusters = [];   // uid across 2+ groups but DIFFERENT names — never auto-merged
+    const sharedDeviceClusters = [];   // uid shared by 2+ DIFFERENT names — surfaced for review; different names NEVER merged
     byUid.forEach(group => {
-      // "Same uid in 2+ GROUPS" was the spec's original bar for auto-merge (one
-      // device joined multiple groups — presumed one person). The 9 Jul 2026
-      // prod audit disproved that presumption: a single phone here registers
-      // whole families/friend-groups — device uid a0ez2IiD… carried SIX
-      // different people (Nirag/Tanmmay/Vidhita/Riya/Bhavika/Tanish) across all
-      // four groups. Merging on uid alone would have collapsed them into one
-      // identity. So the bar is now BOTH conditions: same uid across 2+ groups
-      // AND every entry in the cluster shares the same name (case-insensitive).
-      // A mismatched-name cluster is NOT auto-merged — each entry falls through
-      // to the per-entry path below (Pass 3's uidOwnerCount then correctly
-      // refuses to reuse the shared uid as any one entry's doc-id, minting a
-      // fresh id per person) — and the cluster is surfaced for manual review.
-      const spansMultipleGroups = new Set(group.map(e=>e.groupCode)).size >= 2;
-      if(!spansMultipleGroups) return;   // single-group uid clusters handled by the per-entry fallback
-      const allSameName = new Set(group.map(e=>e.nameLower)).size === 1;
-      if(allSameName){
-        resolvedUsers.push({ entries: group });
-        group.forEach(e=>claimed.add(e));
-      } else {
+      // A device uid is NEVER trusted on its own as a merge signal. The 9 Jul 2026
+      // prod audit proved one laptop registered whole friend-groups: device uid
+      // a0ez2IiD… carried SIX different people (Nirag/Tanmmay/Vidhita/Riya/Bhavika/
+      // Tanish) across all four groups. So the merge key is (uid AND name): each
+      // shared-uid cluster is sub-grouped BY NAME, and we only ever merge entries
+      // that share the SAME uid AND the SAME (case-insensitive) name — which makes a
+      // different-name merge STRUCTURALLY IMPOSSIBLE. A uid spanning 2+ distinct
+      // names is surfaced as a shared-device cluster for manual review; its same-name
+      // sub-groups still consolidate correctly (one real Nirag, one real Vidhita),
+      // while the different people on it each stay a separate account.
+      if(new Set(group.map(e=>e.nameLower)).size >= 2){
         sharedDeviceClusters.push({
           uid: group[0].uid,
           entries: group.map(e=>`${e.name} (${e.groupCode})`)
         });
-        // deliberately NOT claimed — each entry becomes its own resolvedUser below.
       }
+      // Merge a same-name sub-group only when it spans 2+ groups (one person who
+      // joined multiple groups on this device). Same-name single-group entries and
+      // every different-name entry fall through to the per-entry path below; Pass 3's
+      // uidOwnerCount then mints a fresh doc-id per person so a shared uid never
+      // collapses two distinct people into one doc.
+      const byName = new Map();
+      group.forEach(e=>{ if(!byName.has(e.nameLower)) byName.set(e.nameLower, []); byName.get(e.nameLower).push(e); });
+      byName.forEach(sub => {
+        if(new Set(sub.map(e=>e.groupCode)).size >= 2){
+          resolvedUsers.push({ entries: sub });
+          sub.forEach(e=>claimed.add(e));
+        }
+      });
     });
     activeEntries.filter(e=>!claimed.has(e)).forEach(e=>{ resolvedUsers.push({ entries:[e] }); });
 
@@ -3536,7 +3540,7 @@ async function runUserMigration(dryRun){
         }
       }
     }
-    log(`Pass 2: ${resolvedUsers.length} distinct user(s) to create, ${mergeCandidates.length} name+pin merge-candidate pair(s) flagged, ${sharedDeviceClusters.length} shared-device cluster(s) split (not auto-merged).`);
+    log(`Pass 2: ${resolvedUsers.length} distinct user(s) to create, ${mergeCandidates.length} name+pin merge-candidate pair(s) flagged, ${sharedDeviceClusters.length} shared-device uid(s) flagged (multiple people on one device — never merged across names).`);
     if(mergeCandidates.length){
       console.log('%c[Migration] MERGE-CANDIDATES (name+pin match) — manual review only, never auto-merge:','font-weight:bold;color:#f59e0b');
       console.table(mergeCandidates);
