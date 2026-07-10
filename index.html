@@ -373,6 +373,19 @@
     </div>
 
     <div style="margin-top:24px">
+      <div class="shdr">Stats Backfill (S1b)</div>
+      <div class="card" style="border:1px solid var(--gold)">
+        <div class="card-title" style="color:var(--gold)">Recompute users/{userId}.stats from logs</div>
+        <div class="tmuted" style="margin-bottom:12px">Recomputes totalWorkouts, longest &amp; current streak, lastLoggedDay, and seasonsPlayed (distinct group-months with a log) from real logs — per userId, so fragmented identities are counted separately, never combined. Badges are left untouched. Idempotent: overwrite, not increment — safe to re-run. Preview first — Run stays locked until a dry run completes.</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="runStatsBackfill(true)">🔍 Preview (dry run)</button>
+          <button class="btn btn-gold btn-sm" id="backfillRunBtn" style="flex:1;margin:0" onclick="runStatsBackfill(false)" disabled>▶ Run Backfill</button>
+        </div>
+        <div id="backfillStatus" class="tmuted" style="text-align:center;margin-top:8px"></div>
+      </div>
+    </div>
+
+    <div style="margin-top:24px">
       <div class="shdr">Create New Group</div>
       <div class="card">
         <label>Group Name</label>
@@ -3644,6 +3657,91 @@ async function runUserMigration(dryRun){
   } catch(e){
     console.error('[Migration] failed:', e);
     log('Migration failed — see console. Already-committed batches stay; nothing after the error point was written.');
+  }
+}
+
+// ── STATS BACKFILL (S1b) ─────────────────────────────────────────────────────
+// The migration created users docs with totalWorkouts:0 and no streak fields.
+// This recomputes stats from REAL logs. Attribution is per userId via the ACTIVE
+// roster map (groupCode|nameLower -> userId), so fragmented identities (Nirag,
+// Tanmmay, Riya/Riya-Sanghavi) each get ONLY their own roster entries' logs —
+// never combined (that resolves later via Option A linking). Streaks use the same
+// computeStreaksFromDays() the Profile reads, so backfilled values won't jump on
+// the next log. Idempotent: recompute-and-overwrite (absolute values via
+// field-path update), badges left untouched.
+window._backfillDryRunDone = false;
+async function runStatsBackfill(dryRun){
+  const statusEl = document.getElementById('backfillStatus');
+  const log = (msg) => { console.log('[Backfill] '+msg); if(statusEl) statusEl.textContent = msg; };
+  if(!dryRun){
+    if(!window._backfillDryRunDone){ log('Run a dry-run first — see console for the plan.'); return; }
+    if(!confirm('This OVERWRITES stats (totalWorkouts, longest/currentStreak, lastLoggedDay, seasonsPlayed) on ALL users docs, recomputed from real logs. Badges untouched. Idempotent — safe to re-run. Continue?')){ log('Cancelled — nothing written.'); return; }
+  }
+  console.log(`%c[Backfill] ${dryRun?'DRY RUN':'LIVE RUN'} starting`, `font-weight:bold;color:${dryRun?'#3b82f6':'#ef4444'}`);
+  try {
+    // ---- Pass 1: (groupCode|nameLower) -> userId from ACTIVE-season rosters ----
+    const groupsSnap = await db.collection('groups').get();
+    const rmap = new Map();
+    for(const gDoc of groupsSnap.docs){
+      const g = gDoc.data();
+      if(!g.currentSeasonId) continue;
+      const sDoc = await db.collection('groups').doc(gDoc.id).collection('seasons').doc(g.currentSeasonId).get();
+      if(!sDoc.exists) continue;
+      (sDoc.data().roster||[]).forEach(p=>{ if(p && p.name && p.userId) rmap.set(gDoc.id+'|'+p.name.toLowerCase(), p.userId); });
+    }
+    // ---- Pass 2: attribute every non-voided log to a userId ----
+    const logsSnap = await db.collection('logs').get();
+    const agg = new Map(); // userId -> {count, days:Set, months:Set}
+    let attributed=0, orphan=0;
+    logsSnap.docs.forEach(d=>{ const l=d.data(); if(l.voided) return;
+      if(!l.groupCode || !l.player || !l.year || !l.month || !l.day) return;
+      const uid = rmap.get(l.groupCode+'|'+String(l.player).toLowerCase());
+      if(!uid){ orphan++; return; }
+      attributed++;
+      if(!agg.has(uid)) agg.set(uid, {count:0, days:new Set(), months:new Set()});
+      const a = agg.get(uid); a.count++;
+      a.days.add(ymdOf(l.year, l.month, l.day));
+      a.months.add(l.groupCode+'|'+l.year+'-'+l.month);
+    });
+    log(`Pass 2: ${attributed} logs attributed, ${orphan} orphan (no active-roster match).`);
+    // ---- Pass 3: compute per users doc + (preview | write) ----
+    const usersSnap = await db.collection('users').get();
+    const plan = [];
+    let batch = db.batch(), ops = 0, written = 0;
+    for(const uDoc of usersSnap.docs){
+      const a = agg.get(uDoc.id) || {count:0, days:new Set(), months:new Set()};
+      const st = computeStreaksFromDays(a.days);           // the exact helper the Profile uses
+      const rec = { totalWorkouts:a.count, longestStreak:st.longestStreak, currentStreak:st.currentStreak, lastLoggedDay:st.lastLoggedDay, seasonsPlayed:a.months.size };
+      plan.push({ name: uDoc.data().name, ...rec });
+      if(!dryRun){
+        batch.update(db.collection('users').doc(uDoc.id), {
+          'stats.totalWorkouts': rec.totalWorkouts,
+          'stats.longestStreak': rec.longestStreak,
+          'stats.currentStreak': rec.currentStreak,
+          'stats.lastLoggedDay': rec.lastLoggedDay,
+          'stats.seasonsPlayed': rec.seasonsPlayed
+        });
+        ops++; written++;
+        if(ops>=400){ await batch.commit(); batch=db.batch(); ops=0; }
+      }
+    }
+    if(dryRun){
+      plan.sort((a,b)=>b.totalWorkouts-a.totalWorkouts);
+      console.log('%c[Backfill] DRY RUN — computed stats for '+plan.length+' users docs (writes NOTHING):','font-weight:bold;color:#3b82f6');
+      console.table(plan.map(p=>({ name:p.name, totalWorkouts:p.totalWorkouts, longestStreak:p.longestStreak, currentStreak:p.currentStreak, seasonsPlayed:p.seasonsPlayed, lastLoggedDay:p.lastLoggedDay||'—' })));
+      window._backfillDryRunDone = true;
+      const btn = document.getElementById('backfillRunBtn'); if(btn) btn.disabled = false;
+      log(`Dry run complete: would update ${plan.length} users docs. Full plan in console. Nothing written.`);
+      return;
+    }
+    if(ops>0) await batch.commit();
+    window._backfillDryRunDone = false;
+    const btn = document.getElementById('backfillRunBtn'); if(btn) btn.disabled = true;
+    log(`Backfill complete: recomputed stats on ${written} users docs.`);
+    console.log('%c[Backfill] LIVE RUN complete — '+written+' users updated.','font-weight:bold;color:#22c55e');
+  } catch(e){
+    console.error('[Backfill] failed:', e);
+    log('Backfill failed — see console. Recompute-and-overwrite means a re-run is safe.');
   }
 }
 
