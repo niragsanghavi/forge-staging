@@ -5523,11 +5523,24 @@ if('serviceWorker' in navigator){
   // ── 1b. GROWTH & PARTICIPATION METRIC CARDS (deduped by canonical userId) ──
   function buildMetrics(data){
     var idx=partIndex(data), tm=data.todayMid;
-    // C1 — logs this calendar month vs last full calendar month (always current month, independent of the selector)
-    var thisMo=0, lastMo=0, pm=prevMonth(data.curM,data.curY);
-    data.logs.forEach(function(l){ if(l.m===data.curM&&l.y===data.curY) thisMo++; else if(l.m===pm.m&&l.y===pm.y) lastMo++; });
-    var moChg=lastMo>0?Math.round((thisMo-lastMo)/lastMo*100):(thisMo>0?100:0);
-    var moUp=thisMo>=lastMo, moArrow=moUp?'▲':'▼', moCol=moUp?'var(--green)':'var(--red)';
+    // C1 — logs this month-to-date vs the SAME window of last month (like-for-like),
+    // e.g. Jul 1–11 vs Jun 1–11, with the FULL previous-month total kept as a muted
+    // reference. Always the current calendar month, independent of the month selector.
+    // Edge: if the previous month is shorter (Mar 30 vs Feb), clamp the window to the
+    // last day of that shorter month.
+    var pm=prevMonth(data.curM,data.curY);
+    var todayDay=data.now.getDate();
+    var prevLastDay=new Date(pm.y, pm.m, 0).getDate();   // last calendar day of the previous month
+    var cutoffDay=Math.min(todayDay, prevLastDay);
+    var thisMTD=0, prevMTD=0, prevTotal=0;
+    data.logs.forEach(function(l){
+      if(l.y===data.curY && l.m===data.curM){ if(l.d<=todayDay) thisMTD++; }
+      else if(l.y===pm.y && l.m===pm.m){ prevTotal++; if(l.d<=cutoffDay) prevMTD++; }
+    });
+    var moChg=prevMTD>0?Math.round((thisMTD-prevMTD)/prevMTD*100):(thisMTD>0?100:0);
+    var moUp=thisMTD>=prevMTD, moArrow=moUp?'▲':'▼', moCol=moUp?'var(--green)':'var(--red)';
+    var pmAbbr=MONTHS[pm.m-1].slice(0,3), curAbbr=MONTHS[data.curM-1].slice(0,3);
+    var moSub='vs '+pmAbbr+' 1–'+cutoffDay+' · <span style="opacity:.75">'+pmAbbr+' total: '+prevTotal+'</span>';
     // C2 — two participation rates, both deduped by canonical userId, averaged over the last 7 days, Δ vs prior 7 days
     var platDenom=partDenom(data,'platform',null), actDenom=partDenom(data,'active',null);
     var platNow=avgPart(data,idx,tm,platDenom,null,0,6), platPrev=avgPart(data,idx,tm,platDenom,null,7,13);
@@ -5537,7 +5550,7 @@ if('serviceWorker' in navigator){
     function t3(v,label,sub,c,tip){ return '<div class="sd-tile" title="'+E(tip||'')+'"><div class="sd-tile-v" style="color:'+(c||'var(--gold)')+'">'+v+'</div><div class="sd-tile-l">'+label+'</div>'+(sub?'<div class="sd-tile-s">'+sub+'</div>':'')+'</div>'; }
     return '<div class="shdr">Growth &amp; Participation <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">· deduped by user</span></div>'
       +'<div class="sd-metrics3">'
-      + t3(thisMo+' <span style="font-size:13px;color:'+moCol+'">'+moArrow+Math.abs(moChg)+'%</span>','Logs this month','vs '+lastMo+' last mo',null,'Total workout logs in '+MONTHS[data.curM-1]+' '+data.curY+' vs all of '+MONTHS[pm.m-1]+'. Calendar-month totals across every group.')
+      + t3(thisMTD+' <span style="font-size:13px;color:'+moCol+'">'+moArrow+Math.abs(moChg)+'%</span>','Logs this month',moSub,null,'Month-to-date logs ('+curAbbr+' 1–'+todayDay+') vs the SAME window last month ('+pmAbbr+' 1–'+cutoffDay+'). % delta is like-for-like; "'+pmAbbr+' total" is the full previous month for reference. Prev window clamps to the shorter month. All groups.')
       + t3((platDenom>0?Math.round(platNow):'—')+'%'+delta(platNow,platPrev),'Platform participation','of all '+platDenom+' registered',ptcol(platNow),'Avg over the last 7 days of (unique people who logged that day ÷ EVERY registered user). The honest headline number — churned users drag it down. Δ vs the prior 7 days, in percentage points. Deduped by canonical userId.')
       + t3((actDenom>0?Math.round(actNow):'—')+'%'+delta(actNow,actPrev),'Active participation','of '+actDenom+' active (30d)',ptcol(actNow),'Same computation, but the denominator is only users with ≥1 log in the last 30 days — "of the people still alive, how many showed up?" If platform falls while this holds, the problem is churn; if both fall, it is engagement.')
       +'</div>';
