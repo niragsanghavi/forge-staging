@@ -1033,7 +1033,7 @@ function newUserDocFields(name, pinHash, groupCode, groupName, currentUid, migra
     knownDeviceUids: currentUid ? [currentUid] : [],
     memberships: { [groupCode]: { joinedAt: firebase.firestore.FieldValue.serverTimestamp(), groupName: groupName||groupCode } },
     lastActiveAt: firebase.firestore.FieldValue.serverTimestamp(),
-    stats: { seasonsPlayed:0, badgeCounts:{}, totalWorkouts:0 }
+    stats: { seasonsPlayed:0, badgeCounts:{}, totalWorkouts:0, currentStreak:0, longestStreak:0, lastLoggedDay:null }
   };
 }
 
@@ -3827,7 +3827,7 @@ async function runUserMigration(dryRun){
         knownDeviceUids: primary.uid ? [primary.uid] : [],
         memberships,
         lastActiveAt: firebase.firestore.FieldValue.serverTimestamp(),
-        stats: { seasonsPlayed: seasonsPlayedFor(primary), badgeCounts:{}, totalWorkouts:0 }
+        stats: { seasonsPlayed: seasonsPlayedFor(primary), badgeCounts:{}, totalWorkouts:0, currentStreak:0, longestStreak:0, lastLoggedDay:null }
       }, {merge:true});
       opsInBatch++; created++;
 
@@ -3871,14 +3871,19 @@ async function runUserMigration(dryRun){
 }
 
 // ── STATS BACKFILL (S1b) ─────────────────────────────────────────────────────
-// The migration created users docs with totalWorkouts:0 and no streak fields.
-// This recomputes stats from REAL logs. Attribution is per userId via the ACTIVE
-// roster map (groupCode|nameLower -> userId), so fragmented identities (Nirag,
-// Tanmmay, Riya/Riya-Sanghavi) each get ONLY their own roster entries' logs —
-// never combined (that resolves later via Option A linking). Streaks use the same
-// computeStreaksFromDays() the Profile reads, so backfilled values won't jump on
-// the next log. Idempotent: recompute-and-overwrite (absolute values via
-// field-path update), badges left untouched.
+// The migration created users docs with totalWorkouts:0 and no streak fields, so
+// "best/longest streak" reads 0 on Profile until this runs. Recomputes stats from
+// REAL logs, attributing each non-voided log to a CANONICAL userId: the log's own
+// userId first (resolved through the mergedInto chain), falling back to a roster
+// name-map (groupCode|nameLower -> canonical userId, built from ALL seasons) only
+// for logs written before userId was stamped. Days are collected in a Set, so the
+// SAME calendar day logged in two groups counts ONCE — an identity's cross-group
+// history combines under one canonical id; separate (unlinked) identities stay
+// separate until Option A linking merges them. Longest streak = longest run of
+// consecutive days over that whole deduped set (survives month boundaries), via
+// the same computeStreaksFromDays() the Profile reads. Tombstone (mergedInto) docs
+// are skipped — their logs already fold into the canonical doc. Idempotent:
+// recompute-and-overwrite (absolute values via field-path update), badges untouched.
 window._backfillDryRunDone = false;
 async function runStatsBackfill(dryRun){
   const statusEl = document.getElementById('backfillStatus');
@@ -3889,23 +3894,30 @@ async function runStatsBackfill(dryRun){
   }
   console.log(`%c[Backfill] ${dryRun?'DRY RUN':'LIVE RUN'} starting`, `font-weight:bold;color:${dryRun?'#3b82f6':'#ef4444'}`);
   try {
-    // ---- Pass 1: (groupCode|nameLower) -> userId from ACTIVE-season rosters ----
+    // ---- Pass 0: users + canonical-identity resolver (mergedInto chain) ----
+    const usersSnap = await db.collection('users').get();
+    const mergedMap = new Map();
+    usersSnap.docs.forEach(d=>{ const m=d.data().mergedInto; if(m) mergedMap.set(d.id, m); });
+    const canon = (id) => { let seen=new Set(), cur=id, h=0; while(cur && mergedMap.has(cur) && !seen.has(cur) && h<10){ seen.add(cur); cur=mergedMap.get(cur); h++; } return cur; };
+    // ---- Pass 1: (groupCode|nameLower) -> CANONICAL userId, from ALL seasons' rosters ----
+    // (fallback attribution for logs written before userId was stamped)
     const groupsSnap = await db.collection('groups').get();
     const rmap = new Map();
     for(const gDoc of groupsSnap.docs){
-      const g = gDoc.data();
-      if(!g.currentSeasonId) continue;
-      const sDoc = await db.collection('groups').doc(gDoc.id).collection('seasons').doc(g.currentSeasonId).get();
-      if(!sDoc.exists) continue;
-      (sDoc.data().roster||[]).forEach(p=>{ if(p && p.name && p.userId) rmap.set(gDoc.id+'|'+p.name.toLowerCase(), p.userId); });
+      const seasonsSnap = await db.collection('groups').doc(gDoc.id).collection('seasons').get();
+      seasonsSnap.docs.forEach(sDoc=>{ (sDoc.data().roster||[]).forEach(p=>{ if(p && p.name && p.userId) rmap.set(gDoc.id+'|'+p.name.toLowerCase(), canon(p.userId)); }); });
     }
-    // ---- Pass 2: attribute every non-voided log to a userId ----
+    // ---- Pass 2: attribute every non-voided log to a CANONICAL userId ----
+    // log.userId (mergedInto-resolved) first; roster name-map fallback for pre-stamp
+    // logs. Days are a Set → same calendar day in two groups counts ONCE.
     const logsSnap = await db.collection('logs').get();
-    const agg = new Map(); // userId -> {count, days:Set, months:Set}
-    let attributed=0, orphan=0;
+    const agg = new Map(); // canonical userId -> {count, days:Set, months:Set}
+    let attributed=0, orphan=0, viaUserId=0, viaName=0;
     logsSnap.docs.forEach(d=>{ const l=d.data(); if(l.voided) return;
-      if(!l.groupCode || !l.player || !l.year || !l.month || !l.day) return;
-      const uid = rmap.get(l.groupCode+'|'+String(l.player).toLowerCase());
+      if(!l.year || !l.month || !l.day) return;
+      let uid = l.userId ? canon(l.userId) : null;
+      if(uid) viaUserId++;
+      if(!uid && l.groupCode && l.player){ uid = rmap.get(l.groupCode+'|'+String(l.player).toLowerCase()) || null; if(uid) viaName++; }
       if(!uid){ orphan++; return; }
       attributed++;
       if(!agg.has(uid)) agg.set(uid, {count:0, days:new Set(), months:new Set()});
@@ -3913,12 +3925,12 @@ async function runStatsBackfill(dryRun){
       a.days.add(ymdOf(l.year, l.month, l.day));
       a.months.add(l.groupCode+'|'+l.year+'-'+l.month);
     });
-    log(`Pass 2: ${attributed} logs attributed, ${orphan} orphan (no active-roster match).`);
-    // ---- Pass 3: compute per users doc + (preview | write) ----
-    const usersSnap = await db.collection('users').get();
+    log(`Pass 2: ${attributed} logs attributed (${viaUserId} by userId, ${viaName} by name), ${orphan} orphan.`);
+    // ---- Pass 3: compute per CANONICAL users doc (skip mergedInto tombstones) + (preview | write) ----
     const plan = [];
     let batch = db.batch(), ops = 0, written = 0;
     for(const uDoc of usersSnap.docs){
+      if(uDoc.data().mergedInto) continue;                 // tombstone — its logs already fold into canonical
       const a = agg.get(uDoc.id) || {count:0, days:new Set(), months:new Set()};
       const st = computeStreaksFromDays(a.days);           // the exact helper the Profile uses
       const rec = { totalWorkouts:a.count, longestStreak:st.longestStreak, currentStreak:st.currentStreak, lastLoggedDay:st.lastLoggedDay, seasonsPlayed:a.months.size };
@@ -5446,8 +5458,6 @@ if('serviceWorker' in navigator){
       arr.push({ ds:ds, loggers:loggers, pct: denom>0 ? Math.min(100, Math.round(loggers/denom*1000)/10) : 0 }); }
     return arr;
   }
-  // Trailing win-day rolling average of a series' pct.
-  function rollingAvg(arr, win){ return arr.map(function(_,i){ var s=0,c=0; for(var j=Math.max(0,i-win+1);j<=i;j++){ s+=arr[j].pct; c++; } return Math.round(s/c*10)/10; }); }
   // Mean daily participation % over days [startAgo..endAgo] ago (inclusive).
   function avgPart(data, idx, endMid, denom, scopeGroup, startAgo, endAgo){
     var sum=0,n=0; for(var a=startAgo;a<=endAgo;a++){ var dt=new Date(endMid); dt.setDate(dt.getDate()-a);
@@ -5562,16 +5572,13 @@ if('serviceWorker' in navigator){
     var denom=partDenom(data,denomMode,scope);
     var curEnd=new Date(tm), prevEnd=new Date(tm); prevEnd.setDate(prevEnd.getDate()-30);
     var cur=dailySeries(idx,curEnd,denom,scope,30), prev=dailySeries(idx,prevEnd,denom,scope,30);
-    var curRoll=rollingAvg(cur,7), prevRoll=rollingAvg(prev,7);
     var labels=[]; for(var i=1;i<=30;i++) labels.push(String(i));
     var GOLD='#d4af37', BLUE='#4f9cf7', MUT='#8a8a93';
     state.partChart=new window.Chart(cv.getContext('2d'), {
       type:'line',
       data:{ labels:labels, datasets:[
         { label:'Last 30 days', data:cur.map(function(p){return p.pct;}), borderColor:GOLD, backgroundColor:'rgba(212,175,55,.12)', borderWidth:2, pointRadius:0, pointHoverRadius:4, tension:.25, fill:true, _meta:cur },
-        { label:'Last 30 · 7-day avg', data:curRoll, borderColor:GOLD, borderWidth:1.5, borderDash:[5,4], pointRadius:0, tension:.3, fill:false },
-        { label:'Previous 30 days', data:prev.map(function(p){return p.pct;}), borderColor:BLUE, backgroundColor:'rgba(79,156,247,.08)', borderWidth:2, pointRadius:0, pointHoverRadius:4, tension:.25, fill:false, _meta:prev },
-        { label:'Prev 30 · 7-day avg', data:prevRoll, borderColor:BLUE, borderWidth:1.5, borderDash:[5,4], pointRadius:0, tension:.3, fill:false }
+        { label:'Previous 30 days', data:prev.map(function(p){return p.pct;}), borderColor:BLUE, backgroundColor:'rgba(79,156,247,.08)', borderWidth:2, pointRadius:0, pointHoverRadius:4, tension:.25, fill:false, _meta:prev }
       ]},
       options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
         scales:{ y:{ min:0, max:100, ticks:{ callback:function(v){return v+'%';}, color:MUT }, grid:{color:'rgba(255,255,255,.06)'}, title:{display:true,text:'Participation %',color:MUT} },
