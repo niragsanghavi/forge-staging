@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Forge — Your friend group's fitness league</title>
+<meta name="description" content="Forge turns your friend group's workouts into a monthly competition. Teams, points, streaks, one leaderboard.">
+<meta name="theme-color" content="#0a0a0d">
+<meta property="og:title" content="Forge — Your friend group's fitness league">
+<meta property="og:description" content="Forge turns your friend group's workouts into a monthly competition.">
+<link rel="icon" href="../icon-192.png">
+<link rel="apple-touch-icon" href="../icon-180.png">
+<style>
+/* ════════════════════════════════════════════════════════════════════
+   FORGE /app — marketing page. Standalone: no dependencies, no SW.
+   Palette law: bg #0a0a0d · gold #d4a843 (hot #f0c05a) · text #f2f0ec
+   · muted #8f8d98. Nothing else. Borders are alpha blends of these.
+   ════════════════════════════════════════════════════════════════════ */
+:root{
+  --bg:#0a0a0d;
+  --gold:#d4a843;
+  --gold-hot:#f0c05a;
+  --text:#f2f0ec;
+  --muted:#8f8d98;
+  --line:rgba(242,240,236,.08);
+  --gold-line:rgba(212,168,67,.32);
+  --gold-dim:rgba(212,168,67,.10);
+  --ease:cubic-bezier(.22,.61,.36,1); /* ease-out */
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{scroll-behavior:smooth}
+html.locked, html.locked body{overflow:hidden;height:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  background:var(--bg);color:var(--text);line-height:1.6;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+a{color:inherit;text-decoration:none}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ── type scale ──────────────────────────────────────────────────── */
+.display{
+  font-weight:900;letter-spacing:-.02em;line-height:1.14;
+  font-size:clamp(1.7rem,5.4vw,2.9rem);
+}
+.label{
+  display:flex;align-items:center;justify-content:center;gap:12px;
+  font-size:11px;font-weight:500;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--muted);
+}
+.label::before{content:"";width:20px;height:1.5px;background:var(--gold)}
+
+/* ── buttons ─────────────────────────────────────────────────────── */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-height:52px;padding:15px 34px;border-radius:10px;
+  font-size:13px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;
+  background:var(--gold);color:var(--bg);
+  transition:background .3s var(--ease),transform .3s var(--ease),opacity .3s var(--ease);
+}
+.btn:hover{background:var(--gold-hot)}
+.btn:active{transform:translateY(1px)}
+.btn:focus-visible{outline:2px solid var(--gold-hot);outline-offset:3px}
+.btn-quiet{
+  background:transparent;color:var(--gold);
+  border:1px solid var(--gold-line);
+}
+.btn-quiet:hover{background:var(--gold-dim);color:var(--gold-hot)}
+
+/* ════════════════ A · THE GATE ════════════════ */
+.gate{
+  position:relative;min-height:100vh;min-height:100svh;
+  display:flex;align-items:center;justify-content:center;
+  padding:24px;
+}
+.stage{position:relative;width:100%;max-width:560px;height:70vh;height:70svh;max-height:640px;min-height:420px}
+.card{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:34px;text-align:center;padding:0 8px;
+  opacity:0;transform:translateY(14px);pointer-events:none;
+  transition:opacity .38s var(--ease),transform .38s var(--ease);
+}
+.card.on{opacity:1;transform:none;pointer-events:auto}
+.g-title{
+  font-weight:900;letter-spacing:-.02em;line-height:1.18;
+  font-size:clamp(1.45rem,5.6vw,2.2rem);max-width:17ch;
+}
+.g-sub{color:var(--muted);font-size:15px;margin-top:-20px}
+
+/* chevrons — 1.5px line-work, 8px directional nudge */
+.chev{width:44px;height:44px;stroke:var(--gold);stroke-width:1.5;fill:none;
+  stroke-linecap:round;stroke-linejoin:round}
+.n-r{animation:nR 1.5s var(--ease) infinite}
+.n-u{animation:nU 1.5s var(--ease) infinite}
+.n-l{animation:nL 1.5s var(--ease) infinite}
+.n-d{animation:nD 1.5s var(--ease) infinite}
+@keyframes nR{0%,100%{transform:translateX(0)}50%{transform:translateX(8px)}}
+@keyframes nU{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes nL{0%,100%{transform:translateX(0)}50%{transform:translateX(-8px)}}
+@keyframes nD{0%,100%{transform:translateY(0)}50%{transform:translateY(8px)}}
+
+/* progress dots — 4, for the 4 memory cards */
+.dots{
+  position:absolute;left:0;right:0;bottom:12px;
+  display:flex;justify-content:center;gap:10px;
+  opacity:0;transition:opacity .38s var(--ease);
+}
+.dots.show{opacity:1}
+.dots i{width:6px;height:6px;border-radius:50%;background:var(--line);transition:background .3s var(--ease)}
+.dots i.hit{background:var(--gold)}
+
+/* ════════════════ B · THE REVEAL ════════════════ */
+.reveal{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:30px;text-align:center;padding:0 8px;
+  pointer-events:none;
+}
+.reveal.on{pointer-events:auto}
+.r-line,.r-btn{opacity:0;transform:translateY(14px);
+  transition:opacity .42s var(--ease),transform .42s var(--ease)}
+.r-line.in,.r-btn.in{opacity:1;transform:none}
+#r1{font-weight:900;letter-spacing:-.02em;line-height:1.18;
+  font-size:clamp(1.45rem,5.6vw,2.2rem);max-width:16ch}
+#r2{color:var(--muted);font-size:clamp(1rem,3.6vw,1.15rem);max-width:30ch}
+.r-btn{min-width:230px}
+.r-btn.logged{
+  background:transparent;border:1px solid var(--gold-line);color:var(--gold);
+  text-transform:none;letter-spacing:.02em;font-size:15px;cursor:default;
+}
+.r-btn.logged:hover{background:transparent}
+
+/* ════════════════ C · MAIN PAGE ════════════════ */
+.sec{
+  max-width:660px;margin:0 auto;padding:96px 24px;
+  text-align:center;
+}
+.sec .display{margin-top:26px}
+.sec-sub{color:var(--muted);font-size:16px;margin-top:18px}
+.lead{margin-top:26px;font-weight:900;letter-spacing:-.02em;
+  font-size:clamp(1.4rem,4.4vw,1.9rem)}
+
+/* scroll reveal — fade + small translate only */
+.rv{opacity:0;transform:translateY(18px);
+  transition:opacity .5s var(--ease),transform .5s var(--ease)}
+.rv.in{opacity:1;transform:none}
+
+/* how-it-works rows */
+.rows{max-width:480px;margin:44px auto 0;text-align:left;
+  display:flex;flex-direction:column;gap:14px}
+.row{
+  display:flex;align-items:flex-start;gap:18px;
+  padding:22px 22px;border:1px solid var(--line);border-radius:14px;
+}
+.row-ic{flex:none;width:42px;height:42px;border:1px solid var(--line);border-radius:11px;
+  display:flex;align-items:center;justify-content:center}
+.row-ic svg{width:20px;height:20px;stroke:var(--gold);stroke-width:1.5;fill:none;
+  stroke-linecap:round;stroke-linejoin:round}
+.row-t{font-size:12px;font-weight:500;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--text);margin-bottom:5px;margin-top:2px}
+.row p{color:var(--muted);font-size:14.5px;line-height:1.55}
+
+/* CTA */
+.cta{padding-top:120px;padding-bottom:120px}
+.cta .btn{margin-top:38px}
+.quiet-link{
+  display:inline-block;margin-top:26px;color:var(--muted);font-size:14px;
+  border-bottom:1px solid var(--line);padding-bottom:2px;
+  transition:color .3s var(--ease),border-color .3s var(--ease);
+}
+.quiet-link:hover{color:var(--gold-hot);border-color:var(--gold-line)}
+
+/* ════════════════ D · FOOTER STRIP ════════════════ */
+.foot{border-top:1px solid var(--line);padding:56px 24px 64px;text-align:center}
+.pills{display:flex;flex-wrap:wrap;justify-content:center;gap:12px}
+.pill{
+  display:inline-flex;align-items:center;gap:10px;
+  padding:12px 20px;border:1px solid var(--line);border-radius:999px;
+  color:var(--muted);font-size:12.5px;letter-spacing:.04em;cursor:default;
+}
+.pill svg{width:16px;height:16px;stroke:var(--muted);stroke-width:1.5;fill:none;
+  stroke-linecap:round;stroke-linejoin:round}
+.foot-line{
+  margin-top:44px;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;
+  gap:8px 14px;color:var(--muted);font-size:13px;
+}
+.wordmark{font-weight:900;letter-spacing:.3em;font-size:13px;color:var(--text)}
+.foot-line a{transition:color .3s var(--ease)}
+.foot-line a:hover{color:var(--gold-hot)}
+.foot-dot{opacity:.45}
+.ig{display:inline-flex;vertical-align:middle}
+.ig svg{width:16px;height:16px;stroke:currentColor;stroke-width:1.5;fill:none;
+  stroke-linecap:round;stroke-linejoin:round}
+
+/* ── desktop ─────────────────────────────────────────────────────── */
+@media(min-width:900px){
+  .sec{padding:130px 24px}
+  .cta{padding-top:160px;padding-bottom:160px}
+  .rows{gap:16px}
+}
+
+/* ── reduced motion: no nudge, near-instant fades, no translates ─── */
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .n-r,.n-u,.n-l,.n-d{animation:none}
+  .card,.r-line,.r-btn,.rv,.dots{transition-duration:.01ms;transform:none}
+  .card{transform:none}
+}
+</style>
+</head>
+<body>
+
+<h1 class="vh">Forge — your friend group's fitness league</h1>
+
+<!-- ════════════════ A · THE GATE ════════════════ -->
+<section class="gate" id="gate" aria-label="Introduction">
+  <div class="stage">
+
+    <div class="card on" data-i="0">
+      <p class="g-title">A quick memory game.</p>
+      <p class="g-sub">Ten seconds. Don&rsquo;t overthink.</p>
+      <button class="btn" data-next>Start</button>
+    </div>
+
+    <div class="card" data-i="1">
+      <svg class="chev n-r" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+      <p class="g-title">Memorise the thing on your right.</p>
+      <button class="btn btn-quiet" data-next>Got it</button>
+    </div>
+
+    <div class="card" data-i="2">
+      <svg class="chev n-u" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 15l7-7 7 7"/></svg>
+      <p class="g-title">Spot something round above you.</p>
+      <button class="btn btn-quiet" data-next>Got it</button>
+    </div>
+
+    <div class="card" data-i="3">
+      <svg class="chev n-l" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+      <p class="g-title">The furthest thing to your left &mdash; what is it?</p>
+      <button class="btn btn-quiet" data-next>Got it</button>
+    </div>
+
+    <div class="card" data-i="4">
+      <svg class="chev n-d" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9l7 7 7-7"/></svg>
+      <p class="g-title">What colour are your shoes?</p>
+      <button class="btn btn-quiet" data-next>Got it</button>
+    </div>
+
+    <!-- ════════════════ B · THE REVEAL ════════════════ -->
+    <div class="reveal" id="reveal">
+      <p class="r-line" id="r1">All of that was irrelevant.</p>
+      <p class="r-line" id="r2">But you just did your first neck stretches of the day.</p>
+      <button class="btn r-btn" id="logBtn">Log this workout</button>
+    </div>
+
+    <div class="dots" id="dots" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  </div>
+</section>
+
+<!-- ════════════════ C · MAIN PAGE ════════════════ -->
+<main id="content">
+
+  <section class="sec">
+    <div class="label rv">What is Forge</div>
+    <h2 class="display rv">Forge turns your friend group&rsquo;s workouts into a monthly competition.</h2>
+    <p class="sec-sub rv">Real people. Real rivalry. Every workout counts.</p>
+  </section>
+
+  <section class="sec">
+    <div class="label rv">How it works</div>
+    <p class="lead rv">You compete in teams.</p>
+    <div class="rows">
+      <div class="row rv">
+        <span class="row-ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.25"/><path d="M12 8.5v7M8.5 12h7"/></svg>
+        </span>
+        <div>
+          <div class="row-t">Points</div>
+          <p>Every workout you log scores points for your team.</p>
+        </div>
+      </div>
+      <div class="row rv">
+        <span class="row-ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 3.5c2.4 3 4.9 4.6 4.9 7.9a4.9 4.9 0 0 1-9.8 0c0-1.7.7-3 1.7-4.1.2 1.2.9 2 2 2.5-.9-2.5-.1-4.5 1.2-6.3z"/></svg>
+        </span>
+        <div>
+          <div class="row-t">Streaks</div>
+          <p>Show up consistently and your streak grows. One rest day is allowed.</p>
+        </div>
+      </div>
+      <div class="row rv">
+        <span class="row-ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 20h16M7 20v-6M12 20V5M17 20v-9"/></svg>
+        </span>
+        <div>
+          <div class="row-t">Leaderboard</div>
+          <p>Live ranks all month. New season, new teams, every month.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec cta">
+    <h2 class="display rv">Bring your group.</h2>
+    <div class="rv">
+      <a class="btn" href="mailto:team@goforge.in?subject=Starting%20a%20Forge%20group&body=Hi%20-%20I%20want%20to%20start%20a%20Forge%20group%20for%20my%20crew.">Start your group</a>
+    </div>
+    <div class="rv">
+      <a class="quiet-link" href="https://www.instagram.com/go.forge/" target="_blank" rel="noopener">See it in action on Instagram</a>
+    </div>
+  </section>
+
+  <!-- ════════════════ D · FOOTER STRIP ════════════════ -->
+  <footer class="foot">
+    <div class="pills rv">
+      <span class="pill">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.8 8.2c-1.2-.1-2.3.7-3.8.7s-2.5-.7-3.7-.7c-1.9.1-4.1 1.7-4.1 5 0 3.4 2.6 7.6 4.6 7.6 1 0 1.7-.7 3.2-.7s2.1.7 3.2.7c2 0 4.6-4.2 4.6-7.6 0-3.3-2.2-4.9-4-5z"/><path d="M12.3 7.5c-.3-1.9.9-3.7 2.8-4.1.3 1.9-1 3.7-2.8 4.1z"/></svg>
+        App Store &mdash; Coming soon
+      </span>
+      <span class="pill">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 4.6v14.8c0 .7.8 1.2 1.4.8l12.3-7.4c.6-.4.6-1.2 0-1.6L7.9 3.8c-.6-.4-1.4.1-1.4.8z"/></svg>
+        Google Play &mdash; Coming soon
+      </span>
+    </div>
+    <div class="foot-line">
+      <span class="wordmark">FORGE</span>
+      <span class="foot-dot">&middot;</span>
+      <a href="mailto:team@goforge.in">team@goforge.in</a>
+      <span class="foot-dot">&middot;</span>
+      <a class="ig" href="https://www.instagram.com/go.forge/" target="_blank" rel="noopener" aria-label="Forge on Instagram">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4.5"/><circle cx="12" cy="12" r="3.6"/><path d="M16.6 7.4h.01"/></svg>
+      </a>
+      <span class="foot-dot">&middot;</span>
+      <span>&copy; 2026</span>
+    </div>
+  </footer>
+</main>
+
+<script>
+(function(){
+'use strict';
+var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+var docEl = document.documentElement;
+var content = document.getElementById('content');
+var cards = Array.prototype.slice.call(document.querySelectorAll('.card'));
+var dots = document.getElementById('dots');
+var dotEls = Array.prototype.slice.call(dots.children);
+var reveal = document.getElementById('reveal');
+var r1 = document.getElementById('r1');
+var r2 = document.getElementById('r2');
+var logBtn = document.getElementById('logBtn');
+var idx = 0;
+
+/* Gate is JS-gated: without JS the page is a plain scrollable document. */
+docEl.classList.add('locked');
+content.setAttribute('inert','');
+
+function show(n){
+  cards[idx].classList.remove('on');
+  idx = n;
+  cards[idx].classList.add('on');
+  if(n >= 1){
+    dots.classList.add('show');
+    dotEls.forEach(function(d,i){ d.classList.toggle('hit', i <= n-1); });
+  }
+}
+
+function startReveal(){
+  cards[idx].classList.remove('on');
+  dots.classList.remove('show');
+  reveal.classList.add('on');
+  /* Pacing is the product:
+     r1 alone → hold 1.4s → r2 → 1s → button. */
+  setTimeout(function(){ r1.classList.add('in'); }, 420);
+  setTimeout(function(){ r2.classList.add('in'); }, 420 + 1400);
+  setTimeout(function(){ logBtn.classList.add('in'); }, 420 + 1400 + 1000);
+}
+
+cards.forEach(function(card, n){
+  var btn = card.querySelector('[data-next]');
+  btn.addEventListener('click', function(){
+    if(n < 4) show(n+1);
+    else startReveal();
+  });
+});
+
+logBtn.addEventListener('click', function(){
+  if(logBtn.classList.contains('logged')) return;
+  /* quiet confirmation state, then hand the page over */
+  logBtn.style.opacity = '0';
+  setTimeout(function(){
+    logBtn.classList.add('logged');
+    logBtn.textContent = 'Workout №1 — logged.';
+    logBtn.style.opacity = '1';
+    logBtn.setAttribute('aria-disabled','true');
+  }, reduced ? 0 : 180);
+  setTimeout(function(){
+    docEl.classList.remove('locked');
+    content.removeAttribute('inert');
+    content.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' });
+  }, reduced ? 300 : 1150);
+});
+
+/* scroll reveal for main sections — fade + 18px rise, once */
+var io = new IntersectionObserver(function(entries){
+  entries.forEach(function(e){
+    if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); }
+  });
+},{ threshold: 0.15 });
+document.querySelectorAll('.rv').forEach(function(el){ io.observe(el); });
+})();
+</script>
+</body>
+</html>
