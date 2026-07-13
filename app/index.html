@@ -14,7 +14,11 @@
 /* ════════════════════════════════════════════════════════════════════
    FORGE /app — marketing page. Standalone: no dependencies, no SW.
    Palette law: bg #0a0a0d · gold #d4a843 (hot #f0c05a) · text #f2f0ec
-   · muted #8f8d98. Nothing else. Borders are alpha blends of these.
+   · muted #8f8d98. Placeholder frames use #101016 / #26262e (spec).
+   WhatsApp green #25D366 is the single sanctioned exemption (official
+   button only) — nothing else on the page may use it.
+   Gold-keyword rule: each display/body line carries exactly ONE gold
+   (#f0c05a) key word/phrase via <b class="gk">.
    ════════════════════════════════════════════════════════════════════ */
 :root{
   --bg:#0a0a0d;
@@ -25,6 +29,8 @@
   --line:rgba(242,240,236,.08);
   --gold-line:rgba(212,168,67,.32);
   --gold-dim:rgba(212,168,67,.10);
+  --ph-bg:#101016;
+  --ph-line:#26262e;
   --ease:cubic-bezier(.22,.61,.36,1); /* ease-out */
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -37,6 +43,7 @@ body{
 }
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 a{color:inherit;text-decoration:none}
+b.gk{font-weight:inherit;color:var(--gold-hot)}
 .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
 /* ── type scale ──────────────────────────────────────────────────── */
@@ -53,10 +60,10 @@ a{color:inherit;text-decoration:none}
 
 /* ── buttons ─────────────────────────────────────────────────────── */
 .btn{
-  display:inline-flex;align-items:center;justify-content:center;
-  min-height:52px;padding:15px 34px;border-radius:10px;
+  display:inline-flex;align-items:center;justify-content:center;text-align:center;
+  min-height:52px;padding:15px 32px;border-radius:10px;
   font-size:13px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;
-  background:var(--gold);color:var(--bg);
+  background:var(--gold);color:var(--bg);max-width:330px;line-height:1.5;
   transition:background .3s var(--ease),transform .3s var(--ease),opacity .3s var(--ease);
 }
 .btn:hover{background:var(--gold-hot)}
@@ -74,20 +81,27 @@ a{color:inherit;text-decoration:none}
   display:flex;align-items:center;justify-content:center;
   padding:24px;
 }
-.stage{position:relative;width:100%;max-width:560px;height:70vh;height:70svh;max-height:640px;min-height:420px}
+.stage{position:relative;width:100%;max-width:620px;height:74vh;height:74svh;max-height:680px;min-height:440px}
 .card{
   position:absolute;inset:0;
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:34px;text-align:center;padding:0 8px;
+  gap:32px;text-align:center;padding:0 8px;
   opacity:0;transform:translateY(14px);pointer-events:none;
   transition:opacity .38s var(--ease),transform .38s var(--ease);
 }
 .card.on{opacity:1;transform:none;pointer-events:auto}
 .g-title{
-  font-weight:900;letter-spacing:-.02em;line-height:1.18;
-  font-size:clamp(1.45rem,5.6vw,2.2rem);max-width:17ch;
+  font-weight:900;letter-spacing:-.02em;line-height:1.22;
+  font-size:clamp(1.35rem,5.2vw,2.05rem);max-width:22ch;
 }
-.g-sub{color:var(--muted);font-size:15px;margin-top:-20px}
+
+/* intro screen — its own sequential fades */
+.i-line,.i-btn{opacity:0;transform:translateY(14px);
+  transition:opacity .42s var(--ease),transform .42s var(--ease)}
+.i-line.in,.i-btn.in{opacity:1;transform:none}
+#i1{font-weight:900;letter-spacing:-.02em;line-height:1.18;
+  font-size:clamp(1.6rem,6vw,2.4rem)}
+#i2{font-size:clamp(1rem,3.7vw,1.2rem);line-height:1.55;max-width:34ch;color:var(--text);margin-top:-10px}
 
 /* chevrons — 1.5px line-work, 8px directional nudge */
 .chev{width:44px;height:44px;stroke:var(--gold);stroke-width:1.5;fill:none;
@@ -111,21 +125,23 @@ a{color:inherit;text-decoration:none}
 .dots i{width:6px;height:6px;border-radius:50%;background:var(--line);transition:background .3s var(--ease)}
 .dots i.hit{background:var(--gold)}
 
-/* ════════════════ B · THE REVEAL ════════════════ */
+/* ════════════════ B · THE REVEAL — 7 beats, all persist ═══════════ */
 .reveal{
   position:absolute;inset:0;
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:30px;text-align:center;padding:0 8px;
+  gap:15px;text-align:center;padding:0 8px;
   pointer-events:none;
 }
 .reveal.on{pointer-events:auto}
-.r-line,.r-btn{opacity:0;transform:translateY(14px);
+.rb{opacity:0;transform:translateY(12px);
   transition:opacity .42s var(--ease),transform .42s var(--ease)}
-.r-line.in,.r-btn.in{opacity:1;transform:none}
-#r1{font-weight:900;letter-spacing:-.02em;line-height:1.18;
-  font-size:clamp(1.45rem,5.6vw,2.2rem);max-width:16ch}
-#r2{color:var(--muted);font-size:clamp(1rem,3.6vw,1.15rem);max-width:30ch}
-.r-btn{min-width:230px}
+.rb.in{opacity:1;transform:none}
+.rb-xl{font-weight:900;letter-spacing:-.02em;line-height:1.2;
+  font-size:clamp(1.45rem,5.2vw,2.05rem)}
+#rb1{color:var(--gold-hot)}
+.rb-md{font-size:clamp(.98rem,3.5vw,1.12rem);line-height:1.55;max-width:37ch}
+.rb-label{font-size:11px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--muted);margin-top:6px}
 .r-btn.logged{
   background:transparent;border:1px solid var(--gold-line);color:var(--gold);
   text-transform:none;letter-spacing:.02em;font-size:15px;cursor:default;
@@ -134,7 +150,7 @@ a{color:inherit;text-decoration:none}
 
 /* ════════════════ C · MAIN PAGE ════════════════ */
 .sec{
-  max-width:660px;margin:0 auto;padding:96px 24px;
+  max-width:720px;margin:0 auto;padding:96px 24px;
   text-align:center;
 }
 .sec .display{margin-top:26px}
@@ -147,23 +163,38 @@ a{color:inherit;text-decoration:none}
   transition:opacity .5s var(--ease),transform .5s var(--ease)}
 .rv.in{opacity:1;transform:none}
 
-/* how-it-works rows */
-.rows{max-width:480px;margin:44px auto 0;text-align:left;
+/* image placeholders — 1px #26262e frame on #101016, labeled until the
+   real asset lands at the wired path (img covers the label once it loads) */
+.ph{position:relative;background:var(--ph-bg);border:1px solid var(--ph-line);
+  border-radius:12px;overflow:hidden}
+.ph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1}
+.ph figcaption{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  padding:8px;font-size:10.5px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--muted);text-align:center}
+.ph169{aspect-ratio:16/9}
+.ph1x1{aspect-ratio:1/1}
+.shots{display:grid;grid-template-columns:1fr;gap:14px;margin-top:42px}
+
+/* how-it-works rows — icon · text · square image slot */
+.rows{max-width:560px;margin:44px auto 0;text-align:left;
   display:flex;flex-direction:column;gap:14px}
 .row{
-  display:flex;align-items:flex-start;gap:18px;
-  padding:22px 22px;border:1px solid var(--line);border-radius:14px;
+  display:flex;align-items:center;gap:14px;
+  padding:18px 16px;border:1px solid var(--line);border-radius:14px;
 }
-.row-ic{flex:none;width:42px;height:42px;border:1px solid var(--line);border-radius:11px;
+.row-ic{flex:none;width:38px;height:38px;border:1px solid var(--line);border-radius:10px;
   display:flex;align-items:center;justify-content:center}
-.row-ic svg{width:20px;height:20px;stroke:var(--gold);stroke-width:1.5;fill:none;
+.row-ic svg{width:19px;height:19px;stroke:var(--gold);stroke-width:1.5;fill:none;
   stroke-linecap:round;stroke-linejoin:round}
+.row-tx{flex:1;min-width:0}
 .row-t{font-size:12px;font-weight:500;letter-spacing:.18em;text-transform:uppercase;
-  color:var(--text);margin-bottom:5px;margin-top:2px}
-.row p{color:var(--muted);font-size:14.5px;line-height:1.55}
+  color:var(--text);margin-bottom:5px}
+.row-tx p{color:var(--muted);font-size:13.5px;line-height:1.55}
+.row-img{flex:none;width:88px}
+.row-img figcaption{font-size:8px;letter-spacing:.06em;padding:4px}
 
 /* CTA */
-.cta{padding-top:120px;padding-bottom:120px}
+.cta{padding-top:110px;padding-bottom:110px}
 .cta .btn{margin-top:38px}
 .quiet-link{
   display:inline-block;margin-top:26px;color:var(--muted);font-size:14px;
@@ -172,7 +203,16 @@ a{color:inherit;text-decoration:none}
 }
 .quiet-link:hover{color:var(--gold-hot);border-color:var(--gold-line)}
 
-/* ════════════════ D · FOOTER STRIP ════════════════ */
+/* ════════════════ D · WHATSAPP CTA ════════════════ */
+.wa{max-width:720px;margin:0 auto;padding:0 24px 96px;text-align:center}
+.wa-sub{color:var(--muted);font-size:15px}
+.wa a{display:inline-block;margin-top:26px;transition:opacity .3s var(--ease)}
+.wa a:hover{opacity:.88}
+.wa img{height:56px;width:auto;display:inline-block}
+.wa-fallback{display:none}
+.wa-fallback svg{display:block;height:56px;width:auto}
+
+/* ════════════════ E · FOOTER STRIP ════════════════ */
 .foot{border-top:1px solid var(--line);padding:56px 24px 64px;text-align:center}
 .pills{display:flex;flex-wrap:wrap;justify-content:center;gap:12px}
 .pill{
@@ -197,15 +237,21 @@ a{color:inherit;text-decoration:none}
 /* ── desktop ─────────────────────────────────────────────────────── */
 @media(min-width:900px){
   .sec{padding:130px 24px}
-  .cta{padding-top:160px;padding-bottom:160px}
+  .cta{padding-top:150px;padding-bottom:150px}
+  .shots{grid-template-columns:1fr 1fr;gap:18px}
   .rows{gap:16px}
+  .row{gap:18px;padding:22px 22px}
+  .row-ic{width:42px;height:42px}
+  .row-img{width:112px}
+  .row-img figcaption{font-size:9.5px;letter-spacing:.1em}
+  .wa{padding-bottom:130px}
 }
 
 /* ── reduced motion: no nudge, near-instant fades, no translates ─── */
 @media(prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
   .n-r,.n-u,.n-l,.n-d{animation:none}
-  .card,.r-line,.r-btn,.rv,.dots{transition-duration:.01ms;transform:none}
+  .card,.i-line,.i-btn,.rb,.rv,.dots{transition-duration:.01ms;transform:none}
   .card{transform:none}
 }
 </style>
@@ -218,41 +264,52 @@ a{color:inherit;text-decoration:none}
 <section class="gate" id="gate" aria-label="Introduction">
   <div class="stage">
 
+    <!-- intro screen — two sequential fade-ins, then BEGIN -->
     <div class="card on" data-i="0">
-      <p class="g-title">A quick memory game.</p>
-      <p class="g-sub">Ten seconds. Don&rsquo;t overthink.</p>
-      <button class="btn" data-next>Start</button>
+      <p class="i-line" id="i1">Welcome to <b class="gk">Forge</b>.</p>
+      <p class="i-line" id="i2">Before we let you in, we want to show you some <b class="gk">magic</b> through our memory game.</p>
+      <button class="btn i-btn" id="beginBtn" data-next>Begin</button>
     </div>
 
     <div class="card" data-i="1">
       <svg class="chev n-r" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
-      <p class="g-title">Memorise the thing on your right.</p>
+      <p class="g-title">First, memorise the first object that you see on your <b class="gk">right</b>.</p>
       <button class="btn btn-quiet" data-next>Got it</button>
     </div>
 
     <div class="card" data-i="2">
       <svg class="chev n-u" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 15l7-7 7 7"/></svg>
-      <p class="g-title">Spot something round above you.</p>
+      <p class="g-title">Now, spot something <b class="gk">round</b> above you.</p>
       <button class="btn btn-quiet" data-next>Got it</button>
     </div>
 
     <div class="card" data-i="3">
       <svg class="chev n-l" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
-      <p class="g-title">The furthest thing to your left &mdash; what is it?</p>
+      <p class="g-title">Almost done, the furthest thing to your <b class="gk">left</b> &mdash; what is it? Lock this object in your head.</p>
       <button class="btn btn-quiet" data-next>Got it</button>
     </div>
 
     <div class="card" data-i="4">
       <svg class="chev n-d" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9l7 7 7-7"/></svg>
-      <p class="g-title">What colour are your shoes?</p>
+      <p class="g-title">And last, what colour are your <b class="gk">shoes</b>?</p>
       <button class="btn btn-quiet" data-next>Got it</button>
     </div>
 
-    <!-- ════════════════ B · THE REVEAL ════════════════ -->
+    <!-- question screen — no chevron -->
+    <div class="card" data-i="5">
+      <p class="g-title">Do you remember all <b class="gk">four objects</b>?</p>
+      <button class="btn btn-quiet" data-next>I do</button>
+    </div>
+
+    <!-- ════════════════ B · THE REVEAL — 7 beats ════════════════ -->
     <div class="reveal" id="reveal">
-      <p class="r-line" id="r1">All of that was irrelevant.</p>
-      <p class="r-line" id="r2">But you just did your first neck stretches of the day.</p>
-      <button class="btn r-btn" id="logBtn">Log this workout</button>
+      <p class="rb rb-xl" id="rb1">Great.</p>
+      <p class="rb rb-xl">It&rsquo;s <b class="gk">irrelevant</b>.</p>
+      <p class="rb rb-md">But guess who just fooled you into doing your first <b class="gk">neck stretches</b> for the day?</p>
+      <p class="rb rb-md">Being on this website for just 20 seconds already made you a <b class="gk">fitter person</b> than you were 20 seconds ago.</p>
+      <p class="rb rb-md">Imagine what <b class="gk">magic</b> awaits you!</p>
+      <p class="rb rb-label">To know more:</p>
+      <button class="btn rb r-btn" id="logBtn">Log this workout and begin your journey</button>
     </div>
 
     <div class="dots" id="dots" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
@@ -264,46 +321,68 @@ a{color:inherit;text-decoration:none}
 
   <section class="sec">
     <div class="label rv">What is Forge</div>
-    <h2 class="display rv">Forge turns your friend group&rsquo;s workouts into a monthly competition.</h2>
-    <p class="sec-sub rv">Real people. Real rivalry. Every workout counts.</p>
+    <h2 class="display rv">Forge turns your friend group&rsquo;s workouts into a monthly <b class="gk">competition</b>.</h2>
+    <p class="sec-sub rv">Real people. Real <b class="gk">rivalry</b>. Every workout counts.</p>
+    <div class="shots rv">
+      <figure class="ph ph169">
+        <img src="assets/marketing/what-is-forge-1.png" alt="Forge preview" onerror="this.style.display='none'">
+        <figcaption>what-is-forge-1.png</figcaption>
+      </figure>
+      <figure class="ph ph169">
+        <img src="assets/marketing/what-is-forge-2.png" alt="Forge preview" onerror="this.style.display='none'">
+        <figcaption>what-is-forge-2.png</figcaption>
+      </figure>
+    </div>
   </section>
 
   <section class="sec">
     <div class="label rv">How it works</div>
-    <p class="lead rv">You compete in teams.</p>
+    <p class="lead rv">You compete in <b class="gk">teams</b>.</p>
     <div class="rows">
       <div class="row rv">
         <span class="row-ic" aria-hidden="true">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.25"/><path d="M12 8.5v7M8.5 12h7"/></svg>
         </span>
-        <div>
+        <div class="row-tx">
           <div class="row-t">Points</div>
-          <p>Every workout you log scores points for your team.</p>
+          <p>Every workout you log scores <b class="gk">points</b> for your team.</p>
         </div>
+        <figure class="ph ph1x1 row-img">
+          <img src="assets/marketing/feature-points.png" alt="Points preview" onerror="this.style.display='none'">
+          <figcaption>feature-points.png</figcaption>
+        </figure>
       </div>
       <div class="row rv">
         <span class="row-ic" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M12 3.5c2.4 3 4.9 4.6 4.9 7.9a4.9 4.9 0 0 1-9.8 0c0-1.7.7-3 1.7-4.1.2 1.2.9 2 2 2.5-.9-2.5-.1-4.5 1.2-6.3z"/></svg>
         </span>
-        <div>
+        <div class="row-tx">
           <div class="row-t">Streaks</div>
-          <p>Show up consistently and your streak grows. One rest day is allowed.</p>
+          <p>Show up consistently and your <b class="gk">streak</b> grows. One rest day is allowed.</p>
         </div>
+        <figure class="ph ph1x1 row-img">
+          <img src="assets/marketing/feature-streaks.png" alt="Streaks preview" onerror="this.style.display='none'">
+          <figcaption>feature-streaks.png</figcaption>
+        </figure>
       </div>
       <div class="row rv">
         <span class="row-ic" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M4 20h16M7 20v-6M12 20V5M17 20v-9"/></svg>
         </span>
-        <div>
+        <div class="row-tx">
           <div class="row-t">Leaderboard</div>
-          <p>Live ranks all month. New season, new teams, every month.</p>
+          <p><b class="gk">Live ranks</b> all month. New season, new teams, every month.</p>
         </div>
+        <figure class="ph ph1x1 row-img">
+          <img src="assets/marketing/feature-leaderboard.png" alt="Leaderboard preview" onerror="this.style.display='none'">
+          <figcaption>feature-leaderboard.png</figcaption>
+        </figure>
       </div>
     </div>
   </section>
 
   <section class="sec cta">
-    <h2 class="display rv">Bring your group.</h2>
+    <h2 class="display rv">Bring your <b class="gk">group</b>.</h2>
     <div class="rv">
       <a class="btn" href="mailto:team@goforge.in?subject=Starting%20a%20Forge%20group&body=Hi%20-%20I%20want%20to%20start%20a%20Forge%20group%20for%20my%20crew.">Start your group</a>
     </div>
@@ -312,7 +391,25 @@ a{color:inherit;text-decoration:none}
     </div>
   </section>
 
-  <!-- ════════════════ D · FOOTER STRIP ════════════════ -->
+  <!-- ════════════════ D · WHATSAPP CTA ════════════════ -->
+  <section class="wa rv">
+    <p class="wa-sub">For more information, <b class="gk">drop a text</b> &mdash; happy to explain further.</p>
+    <a aria-label="Chat on WhatsApp" href="https://wa.me/919870000217?text=Hi!%20I%20found%20Forge%20at%20goforge.in%20and%20want%20to%20know%20more."><img alt="Chat on WhatsApp" src="assets/marketing/WhatsAppButtonGreenLarge.png" onerror="this.style.display='none';document.getElementById('waFallback').style.display='inline-block'" /><span class="wa-fallback" id="waFallback"><!--
+      Faithful recreation of WhatsApp's official "Chat on WhatsApp" green
+      button (asset not fetchable at build time). Drop the official
+      WhatsAppButtonGreenLarge.png into assets/marketing/ and this SVG
+      auto-retires. #25D366 is the sanctioned exemption to the one-accent
+      rule; used nowhere else.
+      --><svg viewBox="0 0 292 60" role="img" aria-hidden="true" focusable="false">
+        <rect x="0" y="0" width="292" height="60" rx="30" fill="#25D366"/>
+        <g transform="translate(20,14) scale(0.0625)" fill="#fff">
+          <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/>
+        </g>
+        <text x="62" y="38" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="19" font-weight="600" fill="#fff">Chat on WhatsApp</text>
+      </svg></span></a>
+  </section>
+
+  <!-- ════════════════ E · FOOTER STRIP ════════════════ -->
   <footer class="foot">
     <div class="pills rv">
       <span class="pill">
@@ -348,8 +445,7 @@ var cards = Array.prototype.slice.call(document.querySelectorAll('.card'));
 var dots = document.getElementById('dots');
 var dotEls = Array.prototype.slice.call(dots.children);
 var reveal = document.getElementById('reveal');
-var r1 = document.getElementById('r1');
-var r2 = document.getElementById('r2');
+var beats = Array.prototype.slice.call(document.querySelectorAll('.rb'));
 var logBtn = document.getElementById('logBtn');
 var idx = 0;
 
@@ -357,13 +453,20 @@ var idx = 0;
 docEl.classList.add('locked');
 content.setAttribute('inert','');
 
+/* intro screen — line 1, line 2 (~1s later), then BEGIN */
+setTimeout(function(){ document.getElementById('i1').classList.add('in'); }, 300);
+setTimeout(function(){ document.getElementById('i2').classList.add('in'); }, 1400);
+setTimeout(function(){ document.getElementById('beginBtn').classList.add('in'); }, 2500);
+
 function show(n){
   cards[idx].classList.remove('on');
   idx = n;
   cards[idx].classList.add('on');
-  if(n >= 1){
+  if(n >= 1 && n <= 4){
     dots.classList.add('show');
     dotEls.forEach(function(d,i){ d.classList.toggle('hit', i <= n-1); });
+  }else{
+    dots.classList.remove('show');
   }
 }
 
@@ -371,17 +474,16 @@ function startReveal(){
   cards[idx].classList.remove('on');
   dots.classList.remove('show');
   reveal.classList.add('on');
-  /* Pacing is the product:
-     r1 alone → hold 1.4s → r2 → 1s → button. */
-  setTimeout(function(){ r1.classList.add('in'); }, 420);
-  setTimeout(function(){ r2.classList.add('in'); }, 420 + 1400);
-  setTimeout(function(){ logBtn.classList.add('in'); }, 420 + 1400 + 1000);
+  /* 7 beats, ~1.2s apart, each stays on screen as the next appears */
+  beats.forEach(function(b,i){
+    setTimeout(function(){ b.classList.add('in'); }, 300 + i*1200);
+  });
 }
 
 cards.forEach(function(card, n){
   var btn = card.querySelector('[data-next]');
   btn.addEventListener('click', function(){
-    if(n < 4) show(n+1);
+    if(n < 5) show(n+1);
     else startReveal();
   });
 });
