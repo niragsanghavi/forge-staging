@@ -857,7 +857,7 @@ function buildPlayerPicker(players){
   document.getElementById('obgrid').innerHTML = players.map(p=>`
     <div class="pbtn" onclick="choosePlayer('${escForInlineJsAttr(p.name)}')">
       <div class="pname">${esc(p.name)}</div>
-      <div class="prole">${p.role}</div>
+      <div class="prole">${esc(p.role)}</div>
       <div class="pteam t${p.team}">Team ${p.team}</div>
     </div>`).join('');
 }
@@ -865,8 +865,9 @@ function buildPlayerPicker(players){
 function choosePlayer(name){
   const p = (season.roster||[]).find(x=>x.name===name);
   if(!p){ return; }
-  // No PIN yet (existing pre-auth user) → grace flow: set one before entering.
-  if(!p.pin){
+  // No credential yet → grace flow: set one before entering. "Has a credential"
+  // = pinSet:true (new sentinel) OR a legacy plaintext pin (pre-scrub entries).
+  if(!p.pin && !p.pinSet){
     window._pinFlow = { mode:'grace', name:p.name };
     document.getElementById('ob-s3-sub').textContent = `Welcome back, ${p.name}. Set a 4-digit PIN to secure your account.`;
     document.getElementById('pinInput').value = '';
@@ -972,7 +973,9 @@ function backToPicker(){
 function gracePinCheckOnResume(){
   if(!me || !season) return false;
   const fresh = (season.roster||[]).find(p=>p.name===me.name);
-  if(fresh && !fresh.pin){
+  // Route to grace only when NO credential exists. pinSet:true (or a legacy
+  // plaintext pin on pre-scrub entries) means one is already set.
+  if(fresh && !fresh.pin && !fresh.pinSet){
     showScreen('onboard');
     window._pinFlow = { mode:'grace', name:fresh.name };
     document.getElementById('ob-s3-sub').textContent = `Welcome back, ${fresh.name}. Set a 4-digit PIN to secure your account.`;
@@ -1062,7 +1065,11 @@ async function submitNewPin(){
       // uid — that's a device, not identity; see standing traps).
       const pinHash = await sha256hex(pin);
       const userId = db.collection('users').doc().id;
-      const newPlayerObj = { name:flow.name, role:flow.role, team:flow.team, pin, uid:(window.currentUid||null), userId };
+      // R2: never write the plaintext PIN to the world-readable roster. Only
+      // pinHash (on the users doc, below) is persisted; verification reads it.
+      // `pinSet:true` is a non-secret flag that replaces plaintext-presence as
+      // the "this player has a credential" sentinel for login routing.
+      const newPlayerObj = { name:flow.name, role:flow.role, team:flow.team, uid:(window.currentUid||null), userId, pinSet:true };
       const gRef = db.collection('groups').doc(groupCode);
       const sRef = gRef.collection('seasons').doc(seasonId);
       const uRef = db.collection('users').doc(userId);
@@ -1106,7 +1113,12 @@ async function submitNewPin(){
         const roster=sSnap.data().roster||[];
         const entry=roster.find(p=>p.name===flow.name);
         if(!entry) throw new Error('NO_RECORD');
-        entry.pin=pin;
+        // R2: pinHash (written to the users doc below) is the sole credential.
+        // Actively strip any lingering plaintext PIN from this roster entry so a
+        // grace re-set also scrubs legacy data instead of re-writing it. Stamp
+        // pinSet:true — the non-secret login-routing sentinel.
+        delete entry.pin;
+        entry.pinSet=true;
         entry.uid=(window.currentUid||null);
         let newUserId=null;
         if(!entry.userId){ newUserId=candidateUserId; entry.userId=newUserId; }
@@ -1114,6 +1126,12 @@ async function submitNewPin(){
         if(newUserId){
           tx.set(db.collection('users').doc(newUserId), newUserDocFields(entry.name, pinHash, groupCode, groupData?.name, window.currentUid, 'grace-flow'));
           createdUserDoc=true;
+        } else {
+          // Existing userId (e.g. after an admin PIN reset that nulled pinHash
+          // but kept identity): persist the new hash. merge:true leaves
+          // name/memberships/stats untouched. Without this, a reset player could
+          // never log back in via the hash path.
+          tx.set(db.collection('users').doc(entry.userId), { pinHash }, { merge:true });
         }
         wRoster=roster; myEntry=entry;
       });
@@ -1501,8 +1519,8 @@ function renderHome(){
     const remaining=Math.max(0,tgt-sc.wo);
     rHTML=`<div class="card">
       <div class="row">
-        <div><div style="font-size:14px;font-weight:700">${pl.role} Target</div><div class="tmuted" style="font-size:12px">${sc.wo}/${tgt} workouts</div></div>
-        <div class="rbadge ${pl.role==='Captain'?'rCaptain':'rVC'}">${pl.role}</div>
+        <div><div style="font-size:14px;font-weight:700">${esc(pl.role)} Target</div><div class="tmuted" style="font-size:12px">${sc.wo}/${tgt} workouts</div></div>
+        <div class="rbadge ${pl.role==='Captain'?'rCaptain':'rVC'}">${esc(pl.role)}</div>
       </div>
       <div class="pwrap"><div class="pbar" style="width:${pct}%;background:${bc}"></div></div>
       ${ok?`<div class="warn-box warn-green" style="margin-top:10px;margin-bottom:0">✅ Target hit — +${bonus} pts on day ${DAYS}</div>`:`<div class="warn-box warn-red" style="margin-top:10px;margin-bottom:0">⚠️ ${remaining} more workouts needed — missing target deducts ${penalty} pts on day ${DAYS}</div>`}
@@ -2457,7 +2475,7 @@ function renderLB(){
       ${_rankBadge(i)}
       <div style="width:34px;height:34px;border-radius:50%;background:${p.team==='A'?'var(--Al)':p.team==='B'?'var(--Bl)':'var(--Cl)'};border:1.5px solid ${tcol(p.team)};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:${tcol(p.team)};flex-shrink:0">${esc(p.name[0])}</div>
       <div class="lbinfo">
-        <div class="lbname" style="color:var(--text)">${esc(p.name)}${p.name===myName?' <span style="font-size:10px;color:var(--green);font-weight:700">· you</span>':''} <span class="rbadge ${p.role==='Captain'?'rCaptain':p.role==='Vice Captain'?'rVC':'rPlayer'}">${p.role}</span></div>
+        <div class="lbname" style="color:var(--text)">${esc(p.name)}${p.name===myName?' <span style="font-size:10px;color:var(--green);font-weight:700">· you</span>':''} <span class="rbadge ${p.role==='Captain'?'rCaptain':p.role==='Vice Captain'?'rVC':'rPlayer'}">${esc(p.role)}</span></div>
         <div class="lbmeta" style="color:var(--muted)">${p.sc.wo} workouts · ${p.sc.streak}🔥</div>
       </div>
       <div style="text-align:right">
@@ -2755,6 +2773,7 @@ async function resetPlayerPin(name){
       const entry=roster.find(p=>p.name===name);
       if(!entry) throw new Error('NO_RECORD');
       entry.pin=null;
+      entry.pinSet=false;   // clear the credential sentinel → next login routes to grace
       clearedUserId=entry.userId||null;
       tx.update(sRef,{roster});
       if(clearedUserId){
@@ -2776,7 +2795,7 @@ function renderTwistToggles(){
       <div style="flex:1;margin-right:12px">
         <div style="font-size:13px;font-weight:600">${t.name}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px">${t.desc}</div>
-        ${t.config&&isOn?`<input id="twist_cfg_${t.id}" placeholder="${t.config}" value="${active?.[t.configKey]||t.configDefault||''}" style="margin-top:6px;padding:6px 10px;font-size:12px;margin-bottom:0" onchange="saveTwistConfig('${t.id}','${t.configKey}',this.value)">`:''}
+        ${t.config&&isOn?`<input id="twist_cfg_${t.id}" placeholder="${esc(t.config)}" value="${esc(active?.[t.configKey]||t.configDefault||'')}" style="margin-top:6px;padding:6px 10px;font-size:12px;margin-bottom:0" onchange="saveTwistConfig('${t.id}','${t.configKey}',this.value)">`:''}
       </div>
       <div class="toggle${isOn?' on':''}" onclick="toggleTwist('${t.id}',${!isOn})"></div>
     </div>`;
@@ -4047,7 +4066,7 @@ async function selfServeCreateGroup(){
   const sid = seasonIdOf(month, year);
   const days = new Date(year, month, 0).getDate(); // auto-computed, never prompted
 
-  const creatorEntry = { name: formattedName, team:'A', role:'Player', pin:null, uid:(window.currentUid||null), isAdmin:true };
+  const creatorEntry = { name: formattedName, team:'A', role:'Player', uid:(window.currentUid||null), isAdmin:true };  // R2: no plaintext pin field; pinHash set via grace-flow
   const serverNow = firebase.firestore.FieldValue.serverTimestamp();
   try {
     const batch = db.batch();

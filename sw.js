@@ -2,7 +2,7 @@
 // You deploy often and have been bitten by stale caches before, so this always
 // tries the network first and only falls back to cache when offline.
 // To force every device to refresh, bump CACHE_VERSION (e.g. 'forge-v1' -> 'forge-v2').
-const CACHE_VERSION = 'forge-v30';
+const CACHE_VERSION = 'forge-v31';
 const APP_SHELL = [
   './', './index.html',
   './src/style/main.css',
