@@ -271,12 +271,19 @@ html.locked .rail{display:none}
 /* CTA */
 .cta{padding-top:110px;padding-bottom:110px}
 .cta .btn{margin-top:38px}
-.quiet-link{
-  display:inline-block;margin-top:26px;color:var(--muted);font-size:14px;
-  border-bottom:1px solid var(--line);padding-bottom:2px;
-  transition:color .3s var(--ease),border-color .3s var(--ease);
+/* secondary CTA — outlined pill: one clear step below the gold primary,
+   one step above muted text */
+.btn-ig{
+  display:inline-flex;align-items:center;gap:10px;
+  margin-top:22px;padding:13px 26px;border-radius:999px;
+  border:1px solid var(--ph-line);background:transparent;
+  color:var(--text);font-size:14px;font-weight:500;letter-spacing:.02em;
+  transition:border-color .3s var(--ease);
 }
-.quiet-link:hover{color:var(--gold-hot);border-color:var(--gold-line)}
+.btn-ig svg{width:17px;height:17px;stroke:var(--text);stroke-width:1.5;fill:none;
+  stroke-linecap:round;stroke-linejoin:round}
+.btn-ig:hover,.btn-ig:active{border-color:var(--gold)}
+.btn-ig:focus-visible{outline:2px solid var(--gold-hot);outline-offset:3px}
 
 /* ════════════════ D · WHATSAPP CTA ════════════════ */
 .wa{max-width:720px;margin:0 auto;padding:0 24px 96px;text-align:center}
@@ -504,7 +511,10 @@ html.locked .rail{display:none}
       <a class="btn" href="mailto:team@goforge.in?subject=Starting%20a%20Forge%20group&body=Hi%20-%20I%20want%20to%20start%20a%20Forge%20group%20for%20my%20crew.">Start your group</a>
     </div>
     <div class="rv">
-      <a class="quiet-link" href="https://www.instagram.com/go.forge/" target="_blank" rel="noopener">See it in action on Instagram</a>
+      <a class="btn-ig" href="https://www.instagram.com/go.forge/" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4.5"/><circle cx="12" cy="12" r="3.6"/><path d="M16.6 7.4h.01"/></svg>
+        Follow the build on <b class="gk">Instagram</b>
+      </a>
     </div>
   </section>
 
