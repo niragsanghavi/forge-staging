@@ -34,7 +34,7 @@
   --ease:cubic-bezier(.22,.61,.36,1); /* ease-out */
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html{scroll-behavior:smooth}
+html{scroll-behavior:smooth;scroll-snap-type:y proximity} /* proximity, NOT mandatory — fights iOS momentum otherwise */
 html.locked, html.locked body{overflow:hidden;height:100%}
 body{
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
@@ -140,6 +140,9 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
   font-size:clamp(1.45rem,5.2vw,2.05rem)}
 #rb1{color:var(--gold-hot)}
 .rb-md{font-size:clamp(.98rem,3.5vw,1.12rem);line-height:1.55;max-width:37ch}
+/* beat 3 renders one display step above the other reveal lines — it's the payoff */
+.rb-lg{font-weight:900;letter-spacing:-.02em;line-height:1.28;
+  font-size:clamp(1.625rem,7vw,2.125rem);max-width:22ch}
 .rb-label{font-size:11px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;
   color:var(--muted);margin-top:6px}
 .r-btn.logged{
@@ -147,6 +150,24 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
   text-transform:none;letter-spacing:.02em;font-size:15px;cursor:default;
 }
 .r-btn.logged:hover{background:transparent}
+/* desktop (≥768px) congrats swap — replaces the in-place button morph */
+.congrats{display:none;opacity:0;transform:translateY(12px);
+  transition:opacity .42s var(--ease),transform .42s var(--ease);
+  font-weight:900;letter-spacing:-.02em;line-height:1.3;
+  font-size:clamp(1.3rem,4.4vw,1.9rem);max-width:26ch;min-height:52px}
+.congrats.show{display:block}
+.congrats.in{opacity:1;transform:none}
+
+/* scroll cue — appears with the congrats moment, dies on first scroll */
+.cue{position:absolute;left:0;right:0;bottom:16px;
+  display:flex;flex-direction:column;align-items:center;gap:7px;
+  opacity:0;transition:opacity .5s var(--ease);pointer-events:none}
+.cue.show{opacity:1}
+.cue.gone{opacity:0}
+.cue svg{width:22px;height:22px;stroke:var(--gold);stroke-width:1.5;fill:none;
+  stroke-linecap:round;stroke-linejoin:round;animation:cuePulse 2s var(--ease) infinite}
+.cue span{font-size:10px;font-weight:500;letter-spacing:.28em;text-transform:uppercase;color:var(--muted)}
+@keyframes cuePulse{0%,100%{transform:translateY(0);opacity:.55}50%{transform:translateY(6px);opacity:1}}
 
 /* ════════════════ C · MAIN PAGE ════════════════ */
 .sec{
@@ -173,25 +194,41 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
   color:var(--muted);text-align:center}
 .ph169{aspect-ratio:16/9}
 .ph1x1{aspect-ratio:1/1}
-.shots{display:grid;grid-template-columns:1fr;gap:14px;margin-top:42px}
 
-/* how-it-works rows — icon · text · square image slot */
-.rows{max-width:560px;margin:44px auto 0;text-align:left;
-  display:flex;flex-direction:column;gap:14px}
-.row{
-  display:flex;align-items:center;gap:14px;
-  padding:18px 16px;border:1px solid var(--line);border-radius:14px;
-}
-.row-ic{flex:none;width:38px;height:38px;border:1px solid var(--line);border-radius:10px;
-  display:flex;align-items:center;justify-content:center}
-.row-ic svg{width:19px;height:19px;stroke:var(--gold);stroke-width:1.5;fill:none;
-  stroke-linecap:round;stroke-linejoin:round}
-.row-tx{flex:1;min-width:0}
-.row-t{font-size:12px;font-weight:500;letter-spacing:.18em;text-transform:uppercase;
-  color:var(--text);margin-bottom:5px}
-.row-tx p{color:var(--muted);font-size:13.5px;line-height:1.55}
-.row-img{flex:none;width:88px}
-.row-img figcaption{font-size:8px;letter-spacing:.06em;padding:4px}
+/* ── FULL-SCREEN SCROLL JOURNEY (What is Forge → Points → Streaks → Board) ──
+   85svh sections snapping on the root proximity container; the next section's
+   label peeks in the remaining ~15svh so the continuation is obvious. */
+.jsec{min-height:85vh;min-height:85svh;scroll-snap-align:start;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:24px;padding:44px 24px 30px;text-align:center}
+.j-img{height:55vh;height:55svh;width:100%;max-width:960px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
+.j-img figure{position:relative;background:var(--ph-bg);border:1px solid var(--ph-line);
+  border-radius:14px;overflow:hidden;max-width:100%;max-height:100%}
+.j-img img{display:block;max-width:100%;max-height:100%;object-fit:contain}
+.j-title{font-weight:900;letter-spacing:-.02em;line-height:1.18;
+  font-size:clamp(1.4rem,4.6vw,2.1rem);max-width:24ch}
+.j-sub{color:var(--muted);font-size:15px;max-width:42ch;line-height:1.55}
+
+/* events — one line, nothing more */
+.events{padding-top:110px;padding-bottom:36px}
+
+/* ── HAMMER & ANVIL SCROLL RAIL — whisper-thin, right edge ── */
+.rail{position:fixed;right:10px;top:50%;transform:translateY(-50%);
+  width:24px;height:55vh;height:55svh;z-index:60;pointer-events:none}
+.rail-track{position:absolute;left:50%;top:2px;bottom:28px;width:1px;
+  margin-left:-.5px;background:rgba(242,240,236,.10)}
+.rail-hammer{position:absolute;left:0;top:0;width:24px;height:24px;
+  stroke:var(--gold);stroke-width:1.5;fill:none;stroke-linecap:round;stroke-linejoin:round;
+  will-change:transform}
+.rail-anvil{position:absolute;left:0;bottom:0;width:24px;height:24px;
+  stroke:var(--muted);stroke-width:1.5;fill:none;stroke-linecap:round;stroke-linejoin:round;opacity:.75}
+.rail-struck{position:absolute;left:0;bottom:0;width:24px;height:44px;display:none;
+  stroke:var(--gold-hot);stroke-width:1.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.rail.struck .rail-hammer,.rail.struck .rail-track,.rail.struck .rail-anvil{display:none}
+.rail.struck .rail-struck{display:block}
+html.locked .rail{display:none}
+@media(max-width:369px),(prefers-reduced-motion:reduce){.rail{display:none}}
 
 /* live counter strip */
 .stats{display:flex;justify-content:center;gap:52px;padding-top:110px;padding-bottom:0}
@@ -257,6 +294,11 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
   stroke-linecap:round;stroke-linejoin:round}
 
 /* ── desktop ─────────────────────────────────────────────────────── */
+@media(min-width:768px){
+  .j-img{height:60vh;height:60svh}
+  .j-img.two{flex-direction:row;gap:18px}
+  .j-img.two figure{flex:1;min-width:0}
+}
 @media(min-width:900px){
   .sec{padding:130px 24px}
   .stats{padding-top:130px;padding-bottom:0;gap:88px}
@@ -266,20 +308,15 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
   .caro-track{gap:16px;padding-inline:calc(50% - 170px)}
   .slide{flex-basis:340px}
   .cta{padding-top:150px;padding-bottom:150px}
-  .shots{grid-template-columns:1fr 1fr;gap:18px}
-  .rows{gap:16px}
-  .row{gap:18px;padding:22px 22px}
-  .row-ic{width:42px;height:42px}
-  .row-img{width:112px}
-  .row-img figcaption{font-size:9.5px;letter-spacing:.1em}
+  .events{padding-top:130px;padding-bottom:40px}
   .wa{padding-bottom:130px}
 }
 
 /* ── reduced motion: no nudge, near-instant fades, no translates ─── */
 @media(prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
-  .n-r,.n-u,.n-l,.n-d{animation:none}
-  .card,.i-line,.i-btn,.rb,.rv,.dots{transition-duration:.01ms;transform:none}
+  .n-r,.n-u,.n-l,.n-d,.cue svg{animation:none}
+  .card,.i-line,.i-btn,.rb,.rv,.dots,.congrats,.cue{transition-duration:.01ms;transform:none}
   .card{transform:none}
 }
 </style>
@@ -295,7 +332,7 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
     <!-- intro screen — two sequential fade-ins, then BEGIN -->
     <div class="card on" data-i="0">
       <p class="i-line" id="i1">Welcome to <b class="gk">Forge</b>.</p>
-      <p class="i-line" id="i2">Before we let you in, we want to show you some <b class="gk">magic</b> through our memory game.</p>
+      <p class="i-line" id="i2">We&rsquo;ve built <b class="gk">image recognition</b> that can tell what you&rsquo;re looking at. Don&rsquo;t believe us? One round of our memory game &mdash; prove us wrong.</p>
       <button class="btn i-btn" id="beginBtn" data-next>Begin</button>
     </div>
 
@@ -307,7 +344,7 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
 
     <div class="card" data-i="2">
       <svg class="chev n-u" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 15l7-7 7 7"/></svg>
-      <p class="g-title">Now, spot something <b class="gk">round</b> above you.</p>
+      <p class="g-title">Do you see the round object right <b class="gk">above</b> you? Sky or ceiling &mdash; look up.</p>
       <button class="btn btn-quiet" data-next>Got it</button>
     </div>
 
@@ -319,7 +356,7 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
 
     <div class="card" data-i="4">
       <svg class="chev n-d" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9l7 7 7-7"/></svg>
-      <p class="g-title">And last, what colour are your <b class="gk">shoes</b>?</p>
+      <p class="g-title">Our camera spotted something suspicious on the <b class="gk">ground</b>. Do you see it? If not, just remember the colour of your footwear.</p>
       <button class="btn btn-quiet" data-next>Got it</button>
     </div>
 
@@ -333,80 +370,81 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
     <div class="reveal" id="reveal">
       <p class="rb rb-xl" id="rb1">Great.</p>
       <p class="rb rb-xl">It&rsquo;s <b class="gk">irrelevant</b>.</p>
-      <p class="rb rb-md">But guess who just fooled you into doing your first <b class="gk">neck stretches</b> for the day?</p>
+      <p class="rb rb-lg">But guess who just fooled you into doing your first <b class="gk">neck stretches</b> for the day?</p>
       <p class="rb rb-md">Being on this website for just 20 seconds already made you a <b class="gk">fitter person</b> than you were 20 seconds ago.</p>
-      <p class="rb rb-md">Imagine what <b class="gk">magic</b> awaits you!</p>
+      <p class="rb rb-md">There&rsquo;s no camera. No AI. Just <b class="gk">you &mdash; moving</b>. That&rsquo;s the whole secret.</p>
       <p class="rb rb-label">To know more:</p>
       <button class="btn rb r-btn" id="logBtn">Log this workout and begin your journey</button>
+      <p class="congrats" id="congratsLine">Congratulations on starting this journey &mdash; <b class="gk">Workout &#8470;1</b>, logged.</p>
     </div>
 
     <div class="dots" id="dots" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  </div>
+
+  <!-- scroll cue — shown at the congrats moment, dies on first scroll -->
+  <div class="cue" id="cue" aria-hidden="true">
+    <svg viewBox="0 0 24 24"><path d="M5 9l7 7 7-7"/></svg>
+    <span>Scroll</span>
   </div>
 </section>
 
 <!-- ════════════════ C · MAIN PAGE ════════════════ -->
 <main id="content">
 
-  <section class="sec">
-    <div class="label rv">What is Forge</div>
-    <h2 class="display rv">Forge turns your friend group&rsquo;s workouts into a monthly <b class="gk">competition</b>.</h2>
-    <p class="sec-sub rv">Real people. Real <b class="gk">rivalry</b>. Every workout counts.</p>
-    <div class="shots rv">
-      <figure class="ph ph169">
-        <img src="assets/marketing/what-is-forge-1.png" alt="Forge preview" onerror="this.style.display='none'">
-        <figcaption>what-is-forge-1.png</figcaption>
+  <!-- ════════ SCROLL JOURNEY · 1/4 — WHAT IS FORGE ════════ -->
+  <section class="jsec">
+    <div class="label">What is Forge</div>
+    <div class="j-img two">
+      <figure>
+        <img src="assets/marketing/what-is-forge-1.png" alt="Forge team standings" onerror="this.style.display='none'">
       </figure>
-      <figure class="ph ph169">
-        <img src="assets/marketing/what-is-forge-2.png" alt="Forge preview" onerror="this.style.display='none'">
-        <figcaption>what-is-forge-2.png</figcaption>
+      <figure>
+        <img src="assets/marketing/what-is-forge-2.png" alt="Forge activity feed" onerror="this.style.display='none'">
       </figure>
     </div>
+    <h2 class="j-title">Forge turns your friend group&rsquo;s workouts into a monthly <b class="gk">competition</b>.</h2>
+    <p class="j-sub">Real people. Real <b class="gk">rivalry</b>. Every workout counts.</p>
   </section>
 
-  <section class="sec">
-    <div class="label rv">How it works</div>
-    <p class="lead rv">You compete in <b class="gk">teams</b>.</p>
-    <div class="rows">
-      <div class="row rv">
-        <span class="row-ic" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.25"/><path d="M12 8.5v7M8.5 12h7"/></svg>
-        </span>
-        <div class="row-tx">
-          <div class="row-t">Points</div>
-          <p>Every workout you log scores <b class="gk">points</b> for your team.</p>
-        </div>
-        <figure class="ph ph1x1 row-img">
-          <img src="assets/marketing/feature-points.png" alt="Points preview" onerror="this.style.display='none'">
-          <figcaption>feature-points.png</figcaption>
-        </figure>
-      </div>
-      <div class="row rv">
-        <span class="row-ic" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M12 3.5c2.4 3 4.9 4.6 4.9 7.9a4.9 4.9 0 0 1-9.8 0c0-1.7.7-3 1.7-4.1.2 1.2.9 2 2 2.5-.9-2.5-.1-4.5 1.2-6.3z"/></svg>
-        </span>
-        <div class="row-tx">
-          <div class="row-t">Streaks</div>
-          <p>Show up consistently and your <b class="gk">streak</b> grows. One rest day is allowed.</p>
-        </div>
-        <figure class="ph ph1x1 row-img">
-          <img src="assets/marketing/feature-streaks.png" alt="Streaks preview" onerror="this.style.display='none'">
-          <figcaption>feature-streaks.png</figcaption>
-        </figure>
-      </div>
-      <div class="row rv">
-        <span class="row-ic" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M4 20h16M7 20v-6M12 20V5M17 20v-9"/></svg>
-        </span>
-        <div class="row-tx">
-          <div class="row-t">Leaderboard</div>
-          <p><b class="gk">Live ranks</b> all month. New season, new teams, every month.</p>
-        </div>
-        <figure class="ph ph1x1 row-img">
-          <img src="assets/marketing/feature-leaderboard.png" alt="Leaderboard preview" onerror="this.style.display='none'">
-          <figcaption>feature-leaderboard.png</figcaption>
-        </figure>
-      </div>
+  <!-- ════════ 2/4 — POINTS ════════ -->
+  <section class="jsec">
+    <div class="label">How it works &middot; Points</div>
+    <div class="j-img">
+      <figure>
+        <img src="assets/marketing/feature-points.png" alt="Forge points board" onerror="this.style.display='none'">
+      </figure>
     </div>
+    <h2 class="j-title">You compete in <b class="gk">teams</b>.</h2>
+    <p class="j-sub">Every workout you log scores <b class="gk">points</b> for your team.</p>
+  </section>
+
+  <!-- ════════ 3/4 — STREAKS ════════ -->
+  <section class="jsec">
+    <div class="label">How it works &middot; Streaks</div>
+    <div class="j-img">
+      <figure>
+        <img src="assets/marketing/feature-streaks.png" alt="Forge streak card" onerror="this.style.display='none'">
+      </figure>
+    </div>
+    <h2 class="j-title">Show up consistently and your <b class="gk">streak</b> grows.</h2>
+  </section>
+
+  <!-- ════════ 4/4 — LEADERBOARD ════════ -->
+  <section class="jsec">
+    <div class="label">How it works &middot; Leaderboard</div>
+    <div class="j-img">
+      <figure>
+        <img src="assets/marketing/feature-leaderboard.png" alt="Forge leaderboard" onerror="this.style.display='none'">
+      </figure>
+    </div>
+    <h2 class="j-title"><b class="gk">Live ranks</b> all month.</h2>
+    <p class="j-sub">New season, new teams, every month.</p>
+  </section>
+
+  <!-- ════════ EVENTS — one line, nothing more ════════ -->
+  <section class="sec events">
+    <h2 class="display rv">And beyond the app &mdash; <b class="gk">events</b>.</h2>
+    <p class="sec-sub rv">Tournaments, game nights, challenges &mdash; tailored to your group&rsquo;s level. Coming to your city.</p>
   </section>
 
   <!-- ════════════════ LIVE COUNTERS ════════════════ -->
@@ -484,6 +522,20 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
   </footer>
 </main>
 
+<!-- ════════ HAMMER & ANVIL SCROLL RAIL — whisper-thin progress, right edge ════════ -->
+<div class="rail" id="rail" aria-hidden="true">
+  <svg class="rail-hammer" viewBox="0 0 24 24"><rect x="6" y="13" width="12" height="6" rx="1"/><path d="M12 13V4"/></svg>
+  <div class="rail-track"></div>
+  <svg class="rail-anvil" viewBox="0 0 24 24"><path d="M3.5 8h12c2.6 0 4.4-.9 5-2.3"/><path d="M7 8c0 2.8 2 4.3 4.8 4.3v3.2H8.6L7.4 18h9.2l-1.2-2.5h-3.2"/></svg>
+  <svg class="rail-struck" viewBox="0 0 24 44">
+    <!-- one static celebratory frame: hammer touching anvil, spark strokes -->
+    <rect x="7" y="20" width="10" height="5" rx="1"/><path d="M12 20v-9"/>
+    <path d="M3.5 22l-2.5-2.5M20.5 22l2.5-2.5M3 30l-2.5 2M21 30l2.5 2M12 8V5"/>
+    <path d="M3.5 26h12c2.6 0 4.4-.9 5-2.3"/>
+    <path d="M7 26c0 2.8 2 4.3 4.8 4.3v3.2H8.6L7.4 36h9.2l-1.2-2.5h-3.2"/>
+  </svg>
+</div>
+
 <script>
 (function(){
 'use strict';
@@ -523,9 +575,11 @@ function startReveal(){
   cards[idx].classList.remove('on');
   dots.classList.remove('show');
   reveal.classList.add('on');
-  /* 7 beats, ~1.2s apart, each stays on screen as the next appears */
+  /* 7 beats, each persists. Pacing per script: 1.2s, 1.2s, then a deliberate
+     3s hold on the neck-stretches payoff, 1.5s, 1.2s, then label -> button. */
+  var delays=[300, 1500, 2700, 5700, 7200, 8400, 9300];
   beats.forEach(function(b,i){
-    setTimeout(function(){ b.classList.add('in'); }, 300 + i*1200);
+    setTimeout(function(){ b.classList.add('in'); }, delays[i]);
   });
 }
 
@@ -537,22 +591,47 @@ cards.forEach(function(card, n){
   });
 });
 
+var cue = document.getElementById('cue');
+function releasePage(){
+  docEl.classList.remove('locked');
+  content.removeAttribute('inert');
+  content.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' });
+}
 logBtn.addEventListener('click', function(){
-  if(logBtn.classList.contains('logged')) return;
-  /* quiet confirmation state, then hand the page over */
-  logBtn.style.opacity = '0';
-  setTimeout(function(){
-    logBtn.classList.add('logged');
-    logBtn.textContent = 'Workout №1 — logged.';
-    logBtn.style.opacity = '1';
-    logBtn.setAttribute('aria-disabled','true');
-  }, reduced ? 0 : 180);
-  setTimeout(function(){
-    docEl.classList.remove('locked');
-    content.removeAttribute('inert');
-    content.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' });
-  }, reduced ? 300 : 1150);
+  if(logBtn.classList.contains('logged') || logBtn.dataset.done) return;
+  logBtn.dataset.done = '1';
+  cue.classList.add('show');
+  if(window.matchMedia('(min-width:768px)').matches){
+    /* desktop: button fades out COMPLETELY, then a display line takes its
+       place — no in-place morph, no overlapping text */
+    var congrats = document.getElementById('congratsLine');
+    logBtn.style.transition = 'opacity .25s cubic-bezier(.22,.61,.36,1)';
+    logBtn.style.opacity = '0';
+    setTimeout(function(){
+      logBtn.style.display = 'none';
+      congrats.classList.add('show');
+      requestAnimationFrame(function(){ requestAnimationFrame(function(){
+        congrats.classList.add('in');
+      }); });
+      setTimeout(releasePage, reduced ? 300 : 1400);
+    }, reduced ? 0 : 250);
+  } else {
+    /* mobile: current behavior, unchanged */
+    logBtn.style.opacity = '0';
+    setTimeout(function(){
+      logBtn.classList.add('logged');
+      logBtn.textContent = 'Workout №1 — logged.';
+      logBtn.style.opacity = '1';
+      logBtn.setAttribute('aria-disabled','true');
+    }, reduced ? 0 : 180);
+    setTimeout(releasePage, reduced ? 300 : 1150);
+  }
 });
+/* the cue dies permanently on the first scroll event */
+window.addEventListener('scroll', function once(){
+  cue.classList.add('gone');
+  window.removeEventListener('scroll', once);
+}, {passive:true});
 
 /* scroll reveal for main sections — fade + 18px rise, once */
 var io = new IntersectionObserver(function(entries){
@@ -662,6 +741,31 @@ document.querySelectorAll('.rv').forEach(function(el){ io.observe(el); });
       goTo((current()+1)%slides.length);
     },5000);
   }
+})();
+
+/* ── HAMMER & ANVIL RAIL — hammer descends with scroll, strikes at the
+   WhatsApp CTA (~final 5%), un-strikes on scroll-back. Hidden under
+   prefers-reduced-motion and below 370px (CSS); JS also bails. ── */
+(function(){
+  var rail=document.getElementById('rail');
+  if(!rail || reduced) return;
+  var hammer=rail.querySelector('.rail-hammer');
+  var wa=document.querySelector('.wa');
+  var ticking=false;
+  function update(){
+    ticking=false;
+    var max=document.documentElement.scrollHeight-window.innerHeight;
+    if(max<=0) return;
+    var p=Math.min(1,Math.max(0,window.scrollY/max));
+    var travel=rail.clientHeight-28-24;   /* anvil zone + hammer glyph height */
+    if(travel>0) hammer.style.transform='translateY('+(p*travel).toFixed(1)+'px)';
+    var strikeP=0.95;
+    if(wa){ var waP=(wa.offsetTop-window.innerHeight*0.6)/max; if(waP>0&&waP<1) strikeP=Math.min(0.95,waP); }
+    if(p>=strikeP) rail.classList.add('struck'); else rail.classList.remove('struck');
+  }
+  window.addEventListener('scroll',function(){ if(!ticking){ ticking=true; requestAnimationFrame(update); } },{passive:true});
+  window.addEventListener('resize',update,{passive:true});
+  update();
 })();
 })();
 </script>
