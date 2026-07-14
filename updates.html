@@ -527,16 +527,22 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
 <script>
 // ── ANALYTICS — fire-and-forget counters; never break the page ──
 // Writes increment counters to analytics/updates-page/events/{YYYY-MM}.
-// Reuses window.db from firebase.js. Unauthenticated writes are allowed by
-// the matching firestore.rules (public landing page).
+// Reuses window.db from firebase.js. R6: the events write is now gated on
+// isAuthed() in firestore.rules, so we establish the anonymous session first
+// via window.ensureAuth() (the same helper the app uses). Still fully
+// fire-and-forget — any failure is swallowed and never affects the page.
 function trackEvent(key){
   try{
     if(!window.db || !window.firebase) return;
     var d = new Date();
     var month = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-    window.db.collection('analytics').doc('updates-page').collection('events').doc(month)
-      .set({ [key]: firebase.firestore.FieldValue.increment(1) }, { merge: true })
-      .catch(function(){ /* swallow async rejection (e.g. perms before rules deploy) */ });
+    var write = function(){
+      window.db.collection('analytics').doc('updates-page').collection('events').doc(month)
+        .set({ [key]: firebase.firestore.FieldValue.increment(1) }, { merge: true })
+        .catch(function(){ /* swallow async rejection (e.g. perms before rules deploy) */ });
+    };
+    if(window.ensureAuth){ window.ensureAuth().then(write).catch(function(){}); }
+    else { write(); }
     // no await — fire and forget
   }catch(e){ /* swallow — analytics must never break the page */ }
 }

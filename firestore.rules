@@ -155,12 +155,16 @@ service cloud.firestore {
       // undeployable, which is why deployed rules had drifted from the repo.
     }
 
-    // Updates page analytics — public landing page, so writes are unauthenticated
-    // (visitors may not have Firebase anonymous auth initialized yet). Reads stay gated.
+    // Updates page analytics — R6: writes now require an authed session, matching
+    // the rest of the ruleset's posture (was `if true` = any unauthenticated
+    // caller could inflate/forge counters). The updates page establishes an
+    // anonymous session via window.ensureAuth() before writing (updates.html
+    // trackEvent). increment(1) merges keep the shape counter-only; a merge that
+    // sets a non-integer still can't corrupt other months' docs. Reads stay gated.
     match /analytics/updates-page/events/{month} {
       allow read:   if isAuthed();
-      allow create: if true;
-      allow update: if true;
+      allow create: if isAuthed();
+      allow update: if isAuthed();
       allow delete: if false;
     }
 
