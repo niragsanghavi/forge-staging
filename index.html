@@ -1396,6 +1396,7 @@ function subscribe(){
 function refresh(){
   renderHome(); renderLB(); renderFeed(); renderFlagQueue(); renderGlobalConsent(); renderIronPledgePage(); renderIronPledgeAdmin();
   checkPledgeAutoSettlement().catch(e=>logErr('checkPledgeAutoSettlement',e));
+  scheduleGlobalStats();   // R3: keep this group's denormalized global-board aggregate fresh (debounced, fire-and-forget)
 }
 
 // ── HOME ──────────────────────────────────────────────────────────────────
@@ -2209,6 +2210,53 @@ function updateSel(){ const w=document.getElementById('selPrev'),l=document.getE
 function updBtn(){ document.getElementById('subBtn').disabled=selW.length===0; }
 
 function ymdOf(year,month,day){ return `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`; }
+function ymdToday(){ const d=new Date(); return ymdOf(d.getFullYear(), d.getMonth()+1, d.getDate()); }
+
+// ── R3 loadGlobal DENORMALIZED ROLLUPS ─────────────────────────────────────
+// The Global tab used to read ALL-platform logs + the whole bonuses_30day
+// collection on a user-facing tab (O(users²)/day). Instead:
+//   1. analytics/global/daily/{ymd}.byGroup.{code} — per-group count of logs
+//      SUBMITTED today (board "active today"). Incremented on submit,
+//      decremented on void. STRICTLY fire-and-forget: a rollup failure must
+//      never break logging (mirrors bumpGlobalStat's posture).
+//   2. groups/{code}.globalStats {seasonId,total,avg,count,players[],computedAt}
+//      — the group's own points, computed with the SAME scoring engine and
+//      written by the loaded member's client (writeGlobalStats). loadGlobal
+//      then reads groups.get() + one daily doc instead of the platform scan.
+function bumpDailyRollup(ymd, codeCounts){
+  try{
+    const byGroup={};
+    for(const c in codeCounts){ if(codeCounts[c]) byGroup[c]=firebase.firestore.FieldValue.increment(codeCounts[c]); }
+    if(!Object.keys(byGroup).length) return;
+    db.collection('analytics').doc('global').collection('daily').doc(ymd)
+      .set({ byGroup, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge:true })
+      .catch(()=>{});
+  }catch(e){ /* counters must never throw into a caller */ }
+}
+// Recompute + persist the ACTIVE group's global-board aggregate. Uses the same
+// in-memory globals the leaderboard already scores from (score(name) with no
+// ctx), so the denormalized values equal what the old loadGlobal computed for
+// this group. Eventually-consistent: refreshed whenever a member is active.
+function writeGlobalStats(){
+  try{
+    if(!window.season || !window.groupCode || !window.seasonId) return;
+    const roster = season.roster || [];
+    if(!roster.length) return;
+    let total=0; const players=[];
+    roster.forEach(p=>{
+      const t = score(p.name).total;
+      total += t;
+      if(p.globalConsent===true) players.push({ name:p.name, points:t });
+    });
+    const count = roster.length;
+    const avg = count ? Math.round(total/count) : 0;
+    db.collection('groups').doc(groupCode).set({
+      globalStats: { seasonId, total, avg, count, players, computedAt: firebase.firestore.FieldValue.serverTimestamp() }
+    }, { merge:true }).catch(()=>{});
+  }catch(e){ /* never break the app for a denormalized write */ }
+}
+let _gsTimer=null;
+function scheduleGlobalStats(){ try{ clearTimeout(_gsTimer); _gsTimer=setTimeout(writeGlobalStats, 3500); }catch(e){} }
 
 // Cross-group streak (NORTHSTAR §2.1 rev-3 addendum): counts calendar days on
 // which this person logged at least once, in ANY group — never per-group, and
@@ -2307,6 +2355,9 @@ async function submitLog(){
     // so it fires whenever the write truly lands — even after the 4s grace
     // window — and never on failure. bumpGlobalStat itself swallows errors.
     commitPromise.then(()=>{ if(!commitFailed) bumpGlobalStat('totalLogs', targets.length); });
+    // R3: bump the "active today" daily rollup, one per target group (fire-and-
+    // forget, chained on a genuine commit — never on failure, never blocks).
+    commitPromise.then(()=>{ if(commitFailed) return; const cc={}; targets.forEach(s=>{ cc[s.code]=(cc[s.code]||0)+1; }); bumpDailyRollup(ymdToday(), cc); });
     await Promise.race([commitPromise, new Promise(r=>setTimeout(r,4000))]);
 
     if(!commitSettled){
@@ -2611,7 +2662,20 @@ function voidLogDoc(id, actorName){
     voided: true,
     voidedBy: actorName,
     voidedAt: firebase.firestore.FieldValue.serverTimestamp()
-  }).then(res=>{ bumpGlobalStat('totalLogs', -1); return res; });
+  }).then(res=>{
+    bumpGlobalStat('totalLogs', -1);
+    // R3: decrement the daily rollup for the day this log was SUBMITTED (its
+    // timestamp), so the "active today" board drops it. Best-effort: only if
+    // the log is in memory with a timestamp + groupCode.
+    try{
+      const l=(window.allLogs||[]).find(x=>x.id===id);
+      if(l && l.timestamp && l.timestamp.seconds && l.groupCode){
+        const d=new Date(l.timestamp.seconds*1000);
+        bumpDailyRollup(ymdOf(d.getFullYear(), d.getMonth()+1, d.getDate()), { [l.groupCode]: -1 });
+      }
+    }catch(e){}
+    return res;
+  });
 }
 async function deleteLog(id){
   if(!confirm('Remove this workout entry? It disappears from your feed and score right away.')) return;
@@ -4252,12 +4316,14 @@ let globalDataCacheTime = 0;
 const GLOBAL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 // ── GLOBAL LEADERBOARD (cross-group, opt-in) ───────────────────────────────
-// One-shot read (not a live listener). Points use the SAME scoring engine as
-// in-app, passing each group's data as ctx. Only players who opted in appear.
-// ── GLOBAL LEADERBOARD (cross-group, opt-in) ───────────────────────────────
-// One-shot read. Each group's active season is loaded once and scored with the
-// SAME engine (via ctx). Group-level boards use all players; the individual
-// points board uses only opted-in players (globalConsent===true).
+// R3 DENORMALIZED READ. Was: read every group's season + twists + all-platform
+// month logs + the whole bonuses_30day collection, then score live (O(users²)
+// per day on a user-facing tab). Now: read `groups.get()` (each group doc
+// carries `globalStats` written by its own members via writeGlobalStats) + ONE
+// daily rollup doc for the "active today" board. ~G+1 reads instead of the
+// platform scan. Values are identical to the old live scoring (same engine),
+// eventually-consistent (refreshed whenever a group's member is active; seed
+// all groups once with window.backfillGlobalStats()).
 async function loadGlobal(){
   const actEl=document.getElementById('globalActive');
   const grpEl=document.getElementById('globalGroups');
@@ -4270,80 +4336,41 @@ async function loadGlobal(){
   }
   actEl.innerHTML=grpEl.innerHTML=ptsEl.innerHTML='<div class="tmuted">Loading…</div>';
   try{
-    const gSnap=await db.collection('groups').get();
+    const gSnap=await db.collection('groups').get();                       // G reads
     const groups=gSnap.docs.map(d=>({code:d.id,...d.data()}));
-    // Seasons FIRST, so the logs query can be filtered to exactly the
-    // month/year pairs the active seasons actually use (normally 1 pair,
-    // at most 2 during rollover week) instead of the whole collection.
-    // A group still on last month's season keeps its pair, so it is NOT
-    // dropped from the global boards by the filtering.
-    const groupSeasons={};
-    for(const g of groups){
-      const sid=g.currentSeasonId; if(!sid) continue;
-      const sSnap=await db.collection('groups').doc(g.code).collection('seasons').doc(sid).get();
-      if(!sSnap.exists) continue;
-      const sData=sSnap.data();
-      if(!(sData.roster||[]).length) continue;
-      const twSnap=await db.collection('groups').doc(g.code).collection('seasons').doc(sid).collection('twists').get();
-      const twists={}; twSnap.docs.forEach(t=>{twists[t.id]=t.data();});
-      const twwSnap=await db.collection('groups').doc(g.code).collection('seasons').doc(sid).collection('twistWindows').get();
-      const twistWindows=twwSnap.docs.map(d=>({id:d.id,...d.data()}));
-      groupSeasons[g.code]={sData,twists,twistWindows};
-    }
-    const pairs=[...new Set(Object.values(groupSeasons).map(gs=>gs.sData.month+'|'+gs.sData.year))];
-    let logs=[];
-    for(const pair of pairs){
-      const [m,y]=pair.split('|').map(Number);
-      const snap=await db.collection('logs').where('month','==',m).where('year','==',y).get();
-      logs=logs.concat(snap.docs.map(d=>({id:d.id,...d.data()})).filter(l=>!l.voided));
-    }
-    const bonusSnap=await db.collection('bonuses_30day').get();
-    const bonuses=bonusSnap.docs.map(d=>d.data());
-    globalDataCache={groups,logs,bonuses,groupSeasons};
+    let todayByGroup={};
+    try{
+      const dSnap=await db.collection('analytics').doc('global').collection('daily').doc(ymdToday()).get();  // 1 read
+      if(dSnap.exists) todayByGroup=(dSnap.data().byGroup)||{};
+    }catch(e){ /* board "active today" just renders empty if the rollup is unavailable */ }
+    globalDataCache={groups,todayByGroup};
     globalDataCacheTime=Date.now();
     renderGlobalFromCache(globalDataCache);
   }catch(e){ console.error('loadGlobal failed:',e); actEl.innerHTML='<div class="tmuted">Could not load global stats. Check connection.</div>'; grpEl.innerHTML=''; ptsEl.innerHTML=''; }
 }
 
-function renderGlobalFromCache({groups,logs,bonuses,groupSeasons}){
+function renderGlobalFromCache({groups,todayByGroup}){
   const actEl=document.getElementById('globalActive');
   const grpEl=document.getElementById('globalGroups');
   const ptsEl=document.getElementById('globalPoints');
   if(!actEl||!grpEl||!ptsEl) return;
-  const now=new Date();
-  const startOfDay=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-  const perGroup={};
-  logs.forEach(l=>{
-    const ts=l.timestamp?.seconds?new Date(l.timestamp.seconds*1000):null;
-    if(ts&&ts>=startOfDay) perGroup[l.groupCode]=(perGroup[l.groupCode]||0)+1;
-  });
-  const activeRanked=Object.entries(perGroup)
+  // Board "active today": from the daily rollup doc's per-group counts.
+  const activeRanked=Object.entries(todayByGroup||{})
+    .filter(([,count])=>count>0)
     .map(([code,count])=>({name:groups.find(g=>g.code===code)?.name||code,count}))
     .sort((a,b)=>b.count-a.count).slice(0,5);
   actEl.innerHTML=activeRanked.length===0
     ?'<div class="tmuted">No workouts logged anywhere yet today.</div>'
     :activeRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(g.name)}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--green)">${g.count}</div><div style="font-size:10px;color:var(--muted)">logs today</div></div></div>`).join('');
+  // Boards "top groups" + "top players": from each group's denormalized
+  // globalStats (only when it matches the group's CURRENT season, so a
+  // just-rolled-over group doesn't show last season's numbers until recompute).
   const groupAgg=[];
   const playerEntries=[];
   for(const g of groups){
-    const gs=groupSeasons[g.code]; if(!gs) continue;
-    const {sData,twists,twistWindows}=gs;
-    const roster=sData.roster||[];
-    const ctx={
-      season:sData,
-      groupCode:g.code,
-      logs:logs.filter(l=>l.groupCode===g.code&&l.month===sData.month&&l.year===sData.year),
-      twists,
-      twistWindows:(twistWindows||[]).filter(w=>w.month===sData.month&&w.year===sData.year),
-      bonuses:bonuses.filter(b=>b.groupCode===g.code&&b.month===sData.month&&b.year===sData.year)
-    };
-    let groupTotal=0;
-    roster.forEach(p=>{
-      const t=score(p.name,ctx).total;
-      groupTotal+=t;
-      if(p.globalConsent===true) playerEntries.push({name:p.name,group:g.name,points:t});
-    });
-    groupAgg.push({name:g.name,total:groupTotal,count:roster.length,avg:Math.round(groupTotal/roster.length)});
+    const gs=g.globalStats; if(!gs || gs.seasonId!==g.currentSeasonId || !gs.count) continue;
+    groupAgg.push({name:g.name,total:gs.total,count:gs.count,avg:gs.avg});
+    (gs.players||[]).forEach(p=>{ if(p&&p.name!=null) playerEntries.push({name:p.name,group:g.name,points:p.points}); });
   }
   const grpRanked=groupAgg.sort((a,b)=>b.avg-a.avg).slice(0,5);
   grpEl.innerHTML=grpRanked.length===0
@@ -4355,6 +4382,54 @@ function renderGlobalFromCache({groups,logs,bonuses,groupSeasons}){
     ?'<div class="tmuted">No one has opted in yet. Turn on "Show me on the global leaderboard" on your Home screen to appear here.</div>'
     :top.map((e,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(e.name)}</div><div class="lbmeta">${esc(e.group)}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${e.points}</div><div style="font-size:10px;color:var(--muted)">pts</div></div></div>`).join('');
 }
+
+// R3 BACKFILL — one-time seed of the denormalized rollups from live data using
+// the SAME scoring the old loadGlobal did, so seeded values equal what the old
+// Global tab showed. Reads a lot ONCE (like the old tab); after this the tab
+// reads ~G+1. Invoke from the browser console as window.backfillGlobalStats()
+// (log into any group first so score()/firebase are loaded). Idempotent.
+async function backfillGlobalStats(){
+  console.log('[R3 backfill] reading live data…');
+  const gSnap=await db.collection('groups').get();
+  const groups=gSnap.docs.map(d=>({code:d.id,...d.data()}));
+  const groupSeasons={};
+  for(const g of groups){
+    const sid=g.currentSeasonId; if(!sid) continue;
+    const sSnap=await db.collection('groups').doc(g.code).collection('seasons').doc(sid).get();
+    if(!sSnap.exists) continue;
+    const sData=sSnap.data(); if(!(sData.roster||[]).length) continue;
+    const twSnap=await db.collection('groups').doc(g.code).collection('seasons').doc(sid).collection('twists').get();
+    const twists={}; twSnap.docs.forEach(t=>{twists[t.id]=t.data();});
+    const twwSnap=await db.collection('groups').doc(g.code).collection('seasons').doc(sid).collection('twistWindows').get();
+    const twistWindows=twwSnap.docs.map(d=>({id:d.id,...d.data()}));
+    groupSeasons[g.code]={sid,sData,twists,twistWindows};
+  }
+  const pairs=[...new Set(Object.values(groupSeasons).map(gs=>gs.sData.month+'|'+gs.sData.year))];
+  let logs=[];
+  for(const pair of pairs){ const [m,y]=pair.split('|').map(Number); const snap=await db.collection('logs').where('month','==',m).where('year','==',y).get(); logs=logs.concat(snap.docs.map(d=>({id:d.id,...d.data()})).filter(l=>!l.voided)); }
+  const bonusSnap=await db.collection('bonuses_30day').get();
+  const bonuses=bonusSnap.docs.map(d=>d.data());
+  const startOfDay=new Date(); startOfDay.setHours(0,0,0,0);
+  const todayByGroup={};
+  logs.forEach(l=>{ const ts=l.timestamp&&l.timestamp.seconds?new Date(l.timestamp.seconds*1000):null; if(ts&&ts>=startOfDay) todayByGroup[l.groupCode]=(todayByGroup[l.groupCode]||0)+1; });
+  let wrote=0;
+  for(const g of groups){
+    const gd=groupSeasons[g.code]; if(!gd) continue;
+    const {sid,sData,twists,twistWindows}=gd;
+    const roster=sData.roster||[];
+    const ctx={ season:sData, groupCode:g.code, logs:logs.filter(l=>l.groupCode===g.code&&l.month===sData.month&&l.year===sData.year), twists, twistWindows:(twistWindows||[]).filter(w=>w.month===sData.month&&w.year===sData.year), bonuses:bonuses.filter(b=>b.groupCode===g.code&&b.month===sData.month&&b.year===sData.year) };
+    let total=0; const players=[];
+    roster.forEach(p=>{ const t=score(p.name,ctx).total; total+=t; if(p.globalConsent===true) players.push({name:p.name,points:t}); });
+    const count=roster.length; const avg=count?Math.round(total/count):0;
+    await db.collection('groups').doc(g.code).set({ globalStats:{ seasonId:sid, total, avg, count, players, computedAt:firebase.firestore.FieldValue.serverTimestamp() } },{merge:true});
+    wrote++;
+  }
+  await db.collection('analytics').doc('global').collection('daily').doc(ymdToday())
+    .set({ byGroup: todayByGroup, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });   // authoritative today seed
+  console.log(`[R3 backfill] DONE — globalStats written for ${wrote} group(s); daily rollup ${ymdToday()} =`, todayByGroup);
+  return { groups:wrote, todayByGroup };
+}
+window.backfillGlobalStats = backfillGlobalStats;
 
 // Self-serve opt-in for the global points board. Default OFF (privacy-first).
 function renderGlobalConsent(){

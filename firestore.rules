@@ -148,6 +148,17 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      // R3 global daily rollup — analytics/global/daily/{YYYY-MM-DD}: per-group
+      // count of logs submitted that day, powering the Global tab's "active
+      // today" board without an all-platform logs scan. Members increment via
+      // merge on submit / decrement on void; the Global tab + backfill read it.
+      match /daily/{ymd} {
+        allow read:   if isAuthed();
+        allow create: if isAuthed();
+        allow update: if isAuthed();
+        allow delete: if false;
+      }
+
       // NOTE: baseline-{YYYY-MM} aggregates are top-level analytics/ DOCS, so
       // the parent match above already covers them (read authed, write denied).
       // A previous nested `match /baseline-{docId}` block was invalid syntax —
