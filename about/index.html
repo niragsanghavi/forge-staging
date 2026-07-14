@@ -248,7 +248,10 @@ html.locked .rail{display:none}
 /* group-chat carousel — native scroll-snap, one centered slide, neighbors peek */
 .chats{padding-top:56px}
 .caro{margin:36px -24px 0}
-.caro-track{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;
+.caro-track{position:relative;/* offsetParent for slides — keeps offsetLeft
+  track-internal at every width; without this, slides measure against BODY and
+  the desktop margin:auto centering biases the caption/center math by ~499px */
+  display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;
   padding:6px calc(50% - 150px) 16px;scrollbar-width:none}
 .caro-track::-webkit-scrollbar{display:none}
 .caro-track.noSnap{scroll-snap-type:none}
@@ -299,6 +302,7 @@ html.locked .rail{display:none}
   gap:8px 14px;color:var(--muted);font-size:13px;
 }
 .wordmark{font-weight:900;letter-spacing:.3em;font-size:13px;color:var(--text)}
+.foot-note{margin-top:14px;font-size:11px;color:var(--muted)}
 .foot-line a{transition:color .3s var(--ease)}
 .foot-line a:hover{color:var(--gold-hot)}
 .foot-dot{opacity:.45}
@@ -334,6 +338,14 @@ html.locked .rail{display:none}
   .card{transform:none}
 }
 </style>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-ZDZCF0GX91"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-ZDZCF0GX91');
+</script>
 </head>
 <body>
 
@@ -537,6 +549,7 @@ html.locked .rail{display:none}
       <span class="foot-dot">&middot;</span>
       <span>&copy; 2026</span>
     </div>
+    <div class="foot-note">We use basic analytics to improve this page.</div>
   </footer>
 </main>
 
@@ -558,6 +571,13 @@ html.locked .rail{display:none}
 (function(){
 'use strict';
 var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* fail-safe GA4 wrapper — an adblocker or a blocked gtag.js must never throw
+   or affect page behavior. gtag() itself is only a dataLayer.push shim, so
+   this is safe even when the remote script never loads. */
+function track(ev, params){
+  try{ if(typeof gtag === 'function') gtag('event', ev, params || {}); }catch(e){}
+}
 var docEl = document.documentElement;
 var content = document.getElementById('content');
 var cards = Array.prototype.slice.call(document.querySelectorAll('.card'));
@@ -597,13 +617,19 @@ function startReveal(){
      3s hold on the neck-stretches payoff, 1.5s, 1.2s, then label -> button. */
   var delays=[300, 1500, 2700, 5700, 7200, 8400, 9300];
   beats.forEach(function(b,i){
-    setTimeout(function(){ b.classList.add('in'); }, delays[i]);
+    setTimeout(function(){
+      b.classList.add('in');
+      if(i === 4) track('reveal_complete');   /* beat 5 rendered */
+    }, delays[i]);
   });
 }
 
 cards.forEach(function(card, n){
   var btn = card.querySelector('[data-next]');
   btn.addEventListener('click', function(){
+    if(n === 0) track('gate_begin');
+    else if(n <= 4) track('gate_card', { card_number: n });
+    else track('gate_complete');
     if(n < 5) show(n+1);
     else startReveal();
   });
@@ -618,6 +644,7 @@ function releasePage(){
 logBtn.addEventListener('click', function(){
   if(logBtn.classList.contains('logged') || logBtn.dataset.done) return;
   logBtn.dataset.done = '1';
+  track('log_workout_click');
   cue.classList.add('show');
   if(window.matchMedia('(min-width:768px)').matches){
     /* desktop: button fades out COMPLETELY, then a display line takes its
@@ -814,6 +841,31 @@ document.querySelectorAll('.rv').forEach(function(el){ io.observe(el); });
       goTo(idx+1);
     },5000);
   }
+})();
+
+/* ── GA4 FUNNEL — view milestones (once each) + CTA clicks, all fail-safe ── */
+(function(){
+  var targets=[
+    ['journey_view',     document.querySelector('.jsec')],
+    ['carousel_view',    document.querySelector('.caro')],
+    ['page_end_reached', document.querySelector('.wa')]
+  ];
+  var vio=new IntersectionObserver(function(es){
+    es.forEach(function(e){
+      if(!e.isIntersecting) return;
+      targets.forEach(function(t){ if(t[1]===e.target) track(t[0]); });
+      vio.unobserve(e.target);                 /* once per milestone */
+    });
+  },{ threshold:0.25 });
+  targets.forEach(function(t){ if(t[1]) vio.observe(t[1]); });
+  document.querySelectorAll('a[href^="mailto:"]').forEach(function(a){
+    a.addEventListener('click', function(){ track('email_click'); });
+  });
+  document.querySelectorAll('a[href*="instagram.com"]').forEach(function(a){
+    a.addEventListener('click', function(){ track('instagram_click'); });
+  });
+  var waA=document.querySelector('.wa a');
+  if(waA) waA.addEventListener('click', function(){ track('whatsapp_click'); });
 })();
 
 /* ── HAMMER & ANVIL RAIL — hammer descends with scroll, strikes at the
