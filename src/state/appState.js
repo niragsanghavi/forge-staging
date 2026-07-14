@@ -2,6 +2,14 @@
 window.SUPER_PIN_HASH = '365346103ca5afb17413770bfe4dbc212d5fa88719a4c12ac0319c37af16874d';
 window.ADMIN_PIN_HASH = 'b0958fda6b5cdee38b99f53f9876c5192b6918760f8e75c98e8d37f5cbd3c4ab';
 
+// ── FEATURE FLAGS ─────────────────────────────────────────────────────────
+// Display-only kill switches: flipping one hides UI, never touches data.
+// FEATURE_REACTIONS_ENABLED=false removes the feed's 🔥 react button and its
+// count badge from every log row (the feed's single reaction render site).
+// Stored reaction docs, the reactions listener, and toggleReaction() are all
+// untouched, so flipping back to true restores the feature exactly as it was.
+window.FEATURE_REACTIONS_ENABLED = false;
+
 // ── CONSTANTS ─────────────────────────────────────────────────────────────
 window.COMMON_WORKOUTS = [
   "Gym","Padel","Walk","Run","Yoga","Volleyball","Cricket","Swimming",

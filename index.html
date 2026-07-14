@@ -2673,7 +2673,7 @@ function renderFeed(){
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0;align-items:center">
         ${isMine?`<button onclick="deleteLog('${l.id}')" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:4px">×</button>`:''}
-        ${!isMine?`<button onclick="toggleReaction('${l.id}')" style="background:none;border:none;color:${iReacted?'var(--orange)':'var(--muted)'};font-size:13px;cursor:pointer;padding:4px;display:flex;align-items:center;gap:2px">🔥${rCount>0?`<span style="font-size:11px;font-weight:700">${rCount}</span>`:''}</button>`:''}
+        ${!isMine&&window.FEATURE_REACTIONS_ENABLED?`<button onclick="toggleReaction('${l.id}')" style="background:none;border:none;color:${iReacted?'var(--orange)':'var(--muted)'};font-size:13px;cursor:pointer;padding:4px;display:flex;align-items:center;gap:2px">🔥${rCount>0?`<span style="font-size:11px;font-weight:700">${rCount}</span>`:''}</button>`:''}
         ${!isMine&&!alreadyFlagged?`<button onclick="flagLog('${l.id}','${escForInlineJsAttr(l.player)}')" style="background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:4px">⚑</button>`:''}
       </div>
     </div>`;
