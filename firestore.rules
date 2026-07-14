@@ -164,6 +164,16 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ── GLOBAL COUNTERS (marketing page) ──────────────────────────────────
+    // stats/global {totalLogs, totalUsers, updatedAt}: the goforge.in/app
+    // marketing page reads this via plain REST fetch with NO Firebase auth,
+    // so read must be public. Writes stay behind the existing authed posture
+    // (the app's fire-and-forget increments + the seeding script).
+    match /stats/{docId} {
+      allow read:  if true;
+      allow write: if isAuthed();
+    }
+
     // ── DEFAULT DENY ──────────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;

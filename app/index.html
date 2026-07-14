@@ -193,6 +193,28 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
 .row-img{flex:none;width:88px}
 .row-img figcaption{font-size:8px;letter-spacing:.06em;padding:4px}
 
+/* live counter strip */
+.stats{display:flex;justify-content:center;gap:52px;padding-top:110px;padding-bottom:0}
+.stat{text-align:center}
+.stat-n{font-weight:900;letter-spacing:-.02em;color:var(--gold-hot);
+  font-size:clamp(2.1rem,8vw,3.2rem);line-height:1.1;font-variant-numeric:tabular-nums}
+.stat-l{margin-top:8px;font-size:11px;font-weight:500;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--muted)}
+
+/* group-chat carousel — native scroll-snap, one centered slide, neighbors peek */
+.chats{padding-top:56px}
+.caro{margin:36px -24px 0}
+.caro-track{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;
+  padding:6px calc(50% - 150px) 16px;scrollbar-width:none}
+.caro-track::-webkit-scrollbar{display:none}
+.caro-track.noSnap{scroll-snap-type:none}
+.slide{flex:0 0 300px;scroll-snap-align:center;aspect-ratio:9/16;
+  border-radius:14px;box-shadow:0 14px 40px rgba(0,0,0,.5)}
+.caro-dots{display:flex;justify-content:center;gap:9px;margin-top:16px}
+.caro-dots i{width:6px;height:6px;border-radius:50%;background:var(--line);
+  transition:background .35s var(--ease);cursor:pointer}
+.caro-dots i.on{background:var(--gold)}
+
 /* CTA */
 .cta{padding-top:110px;padding-bottom:110px}
 .cta .btn{margin-top:38px}
@@ -237,6 +259,12 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
 /* ── desktop ─────────────────────────────────────────────────────── */
 @media(min-width:900px){
   .sec{padding:130px 24px}
+  .stats{padding-top:130px;padding-bottom:0;gap:88px}
+  .chats{padding-top:64px}
+  /* container sized so each neighbor peeks ~8%: C=(W+2g)/0.84 with W=340,g=16 */
+  .caro{max-width:443px;margin:40px auto 0}
+  .caro-track{gap:16px;padding-inline:calc(50% - 170px)}
+  .slide{flex-basis:340px}
   .cta{padding-top:150px;padding-bottom:150px}
   .shots{grid-template-columns:1fr 1fr;gap:18px}
   .rows{gap:16px}
@@ -381,6 +409,27 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
     </div>
   </section>
 
+  <!-- ════════════════ LIVE COUNTERS ════════════════ -->
+  <section class="sec stats" id="statStrip" aria-label="Forge in numbers">
+    <div class="stat rv"><div class="stat-n" id="statLogs">&mdash;</div><div class="stat-l">Workouts logged</div></div>
+    <div class="stat rv"><div class="stat-n" id="statUsers">&mdash;</div><div class="stat-l">Athletes competing</div></div>
+  </section>
+
+  <!-- ════════════════ GROUP-CHAT CAROUSEL ════════════════ -->
+  <section class="sec chats">
+    <div class="label rv">From the group chats</div>
+    <div class="caro rv">
+      <div class="caro-track" id="caroTrack">
+        <figure class="ph slide"><img src="assets/marketing/wa-chat-1.png" alt="Forge group chat" onerror="this.style.display='none'"><figcaption>wa-chat-1.png</figcaption></figure>
+        <figure class="ph slide"><img src="assets/marketing/wa-chat-2.png" alt="Forge group chat" onerror="this.style.display='none'"><figcaption>wa-chat-2.png</figcaption></figure>
+        <figure class="ph slide"><img src="assets/marketing/wa-chat-3.png" alt="Forge group chat" onerror="this.style.display='none'"><figcaption>wa-chat-3.png</figcaption></figure>
+        <figure class="ph slide"><img src="assets/marketing/wa-chat-4.png" alt="Forge group chat" onerror="this.style.display='none'"><figcaption>wa-chat-4.png</figcaption></figure>
+        <figure class="ph slide"><img src="assets/marketing/wa-chat-5.png" alt="Forge group chat" onerror="this.style.display='none'"><figcaption>wa-chat-5.png</figcaption></figure>
+      </div>
+      <div class="caro-dots" id="caroDots" aria-hidden="true"></div>
+    </div>
+  </section>
+
   <section class="sec cta">
     <h2 class="display rv">Bring your <b class="gk">group</b>.</h2>
     <div class="rv">
@@ -512,6 +561,108 @@ var io = new IntersectionObserver(function(entries){
   });
 },{ threshold: 0.15 });
 document.querySelectorAll('.rv').forEach(function(el){ io.observe(el); });
+
+/* ── LIVE COUNTERS — exactly ONE Firestore read per session ──────────────
+   stats/global via plain REST (no SDK), cached in sessionStorage so repeat
+   navigations cost zero reads. >2.5s / error / zero → baked prod fallback
+   with a "+" suffix. The strip never shows 0 and never looks broken. */
+(function(){
+  var FB = { l:686, u:51 };  /* real prod totals, 2026-07-14 (fallback only) */
+  var IS_STAGING = location.hostname==='localhost' || location.hostname==='127.0.0.1' ||
+                   location.pathname.indexOf('forge-staging') !== -1;
+  var P = IS_STAGING
+    ? { pid:'forge-staging-865ff', key:'AIzaSyD-bFi6X9Hevwmg-p65ajz35G64wco90CA' }
+    : { pid:'forge-25c8c',         key:'AIzaSyCIXojxM6N6f6kp10g7zYV5XYTyLJ6pz2g' };
+  var got=null, visible=false, ran=false;
+  var fmt=function(n){ return n.toLocaleString('en-IN'); };
+
+  function setVals(l,u,plus){ if(got) return; got={l:l,u:u,plus:!!plus}; maybeRun(); }
+  function maybeRun(){
+    if(ran || !visible || !got) return; ran=true;
+    countUp(document.getElementById('statLogs'),  got.l, got.plus);
+    countUp(document.getElementById('statUsers'), got.u, got.plus);
+  }
+  function countUp(el,target,plus){
+    var D = reduced ? 0 : 1200, t0=null;
+    if(D===0){ el.textContent = fmt(target)+(plus?'+':''); return; }
+    requestAnimationFrame(function step(ts){
+      if(t0===null) t0=ts;
+      var p=Math.min(1,(ts-t0)/D), e=1-Math.pow(1-p,3);
+      el.textContent = fmt(Math.round(target*e)) + (plus && p===1 ? '+' : '');
+      if(p<1) requestAnimationFrame(step);
+    });
+  }
+
+  try{
+    var c=sessionStorage.getItem('forge_stats_v1');
+    if(c){ var j=JSON.parse(c); if(j && j.l>0 && j.u>0) setVals(j.l, j.u, false); }
+  }catch(e){}
+  if(!got){
+    var ac = ('AbortController' in window) ? new AbortController() : null;
+    var tm = setTimeout(function(){ if(ac) ac.abort(); else setVals(FB.l,FB.u,true); }, 2500);
+    fetch('https://firestore.googleapis.com/v1/projects/'+P.pid+
+          '/databases/(default)/documents/stats/global?key='+P.key+
+          '&mask.fieldPaths=totalLogs&mask.fieldPaths=totalUsers',
+          ac ? {signal:ac.signal} : {})
+      .then(function(r){ if(!r.ok) throw 0; return r.json(); })
+      .then(function(j){
+        clearTimeout(tm);
+        var l=parseInt(j.fields.totalLogs.integerValue,10),
+            u=parseInt(j.fields.totalUsers.integerValue,10);
+        if(!(l>0) || !(u>0)) throw 0;                 /* never show 0 */
+        try{ sessionStorage.setItem('forge_stats_v1', JSON.stringify({l:l,u:u})); }catch(e){}
+        setVals(l,u,false);
+      })
+      .catch(function(){ clearTimeout(tm); setVals(FB.l,FB.u,true); });
+  }
+  new IntersectionObserver(function(es,o){
+    es.forEach(function(e){ if(e.isIntersecting){ visible=true; o.unobserve(e.target); maybeRun(); } });
+  },{ threshold:0.3 }).observe(document.getElementById('statStrip'));
+})();
+
+/* ── GROUP-CHAT CAROUSEL — native snap swipe, 5s auto-advance, gold dots ── */
+(function(){
+  var track=document.getElementById('caroTrack');
+  var slides=Array.prototype.slice.call(track.children);
+  var dotsBox=document.getElementById('caroDots');
+  var idx=0, hold=false, lastUser=0, anim=false;
+  slides.forEach(function(_,i){
+    var d=document.createElement('i'); if(i===0) d.className='on';
+    d.addEventListener('click',function(){ lastUser=Date.now(); goTo(i); });
+    dotsBox.appendChild(d);
+  });
+  var dots=Array.prototype.slice.call(dotsBox.children);
+  function current(){
+    var c=track.scrollLeft+track.clientWidth/2, best=0, bd=1e9;
+    slides.forEach(function(s,i){ var d=Math.abs(s.offsetLeft+s.offsetWidth/2-c); if(d<bd){bd=d;best=i;} });
+    return best;
+  }
+  function paint(i){ if(i===idx) return; idx=i; dots.forEach(function(d,k){ d.className=k===i?'on':''; }); }
+  track.addEventListener('scroll', function(){ paint(current()); if(!anim) lastUser=Date.now(); }, {passive:true});
+  function goTo(i){
+    var s=slides[i], to=s.offsetLeft+s.offsetWidth/2-track.clientWidth/2;
+    var from=track.scrollLeft, D=reduced?0:350, t0=null;
+    if(D===0){ track.scrollLeft=to; paint(i); return; }
+    anim=true; track.classList.add('noSnap');
+    requestAnimationFrame(function step(ts){
+      if(t0===null) t0=ts;
+      var p=Math.min(1,(ts-t0)/D), e=1-Math.pow(1-p,3);
+      track.scrollLeft=from+(to-from)*e;
+      if(p<1) requestAnimationFrame(step);
+      else { track.classList.remove('noSnap'); anim=false; paint(i); }
+    });
+  }
+  ['pointerdown','touchstart'].forEach(function(ev){
+    track.addEventListener(ev,function(){ hold=true; lastUser=Date.now(); },{passive:true}); });
+  ['pointerup','pointercancel','touchend','touchcancel','mouseleave'].forEach(function(ev){
+    track.addEventListener(ev,function(){ hold=false; lastUser=Date.now(); },{passive:true}); });
+  if(!reduced){
+    setInterval(function(){
+      if(hold || document.hidden || Date.now()-lastUser<5000) return;
+      goTo((current()+1)%slides.length);
+    },5000);
+  }
+})();
 })();
 </script>
 </body>

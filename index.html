@@ -931,7 +931,9 @@ async function submitPinEntry(){
         const userId = db.collection('users').doc().id;
         const pinHash = await sha256hex(entered);
         const sRef = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
+        let healedNewUser=false;
         await db.runTransaction(async tx=>{
+          healedNewUser=false;   // reset per attempt — tx retries must not overcount
           const sSnap=await tx.get(sRef);
           if(!sSnap.exists) return;
           const roster=sSnap.data().roster||[];
@@ -940,7 +942,9 @@ async function submitPinEntry(){
           entry.userId=userId;
           tx.update(sRef,{roster});
           tx.set(db.collection('users').doc(userId), newUserDocFields(p.name, pinHash, groupCode, groupData?.name, window.currentUid, 'login-self-heal'));
+          healedNewUser=true;
         });
+        if(healedNewUser) bumpGlobalStat('totalUsers', 1);   // fire-and-forget
         p.userId = userId; // same object as `me` — mutation is visible there too
       } else {
         await db.collection('users').doc(p.userId).set({
@@ -1079,6 +1083,7 @@ async function submitNewPin(){
         tx.set(uRef, newUserDocFields(flow.name, pinHash, groupCode, groupData?.name, window.currentUid, 'signup'));
         wPlayers=players; wRoster=roster;
       });
+      bumpGlobalStat('totalUsers', 1);   // new canonical identity (fire-and-forget)
       groupData.players=wPlayers;
       season.roster=wRoster;
       me=newPlayerObj;
@@ -1093,8 +1098,9 @@ async function submitNewPin(){
       const pinHash = await sha256hex(pin);
       const candidateUserId = db.collection('users').doc().id;
       const sRef = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
-      let wRoster=null, myEntry=null;
+      let wRoster=null, myEntry=null, createdUserDoc=false;
       await db.runTransaction(async tx=>{
+        createdUserDoc=false;   // reset per attempt — tx retries must not overcount
         const sSnap=await tx.get(sRef);
         if(!sSnap.exists) throw new Error('SEASON_MISSING');
         const roster=sSnap.data().roster||[];
@@ -1107,9 +1113,11 @@ async function submitNewPin(){
         tx.update(sRef,{roster});
         if(newUserId){
           tx.set(db.collection('users').doc(newUserId), newUserDocFields(entry.name, pinHash, groupCode, groupData?.name, window.currentUid, 'grace-flow'));
+          createdUserDoc=true;
         }
         wRoster=roster; myEntry=entry;
       });
+      if(createdUserDoc) bumpGlobalStat('totalUsers', 1);   // fire-and-forget
       season.roster=wRoster;
       me=myEntry;
       upsertSession(groupCode, myEntry, groupData?.name);
@@ -2276,6 +2284,11 @@ async function submitLog(){
     const commitPromise = batch.commit()
       .then(()=>{ commitSettled=true; })
       .catch(err=>{ commitSettled=true; commitFailed=err; });
+    // Global counter: one increment per log DOC actually committed (a multi-
+    // group broadcast writes `targets.length` docs). Chained on commitPromise
+    // so it fires whenever the write truly lands — even after the 4s grace
+    // window — and never on failure. bumpGlobalStat itself swallows errors.
+    commitPromise.then(()=>{ if(!commitFailed) bumpGlobalStat('totalLogs', targets.length); });
     await Promise.race([commitPromise, new Promise(r=>setTimeout(r,4000))]);
 
     if(!commitSettled){
@@ -2562,12 +2575,25 @@ function renderFeed(){
 // NORTHSTAR §5): "delete" sets voided/voidedBy/voidedAt instead. The doc
 // still exists (audit trail for admins), but every read site filters
 // voided:true out, so it's functionally gone from feed/scoring/leaderboard.
+// ── GLOBAL COUNTER (stats/global) ─────────────────────────────────────────
+// Denormalized totals read by the goforge.in/app marketing page (1 doc read).
+// STRICTLY fire-and-forget: a counter hiccup may never break logging, login,
+// or void — every failure path is swallowed. set+merge self-creates the doc.
+function bumpGlobalStat(field, n){
+  try {
+    db.collection('stats').doc('global').set({
+      [field]: firebase.firestore.FieldValue.increment(n),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, {merge:true}).catch(()=>{});
+  } catch(e){ /* counter must never throw into a caller */ }
+}
+
 function voidLogDoc(id, actorName){
   return db.collection('logs').doc(id).update({
     voided: true,
     voidedBy: actorName,
     voidedAt: firebase.firestore.FieldValue.serverTimestamp()
-  });
+  }).then(res=>{ bumpGlobalStat('totalLogs', -1); return res; });
 }
 async function deleteLog(id){
   if(!confirm('Remove this workout entry? It disappears from your feed and score right away.')) return;
