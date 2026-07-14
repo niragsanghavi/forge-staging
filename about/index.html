@@ -6,13 +6,20 @@
 <title>Forge — Your friend group's fitness league</title>
 <meta name="description" content="Forge turns your friend group's workouts into a monthly competition. Teams, points, streaks, one leaderboard.">
 <meta name="theme-color" content="#0a0a0d">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://goforge.in/about">
 <meta property="og:title" content="Forge — Your friend group's fitness league">
 <meta property="og:description" content="Forge turns your friend group's workouts into a monthly competition.">
+<meta property="og:image" content="https://goforge.in/about/assets/marketing/what-is-forge-1.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Forge — Your friend group's fitness league">
+<meta name="twitter:description" content="Forge turns your friend group's workouts into a monthly competition.">
+<meta name="twitter:image" content="https://goforge.in/about/assets/marketing/what-is-forge-1.png">
 <link rel="icon" href="../icon-192.png">
 <link rel="apple-touch-icon" href="../icon-180.png">
 <style>
 /* ════════════════════════════════════════════════════════════════════
-   FORGE /app — marketing page. Standalone: no dependencies, no SW.
+   FORGE /about — marketing page. Standalone: no dependencies, no SW.
    Palette law: bg #0a0a0d · gold #d4a843 (hot #f0c05a) · text #f2f0ec
    · muted #8f8d98. Placeholder frames use #101016 / #26262e (spec).
    WhatsApp green #25D366 is the single sanctioned exemption (official
@@ -247,10 +254,16 @@ html.locked .rail{display:none}
 .caro-track.noSnap{scroll-snap-type:none}
 .slide{flex:0 0 300px;scroll-snap-align:center;aspect-ratio:9/16;
   border-radius:14px;box-shadow:0 14px 40px rgba(0,0,0,.5)}
-.caro-dots{display:flex;justify-content:center;gap:9px;margin-top:16px}
-.caro-dots i{width:6px;height:6px;border-radius:50%;background:var(--line);
-  transition:background .35s var(--ease);cursor:pointer}
-.caro-dots i.on{background:var(--gold)}
+/* crossfading captions — fixed-height zone under the centered slide */
+.caro-caps{position:relative;max-width:300px;margin:16px auto 0;min-height:82px}
+.caro-cap{position:absolute;left:0;right:0;top:0;text-align:center;color:var(--muted);
+  font-size:13px;line-height:1.5;opacity:0;transition:opacity .35s var(--ease)}
+.caro-cap.on{opacity:1}
+.caro-dots{display:flex;justify-content:center;gap:9px;margin-top:10px}
+.caro-dots button{width:6px;height:6px;border-radius:50%;background:var(--line);
+  border:0;padding:0;cursor:pointer;transition:background .35s var(--ease)}
+.caro-dots button.on{background:var(--gold)}
+.caro-dots button:focus-visible,.caro-track:focus-visible{outline:2px solid var(--gold-hot);outline-offset:3px}
 
 /* CTA */
 .cta{padding-top:110px;padding-bottom:110px}
@@ -307,6 +320,7 @@ html.locked .rail{display:none}
   .caro{max-width:443px;margin:40px auto 0}
   .caro-track{gap:16px;padding-inline:calc(50% - 170px)}
   .slide{flex-basis:340px}
+  .caro-caps{max-width:340px;min-height:70px}
   .cta{padding-top:150px;padding-bottom:150px}
   .events{padding-top:130px;padding-bottom:40px}
   .wa{padding-bottom:130px}
@@ -323,7 +337,7 @@ html.locked .rail{display:none}
 </head>
 <body>
 
-<h1 class="vh">Forge — your friend group's fitness league</h1>
+<h1 class="vh">Forge &mdash; your friend group&rsquo;s fitness league</h1>
 
 <!-- ════════════════ A · THE GATE ════════════════ -->
 <section class="gate" id="gate" aria-label="Introduction">
@@ -396,10 +410,10 @@ html.locked .rail{display:none}
     <div class="label">What is Forge</div>
     <div class="j-img two">
       <figure>
-        <img src="assets/marketing/what-is-forge-1.png" alt="Forge team standings" onerror="this.style.display='none'">
+        <img src="assets/marketing/what-is-forge-1.png" loading="lazy" alt="Forge team standings" onerror="this.style.display='none'">
       </figure>
       <figure>
-        <img src="assets/marketing/what-is-forge-2.png" alt="Forge activity feed" onerror="this.style.display='none'">
+        <img src="assets/marketing/what-is-forge-2.png" loading="lazy" alt="Forge activity feed" onerror="this.style.display='none'">
       </figure>
     </div>
     <h2 class="j-title">Forge turns your friend group&rsquo;s workouts into a monthly <b class="gk">competition</b>.</h2>
@@ -411,7 +425,7 @@ html.locked .rail{display:none}
     <div class="label">How it works &middot; Points</div>
     <div class="j-img">
       <figure>
-        <img src="assets/marketing/feature-points.png" alt="Forge points board" onerror="this.style.display='none'">
+        <img src="assets/marketing/feature-points.png" loading="lazy" alt="Forge points board" onerror="this.style.display='none'">
       </figure>
     </div>
     <h2 class="j-title">You compete in <b class="gk">teams</b>.</h2>
@@ -423,7 +437,7 @@ html.locked .rail{display:none}
     <div class="label">How it works &middot; Streaks</div>
     <div class="j-img">
       <figure>
-        <img src="assets/marketing/feature-streaks.png" alt="Forge streak card" onerror="this.style.display='none'">
+        <img src="assets/marketing/feature-streaks.png" loading="lazy" alt="Forge streak card" onerror="this.style.display='none'">
       </figure>
     </div>
     <h2 class="j-title">Show up consistently and your <b class="gk">streak</b> grows.</h2>
@@ -434,7 +448,7 @@ html.locked .rail{display:none}
     <div class="label">How it works &middot; Leaderboard</div>
     <div class="j-img">
       <figure>
-        <img src="assets/marketing/feature-leaderboard.png" alt="Forge leaderboard" onerror="this.style.display='none'">
+        <img src="assets/marketing/feature-leaderboard.png" loading="lazy" alt="Forge leaderboard" onerror="this.style.display='none'">
       </figure>
     </div>
     <h2 class="j-title"><b class="gk">Live ranks</b> all month.</h2>
@@ -457,14 +471,18 @@ html.locked .rail{display:none}
   <section class="sec chats">
     <div class="label rv">From the group chats</div>
     <div class="caro rv">
-      <div class="caro-track" id="caroTrack">
-        <figure class="ph slide"><img src="assets/marketing/wa-chat-1.png" alt="Forge group chat" onerror="this.style.display='none'"><figcaption>wa-chat-1.png</figcaption></figure>
-        <figure class="ph slide"><img src="assets/marketing/wa-chat-2.png" alt="Forge group chat" onerror="this.style.display='none'"><figcaption>wa-chat-2.png</figcaption></figure>
-        <figure class="ph slide"><img src="assets/marketing/wa-chat-3.png" alt="Forge group chat" onerror="this.style.display='none'"><figcaption>wa-chat-3.png</figcaption></figure>
-        <figure class="ph slide"><img src="assets/marketing/wa-chat-4.png" alt="Forge group chat" onerror="this.style.display='none'"><figcaption>wa-chat-4.png</figcaption></figure>
-        <figure class="ph slide"><img src="assets/marketing/wa-chat-5.png" alt="Forge group chat" onerror="this.style.display='none'"><figcaption>wa-chat-5.png</figcaption></figure>
+      <div class="caro-track" id="caroTrack" tabindex="0" role="region" aria-roledescription="carousel" aria-label="Screenshots from Forge group chats — use arrow keys to browse">
+        <figure class="ph slide"><img src="assets/marketing/wa-chat-1.png" loading="lazy" alt="WhatsApp group chat where every uploaded workout collects applause reactions" onerror="this.style.display='none'"><figcaption>wa-chat-1.png</figcaption></figure>
+        <figure class="ph slide"><img src="assets/marketing/wa-chat-2.png" loading="lazy" alt="Group chat rallying teammates as the month-end points race tightens" onerror="this.style.display='none'"><figcaption>wa-chat-2.png</figcaption></figure>
+        <figure class="ph slide"><img src="assets/marketing/wa-chat-3.png" loading="lazy" alt="Group chat conversation sparked by a shared workout photo" onerror="this.style.display='none'"><figcaption>wa-chat-3.png</figcaption></figure>
+        <figure class="ph slide"><img src="assets/marketing/wa-chat-4.png" loading="lazy" alt="Group chat celebrating the jump in monthly workouts per person" onerror="this.style.display='none'"><figcaption>wa-chat-4.png</figcaption></figure>
+        <figure class="ph slide"><img src="assets/marketing/wa-chat-5.png" loading="lazy" alt="Group chat members reacting to each other doing the same workout" onerror="this.style.display='none'"><figcaption>wa-chat-5.png</figcaption></figure>
       </div>
-      <div class="caro-dots" id="caroDots" aria-hidden="true"></div>
+      <div class="caro-caps" aria-live="polite">
+        <p class="caro-cap" id="capA"></p>
+        <p class="caro-cap" id="capB"></p>
+      </div>
+      <div class="caro-dots" id="caroDots"></div>
     </div>
   </section>
 
@@ -481,7 +499,7 @@ html.locked .rail{display:none}
   <!-- ════════════════ D · WHATSAPP CTA ════════════════ -->
   <section class="wa rv">
     <p class="wa-sub">For more information, <b class="gk">drop a text</b> &mdash; happy to explain further.</p>
-    <a aria-label="Chat on WhatsApp" href="https://wa.me/919870000217?text=Hi!%20I%20found%20Forge%20at%20goforge.in%20and%20want%20to%20know%20more."><img alt="Chat on WhatsApp" src="assets/marketing/WhatsAppButtonGreenLarge.png" onerror="this.style.display='none';document.getElementById('waFallback').style.display='inline-block'" /><span class="wa-fallback" id="waFallback"><!--
+    <a aria-label="Chat on WhatsApp" href="https://wa.me/919870000217?text=Hi!%20I%20found%20Forge%20at%20goforge.in%20and%20want%20to%20know%20more."><img alt="Chat on WhatsApp" loading="lazy" src="assets/marketing/WhatsAppButtonGreenLarge.png" onerror="this.style.display='none';document.getElementById('waFallback').style.display='inline-block'" /><span class="wa-fallback" id="waFallback"><!--
       Faithful recreation of WhatsApp's official "Chat on WhatsApp" green
       button (asset not fetchable at build time). Drop the official
       WhatsAppButtonGreenLarge.png into assets/marketing/ and this SVG
@@ -699,46 +717,101 @@ document.querySelectorAll('.rv').forEach(function(el){ io.observe(el); });
   },{ threshold:0.3 }).observe(document.getElementById('statStrip'));
 })();
 
-/* ── GROUP-CHAT CAROUSEL — native snap swipe, 5s auto-advance, gold dots ── */
+/* ── GROUP-CHAT CAROUSEL — infinite circular loop. Clone of the last slide
+   sits before slide 1 and a clone of the first sits after slide 5, so the
+   loop reads circular from the first frame (slide 5 peeking left, slide 2
+   right). When a clone settles, an instant unanimated jump re-centers on
+   its real twin — no visible snap-back, both directions, swipe and auto.
+   Dots and captions always map to the REAL slide index. ── */
 (function(){
   var track=document.getElementById('caroTrack');
-  var slides=Array.prototype.slice.call(track.children);
-  var dotsBox=document.getElementById('caroDots');
-  var idx=0, hold=false, lastUser=0, anim=false;
-  slides.forEach(function(_,i){
-    var d=document.createElement('i'); if(i===0) d.className='on';
-    d.addEventListener('click',function(){ lastUser=Date.now(); goTo(i); });
-    dotsBox.appendChild(d);
+  var CAPS=[
+    'Workouts are more motivating when your group <b class="gk">applauds</b> every one you upload.',
+    'Competition gets aggressive toward month-end. Everyone wants the <b class="gk">champion crown</b>.',
+    'Every workout shared is an excuse for a <b class="gk">conversation</b>. Groups get more involved than they&rsquo;ve ever been.',
+    'Before Forge, this group averaged 10 monthly workouts per person. After? 22. That&rsquo;s not a jump &mdash; <b class="gk">that&rsquo;s a leap</b>.',
+    'Someone somewhere is doing the same workout as you. Why not <b class="gk">share the space</b>?'
+  ];
+  var real=Array.prototype.slice.call(track.children), N=real.length;
+  var cLast=real[N-1].cloneNode(true), cFirst=real[0].cloneNode(true);
+  [cLast,cFirst].forEach(function(c){
+    c.setAttribute('aria-hidden','true');
+    var im=c.querySelector('img'); if(im) im.alt='';
   });
-  var dots=Array.prototype.slice.call(dotsBox.children);
-  function current(){
+  track.insertBefore(cLast, real[0]); track.appendChild(cFirst);
+  var slides=Array.prototype.slice.call(track.children);   /* [c5, 1..5, c1] */
+  var dotsBox=document.getElementById('caroDots');
+  var capA=document.getElementById('capA'), capB=document.getElementById('capB');
+  var capOn=capA, capShown=-1;
+  var idx=1, hold=false, lastUser=0, anim=false, settleT=null, dots=[];
+  for(var i=0;i<N;i++)(function(i){
+    var d=document.createElement('button');
+    d.type='button'; d.setAttribute('aria-label','Go to screenshot '+(i+1));
+    if(i===0) d.className='on';
+    d.addEventListener('click',function(){ lastUser=Date.now(); goTo(i+1); });
+    dotsBox.appendChild(d); dots.push(d);
+  })(i);
+  function realIdx(i){ return (i-1+N)%N; }
+  function centerOf(i){ var s=slides[i]; return s.offsetLeft+s.offsetWidth/2-track.clientWidth/2; }
+  function nearest(){
     var c=track.scrollLeft+track.clientWidth/2, best=0, bd=1e9;
-    slides.forEach(function(s,i){ var d=Math.abs(s.offsetLeft+s.offsetWidth/2-c); if(d<bd){bd=d;best=i;} });
+    for(var i=0;i<slides.length;i++){
+      var d=Math.abs(slides[i].offsetLeft+slides[i].offsetWidth/2-c);
+      if(d<bd){ bd=d; best=i; }
+    }
     return best;
   }
-  function paint(i){ if(i===idx) return; idx=i; dots.forEach(function(d,k){ d.className=k===i?'on':''; }); }
-  track.addEventListener('scroll', function(){ paint(current()); if(!anim) lastUser=Date.now(); }, {passive:true});
+  function setCaption(r){
+    if(r===capShown) return; capShown=r;
+    var inEl=(capOn===capA)?capB:capA, outEl=capOn;
+    inEl.innerHTML=CAPS[r]; inEl.classList.add('on'); outEl.classList.remove('on');
+    capOn=inEl;
+  }
+  function paint(i){
+    idx=i; var r=realIdx(i);
+    dots.forEach(function(d,k){ d.className=k===r?'on':''; });
+    setCaption(r);
+  }
+  function jumpTo(i){
+    track.classList.add('noSnap');
+    track.scrollLeft=centerOf(i); void track.offsetWidth;
+    track.classList.remove('noSnap'); paint(i);
+  }
+  function normalize(){ if(idx===0) jumpTo(N); else if(idx===slides.length-1) jumpTo(1); }
   function goTo(i){
-    var s=slides[i], to=s.offsetLeft+s.offsetWidth/2-track.clientWidth/2;
-    var from=track.scrollLeft, D=reduced?0:350, t0=null;
-    if(D===0){ track.scrollLeft=to; paint(i); return; }
+    var to=centerOf(i), from=track.scrollLeft, D=reduced?0:350, t0=null;
+    if(D===0){ jumpTo(i); normalize(); return; }
     anim=true; track.classList.add('noSnap');
     requestAnimationFrame(function step(ts){
       if(t0===null) t0=ts;
       var p=Math.min(1,(ts-t0)/D), e=1-Math.pow(1-p,3);
       track.scrollLeft=from+(to-from)*e;
       if(p<1) requestAnimationFrame(step);
-      else { track.classList.remove('noSnap'); anim=false; paint(i); }
+      else { track.classList.remove('noSnap'); anim=false; paint(i); normalize(); }
     });
   }
+  track.addEventListener('scroll', function(){
+    paint(nearest());
+    if(!anim){
+      lastUser=Date.now();
+      clearTimeout(settleT);
+      settleT=setTimeout(function(){ if(!anim) normalize(); },140);  /* swipe settled on a clone -> silent re-center */
+    }
+  }, {passive:true});
+  track.addEventListener('keydown', function(e){
+    if(e.key==='ArrowRight'){ e.preventDefault(); lastUser=Date.now(); goTo(idx+1); }
+    else if(e.key==='ArrowLeft'){ e.preventDefault(); lastUser=Date.now(); goTo(idx-1); }
+  });
   ['pointerdown','touchstart'].forEach(function(ev){
     track.addEventListener(ev,function(){ hold=true; lastUser=Date.now(); },{passive:true}); });
   ['pointerup','pointercancel','touchend','touchcancel','mouseleave'].forEach(function(ev){
     track.addEventListener(ev,function(){ hold=false; lastUser=Date.now(); },{passive:true}); });
+  window.addEventListener('resize', function(){ jumpTo(idx); }, {passive:true});
+  jumpTo(1);   /* slide 1 centered; clone-of-5 peeks left, slide 2 peeks right */
   if(!reduced){
     setInterval(function(){
       if(hold || document.hidden || Date.now()-lastUser<5000) return;
-      goTo((current()+1)%slides.length);
+      goTo(idx+1);
     },5000);
   }
 })();
