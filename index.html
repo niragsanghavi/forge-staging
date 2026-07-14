@@ -2255,8 +2255,48 @@ function writeGlobalStats(){
     }, { merge:true }).catch(()=>{});
   }catch(e){ /* never break the app for a denormalized write */ }
 }
+// R4 SuperDash monthly rollup — analytics/global/monthly/{YYYY-MM}.groups.{code}:
+// this group's month slice (per-player workout-day sets, per-day log counts,
+// workout-type distribution, player→userId identity map, member count),
+// recomputed from the SAME in-memory month logs the app already holds. The
+// superadmin cockpit reads ~3-5 of these docs instead of scanning all-platform
+// logs + users. Same posture as writeGlobalStats: fire-and-forget,
+// eventually-consistent, and REPLACE-not-increment (mergeFields swaps this
+// group's slice wholesale, so voids/backdates/renames self-heal on the next
+// recompute instead of drifting like a counter would).
+function writeMonthlyRollup(){
+  try{
+    if(!window.season || !window.groupCode || !season.month || !season.year) return;
+    const roster = season.roster || [];
+    const logs = Array.isArray(window.allLogs) ? window.allLogs : [];
+    const rosterUid={};
+    roster.forEach(p=>{ if(p&&p.name&&p.userId) rosterUid[p.name.toLowerCase()]=p.userId; });
+    const days={}, counts={}, wo={}, stamped={};
+    logs.forEach(l=>{
+      if(l.voided || !l.player || !l.year || !l.month || !l.day) return;
+      (days[l.player]||(days[l.player]=new Set())).add(l.day);
+      counts[l.day]=(counts[l.day]||0)+1;
+      const ws=Array.isArray(l.workouts)?l.workouts:(l.workout?[l.workout]:[]);
+      ws.forEach(w=>{ const lab=String(w||'').trim(); if(!lab) return; const k=lab.toLowerCase(); (wo[k]||(wo[k]={label:lab,n:0})).n++; });
+      if(l.userId && !stamped[l.player]) stamped[l.player]=l.userId;
+    });
+    const daysOut={}, users={};
+    Object.keys(days).forEach(p=>{
+      daysOut[p]=[...days[p]].sort((a,b)=>a-b);
+      users[p]=stamped[p] || rosterUid[p.toLowerCase()] || null;
+    });
+    const members=new Set(roster.map(p=>p&&p.userId).filter(Boolean)).size;
+    const ym=season.year+'-'+String(season.month).padStart(2,'0');
+    db.collection('analytics').doc('global').collection('monthly').doc(ym).set({
+      month: season.month, year: season.year,
+      groups: { [groupCode]: { days:daysOut, counts, wo, users, members,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp() } }
+    }, { mergeFields: ['month','year', new firebase.firestore.FieldPath('groups', groupCode)] })
+    .catch(()=>{});
+  }catch(e){ /* never break the app for a denormalized write */ }
+}
 let _gsTimer=null;
-function scheduleGlobalStats(){ try{ clearTimeout(_gsTimer); _gsTimer=setTimeout(writeGlobalStats, 3500); }catch(e){} }
+function scheduleGlobalStats(){ try{ clearTimeout(_gsTimer); _gsTimer=setTimeout(function(){ writeGlobalStats(); writeMonthlyRollup(); }, 3500); }catch(e){} }
 
 // Cross-group streak (NORTHSTAR §2.1 rev-3 addendum): counts calendar days on
 // which this person logged at least once, in ANY group — never per-group, and
@@ -3253,58 +3293,9 @@ async function loadSuperAdmin(){
       </div>`).join('');
 }
 
-// Cross-group totals. Reads logs once (on load), not a live listener.
-async function renderSuperDashboard(groups){
-  const el=document.getElementById('superDashboard');
-  if(!el) return;
-  el.innerHTML='<div class="tmuted">Loading stats…</div>';
-  try{
-    const totalGroups=groups.length;
-    const totalPlayers=groups.reduce((s,g)=>s+(g.players?.length||0),0);
-
-    // Logs logged today (by calendar date of the timestamp), across all groups.
-    // Query only the current month — any log written today carries today's
-    // month/year (a stale post-rollover client is the only exception, and the
-    // rollover listener now closes that window).
-    const now=new Date();
-    const startOfDay=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-    const M=now.getMonth()+1, Y=now.getFullYear();
-    const logsSnap=await db.collection('logs').where('month','==',M).where('year','==',Y).get();
-    let loggedToday=0;
-    const perGroupToday={};
-    logsSnap.docs.forEach(d=>{
-      const l=d.data();
-      if(l.voided) return;
-      const ts=l.timestamp?.seconds?new Date(l.timestamp.seconds*1000):null;
-      if(ts && ts>=startOfDay){
-        loggedToday++;
-        perGroupToday[l.groupCode]=(perGroupToday[l.groupCode]||0)+1;
-      }
-    });
-    const topEntry=Object.entries(perGroupToday).sort((a,b)=>b[1]-a[1])[0];
-    const topGroupName=topEntry ? (groups.find(g=>g.code===topEntry[0])?.name||topEntry[0]) : '—';
-
-    el.innerHTML=`
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div class="card" style="margin:0;text-align:center;padding:12px">
-          <div style="font-size:26px;font-weight:900;color:var(--gold)">${totalGroups}</div>
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Groups</div>
-        </div>
-        <div class="card" style="margin:0;text-align:center;padding:12px">
-          <div style="font-size:26px;font-weight:900;color:var(--gold)">${totalPlayers}</div>
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Total players</div>
-        </div>
-        <div class="card" style="margin:0;text-align:center;padding:12px">
-          <div style="font-size:26px;font-weight:900;color:var(--green)">${loggedToday}</div>
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Logs today</div>
-        </div>
-        <div class="card" style="margin:0;text-align:center;padding:12px">
-          <div style="font-size:15px;font-weight:800;color:var(--text);margin-top:4px">${topGroupName}</div>
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Most active today</div>
-        </div>
-      </div>`;
-  }catch(e){ console.error(e); el.innerHTML='<div class="tmuted">Could not load stats.</div>'; }
-}
+// (Removed: renderSuperDashboard — dead code since the SuperDash cockpit
+// superseded the old Overview strip. It had no call sites and no #superDashboard
+// element, but still carried a full current-month logs scan; R4 deletes it.)
 
 // If an active season's month is over (or it's the last day), nudge to roll over.
 function checkRolloverNudges(groups){
@@ -4427,7 +4418,64 @@ async function backfillGlobalStats(){
   await db.collection('analytics').doc('global').collection('daily').doc(ymdToday())
     .set({ byGroup: todayByGroup, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });   // authoritative today seed
   console.log(`[R3 backfill] DONE — globalStats written for ${wrote} group(s); daily rollup ${ymdToday()} =`, todayByGroup);
-  return { groups:wrote, todayByGroup };
+
+  // ── R4: rebuild the SuperDash monthly rollups ────────────────────────────
+  // Authoritative rebuild of analytics/global/monthly/{YYYY-MM} for the month
+  // selector's full window (current + 6 prior months — 6 selectable + one
+  // extra so the oldest selection still has its prior-month lookback). Unlike
+  // the ongoing per-group writer, this has the users scan available, so
+  // identity resolution here is EXACT old-fetchAll semantics: a log's stamped
+  // userId (else the current-roster name map), resolved through the mergedInto
+  // tombstone chain to its canonical id.
+  console.log('[R4 backfill] rebuilding monthly rollups…');
+  const uSnap=await db.collection('users').get();
+  const mergedMap={}; const tombs=new Set();
+  uSnap.docs.forEach(d=>{ const u=d.data(); if(u.mergedInto){ mergedMap[d.id]=u.mergedInto; tombs.add(d.id); } });
+  const canon=id=>{ if(!id) return null; const seen={}; let cur=id,h=0; while(cur&&mergedMap[cur]&&!seen[cur]&&h<10){ seen[cur]=1; cur=mergedMap[cur]; h++; } return cur; };
+  const nameKey={};   // 'CODE||namelower' -> canonical userId, from current rosters
+  const memberN={};   // CODE -> distinct canonical roster userIds (writer-aligned definition)
+  for(const g of groups){
+    const gd=groupSeasons[g.code]; if(!gd) continue;
+    const ms=new Set();
+    (gd.sData.roster||[]).forEach(p=>{ if(!p||!p.name) return;
+      const cu=canon(p.userId||null);
+      if(cu){ nameKey[g.code+'||'+p.name.toLowerCase()]=cu; ms.add(cu); } });
+    memberN[g.code]=ms.size;
+  }
+  const nowD=new Date(); let mm=nowD.getMonth()+1, yy=nowD.getFullYear();
+  let monthsWrote=0;
+  for(let i=0;i<7;i++){
+    const ymDoc=yy+'-'+String(mm).padStart(2,'0');
+    const snap=await db.collection('logs').where('month','==',mm).where('year','==',yy).get();
+    const slices={};
+    snap.docs.forEach(d=>{
+      const l=d.data();
+      if(l.voided || !l.player || !l.groupCode || !l.year || !l.month || !l.day) return;
+      const s=slices[l.groupCode]||(slices[l.groupCode]={days:{},counts:{},wo:{},users:{}});
+      (s.days[l.player]||(s.days[l.player]=new Set())).add(l.day);
+      s.counts[l.day]=(s.counts[l.day]||0)+1;
+      const ws=Array.isArray(l.workouts)?l.workouts:(l.workout?[l.workout]:[]);
+      ws.forEach(w=>{ const lab=String(w||'').trim(); if(!lab) return; const k=lab.toLowerCase(); (s.wo[k]||(s.wo[k]={label:lab,n:0})).n++; });
+      if(s.users[l.player]===undefined){
+        s.users[l.player]=canon(l.userId || nameKey[l.groupCode+'||'+String(l.player).toLowerCase()] || null);
+      }
+    });
+    const out={};
+    Object.keys(slices).forEach(code=>{
+      const s=slices[code]; const daysOut={};
+      Object.keys(s.days).forEach(p=>{ daysOut[p]=[...s.days[p]].sort((a,b)=>a-b); });
+      out[code]={ days:daysOut, counts:s.counts, wo:s.wo, users:s.users,
+        members:(memberN[code]!=null?memberN[code]:0),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+    });
+    await db.collection('analytics').doc('global').collection('monthly').doc(ymDoc)
+      .set({ month:mm, year:yy, groups:out });
+    console.log(`[R4 backfill] ${ymDoc}: ${Object.keys(out).length} group slice(s), ${snap.size} logs scanned`);
+    monthsWrote++;
+    mm=mm===1?12:mm-1; if(mm===12) yy--;
+  }
+  console.log(`[R4 backfill] DONE — ${monthsWrote} monthly rollup doc(s) written; users scanned once (${uSnap.size} docs, ${tombs.size} tombstones)`);
+  return { groups:wrote, todayByGroup, monthlyDocs:monthsWrote };
 }
 window.backfillGlobalStats = backfillGlobalStats;
 
@@ -5387,9 +5435,13 @@ if('serviceWorker' in navigator){
    window (today / this week / at-risk / streaks) is computed against that date
    relative to local today — so a backlogged log counts for the day it's FOR.
 
-   Efficiency: cross-group reads are bounded — groups.get() (done by caller) +
-   one seasons.get() per group + at most 4 month-filtered logs queries +
-   one tabClicks doc per group. No unfiltered logs scan.
+   Efficiency (R4): NO logs or users collection scans. Reads per render:
+   groups.get() (done by caller) + 3-5 monthly rollup docs
+   (analytics/global/monthly/{YYYY-MM}, written by each group's own members
+   via writeMonthlyRollup + seeded by window.backfillGlobalStats()) + one
+   seasons.get() and one tabClicks doc per group + two users REST aggregation
+   counts (compat 9.23 has no Query.count()). The player drill-down adds a
+   targeted player-equality logs query per fetched month, only on click.
 
    Only reachable from loadSuperAdmin(), which is behind the superadmin PIN gate.
    ════════════════════════════════════════════════════════════════════════ */
@@ -5437,18 +5489,42 @@ if('serviceWorker' in navigator){
     add(curM,curY); var pc=prevMonth(curM,curY); add(pc.m,pc.y);
     var pc2=prevMonth(pc.m,pc.y); add(pc2.m,pc2.y);   // 60-day lookback so the participation chart's "previous 30 days" is covered (C3)
     var monthList=Object.keys(want).map(function(k){return want[k];});
-    var logSnaps=await Promise.all(monthList.map(function(mo){
-      return db.collection('logs').where('month','==',mo.m).where('year','==',mo.y).get();
+    // R4: each month is ONE monthly rollup doc (analytics/global/monthly/
+    // {YYYY-MM}) instead of an all-platform logs query. A missing doc is a
+    // month with no data — same as an empty logs query before.
+    var rollups={};   // 'YYYY-MM' -> {code: {days,counts,wo,users,members}}
+    await Promise.all(monthList.map(function(mo){
+      var key=ymKey(mo.y,mo.m);
+      return db.collection('analytics').doc('global').collection('monthly').doc(key).get()
+        .then(function(dd){ rollups[key]=(dd.exists&&dd.data().groups)||{}; })
+        .catch(function(){ rollups[key]={}; });
     }));
-    var logs=[];
-    logSnaps.forEach(function(sn){ sn.docs.forEach(function(dd){
-      var l=dd.data(); if(l.voided) return;
-      if(!l.year||!l.month||!l.day) return;
-      logs.push({ id:dd.id, groupCode:l.groupCode, player:l.player, team:l.team,
-        workouts:Array.isArray(l.workouts)?l.workouts:(l.workout?[l.workout]:[]),
-        y:l.year, m:l.month, d:l.day, dateStr:ymd(l.year,l.month,l.day),
-        userId:l.userId||null }); });
+    // Flatten into the shapes the build functions consume. gpList: one entry
+    // per (group, player-string) with its cross-month workout-day set and the
+    // write-time-resolved userId. dayAll/dayByGroup: per-day LOG counts.
+    var curKey=ymKey(curY,curM);
+    var gpMap={}, dayAll={}, dayByGroup={}, membersCount={};
+    monthList.forEach(function(mo){
+      var key=ymKey(mo.y,mo.m), slice=rollups[key]||{};
+      Object.keys(slice).forEach(function(code){
+        var s=slice[code]||{};
+        if(s.members!=null && (key===curKey || membersCount[code]==null)) membersCount[code]=s.members;
+        var days=s.days||{}, users=s.users||{};
+        Object.keys(days).forEach(function(p){
+          var gk=code+'||'+p;
+          var e=gpMap[gk]||(gpMap[gk]={code:code, player:p, days:new Set(), uid:null});
+          (days[p]||[]).forEach(function(d){ e.days.add(ymd(mo.y,mo.m,+d)); });
+          if(e.uid==null && users[p]!=null) e.uid=users[p];
+        });
+        var counts=s.counts||{}, bg=dayByGroup[code]||(dayByGroup[code]={});
+        Object.keys(counts).forEach(function(d){
+          var ds=ymd(mo.y,mo.m,+d), n=counts[d]||0;
+          dayAll[ds]=(dayAll[ds]||0)+n;
+          bg[ds]=(bg[ds]||0)+n;
+        });
+      });
     });
+    var gpList=Object.keys(gpMap).map(function(k){return gpMap[k];});
 
     // Per group: seasons list → current-season roster + latest archived snapshot.
     var groupInfo={};
@@ -5469,25 +5545,18 @@ if('serviceWorker' in navigator){
 
     // ── Canonical identity (userId) layer — deduped platform metrics ──────────
     // Registered user = a users doc WITHOUT `mergedInto` (a mergedInto doc is a
-    // tombstone pointing at the surviving canonical id). `memberships` collapses
-    // multi-group membership into ONE userId, so a person on N group rosters is
-    // ONE registered user, never N. Every participation number below keys off a
-    // canonical userId — never a roster row, never a display name.
-    var users=[], usersDenied=false;
-    try{ var usnap=await db.collection('users').get();
-      users=usnap.docs.map(function(dd){ return Object.assign({id:dd.id}, dd.data()); }); }
-    catch(e){ usersDenied=true; }
-    var mergedMap={};                       // id -> mergedInto, for chain resolution
-    users.forEach(function(u){ if(u.mergedInto) mergedMap[u.id]=u.mergedInto; });
-    var canonicalUserIds=new Set();         // ALL registered users (platform denominator)
-    var membersOf={};                       // groupCode -> Set(canonical userId), from memberships
-    users.forEach(function(u){ if(u.mergedInto) return; canonicalUserIds.add(u.id);
-      var mem=u.memberships||{}; Object.keys(mem).forEach(function(gc){ (membersOf[gc]||(membersOf[gc]=new Set())).add(u.id); }); });
-    // Fallback for logs written before userId was stamped: (groupCode||nameLower) -> canonical userId, from current rosters.
-    var nameKeyToUserId={};
-    (function(){ var seen={}, cur; Object.keys(groupInfo).forEach(function(gc){ (groupInfo[gc].roster||[]).forEach(function(p){
-      if(!p||!p.name||!p.userId) return; seen={}; cur=p.userId; var h=0; while(cur&&mergedMap[cur]&&!seen[cur]&&h<10){ seen[cur]=1; cur=mergedMap[cur]; h++; }
-      nameKeyToUserId[gc+'||'+p.name.toLowerCase()]=cur; }); }); })();
+    // tombstone pointing at the surviving canonical id). R4: the full users
+    // scan is replaced by TWO aggregation counts (all docs minus tombstones) —
+    // an aggregation costs 1 read per 1,000 index entries and transfers no
+    // docs. The compat 9.23 SDK has no Query.count(), so these go through the
+    // Firestore REST :runAggregationQuery endpoint with this session's own ID
+    // token (same rules enforcement as an SDK read). Per-log identity
+    // resolution moved to write time: the monthly rollup's `users` map is
+    // stamped by writeMonthlyRollup / the backfill.
+    var canonicalCount=0, usersDenied=false;
+    try{
+      canonicalCount=await usersAggCount();
+    }catch(e){ usersDenied=true; }
 
     // Error logs (Phase 3) — recent-first, capped, NOT month-scoped. Degrades to
     // an empty/denied state if reads are blocked (write-only rules) or the
@@ -5502,21 +5571,42 @@ if('serviceWorker' in navigator){
     }catch(err){ errorsDenied=true; }
 
     return { now:now, todayMid:todayMid, curM:curM, curY:curY, selM:selM, selY:selY,
-             isCurrentMonth:(selM===curM&&selY===curY), logs:logs, groups:groups, groupInfo:groupInfo,
+             isCurrentMonth:(selM===curM&&selY===curY), groups:groups, groupInfo:groupInfo,
              errors:errors, errorsDenied:errorsDenied,
-             users:users, usersDenied:usersDenied, mergedMap:mergedMap,
-             canonicalUserIds:canonicalUserIds, membersOf:membersOf, nameKeyToUserId:nameKeyToUserId };
+             monthList:monthList, rollups:rollups, gpList:gpList,
+             dayAll:dayAll, dayByGroup:dayByGroup,
+             membersCount:membersCount, canonicalCount:canonicalCount, usersDenied:usersDenied };
   }
   function ymKey(y,m){ return y+'-'+String(m).padStart(2,'0'); }
 
-  // Set of logged dateStrs for (group,player) and for player-across-groups.
+  // Registered-user count via two REST aggregation queries (count all users
+  // docs, subtract mergedInto tombstones). Uses the session's Firebase ID
+  // token, so security rules apply exactly as they would to an SDK read.
+  async function usersAggCount(){
+    var user=firebase.auth().currentUser;
+    if(!user) throw new Error('no auth');
+    var token=await user.getIdToken();
+    var base='https://firestore.googleapis.com/v1/projects/'+firebase.app().options.projectId+'/databases/(default)/documents:runAggregationQuery';
+    function agg(where){
+      var sq={ from:[{collectionId:'users'}] };
+      if(where) sq.where=where;
+      return fetch(base,{ method:'POST',
+        headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
+        body:JSON.stringify({ structuredAggregationQuery:{ structuredQuery:sq, aggregations:[{alias:'n',count:{}}] } })
+      }).then(function(r){ if(!r.ok) throw new Error('agg '+r.status); return r.json(); })
+        .then(function(j){ var n=j[0]&&j[0].result&&j[0].result.aggregateFields&&j[0].result.aggregateFields.n;
+          return n?(parseInt(n.integerValue,10)||0):0; });
+    }
+    var total=await agg(null);
+    var tombs=await agg({ fieldFilter:{ field:{fieldPath:'mergedInto'}, op:'GREATER_THAN', value:{stringValue:''} } });
+    return Math.max(0, total-tombs);
+  }
+
+  // Set of logged dateStrs for (group,player) — same key format as before,
+  // now assembled from the monthly rollups' per-player day arrays.
   function buildDaySets(data){
-    var gp={}, byGroup={}, groupAll={};
-    data.logs.forEach(function(l){
-      var k=l.groupCode+'||'+l.player;
-      (gp[k]||(gp[k]=new Set())).add(l.dateStr);
-      (groupAll[l.groupCode]||(groupAll[l.groupCode]=new Set())).add(l.dateStr);
-    });
+    var gp={};
+    data.gpList.forEach(function(e){ gp[e.code+'||'+e.player]=e.days; });
     return { gp:gp };
   }
   function runEndingAt(set, endDate){
@@ -5534,35 +5624,41 @@ if('serviceWorker' in navigator){
   }
 
   // ── IDENTITY / PARTICIPATION (all deduped by canonical userId) ───────────
-  // Resolve any userId through the mergedInto chain to its surviving canonical id.
-  function canon(data,id){ if(!id) return null; var mm=data.mergedMap||{}, seen={}, cur=id, h=0;
-    while(cur && mm[cur] && !seen[cur] && h<10){ seen[cur]=1; cur=mm[cur]; h++; } return cur; }
-  // A log's canonical userId: prefer the stamped userId, else the roster name map. null = unattributable.
-  function logUid(data,l){ var raw=l.userId || data.nameKeyToUserId[l.groupCode+'||'+String(l.player||'').toLowerCase()] || null; return canon(data,raw); }
+  // R4: identity resolution (stamped userId → roster map → mergedInto chain)
+  // happens at WRITE time now — writeMonthlyRollup / the backfill stamp each
+  // rollup entry's `users` map — so these helpers just walk gpList.
   // Per-day sets of canonical userIds who logged — combined and per-group. Built once, cached.
   function partIndex(data){
     if(data._partIdx) return data._partIdx;
     var byDay={}, byGroupDay={};
-    data.logs.forEach(function(l){
-      var uid=logUid(data,l); if(!uid) return;
-      (byDay[l.dateStr]||(byDay[l.dateStr]=new Set())).add(uid);
-      var gm=byGroupDay[l.groupCode]||(byGroupDay[l.groupCode]={});
-      (gm[l.dateStr]||(gm[l.dateStr]=new Set())).add(uid);
+    data.gpList.forEach(function(e){
+      if(!e.uid) return;
+      var gm=byGroupDay[e.code]||(byGroupDay[e.code]={});
+      e.days.forEach(function(ds){
+        (byDay[ds]||(byDay[ds]=new Set())).add(e.uid);
+        (gm[ds]||(gm[ds]=new Set())).add(e.uid);
+      });
     });
     return (data._partIdx={ byDay:byDay, byGroupDay:byGroupDay });
   }
   // Canonical userIds with >=1 log in the last 30 days (optionally within one group).
   function activeUserSet(data, endMid, scopeGroup){
     var out=new Set();
-    data.logs.forEach(function(l){ if(scopeGroup && l.groupCode!==scopeGroup) return;
-      var a=daysAgoOf(l.dateStr,endMid); if(a<0||a>29) return; var uid=logUid(data,l); if(uid) out.add(uid); });
+    data.gpList.forEach(function(e){
+      if(scopeGroup && e.code!==scopeGroup) return;
+      if(!e.uid || out.has(e.uid)) return;
+      var hit=false;
+      e.days.forEach(function(ds){ if(hit) return; var a=daysAgoOf(ds,endMid); if(a>=0&&a<=29) hit=true; });
+      if(hit) out.add(e.uid);
+    });
     return out;
   }
-  // Denominator for a scope: platform = all registered (or group members); active = logged-in-30d set size.
+  // Denominator for a scope: platform = all registered (count() aggregate) or
+  // the group's roster-member count from its rollup slice; active = logged-in-30d set size.
   function partDenom(data, mode, scopeGroup){
     if(mode==='active') return activeUserSet(data, data.todayMid, scopeGroup).size;
-    if(scopeGroup) return (data.membersOf[scopeGroup]||new Set()).size;
-    return (data.canonicalUserIds||new Set()).size;
+    if(scopeGroup) return data.membersCount[scopeGroup]||0;
+    return data.canonicalCount||0;
   }
   // Set of unique canonical loggers on a given dateStr, for a scope.
   function dayLoggers(idx, ds, scopeGroup){
@@ -5619,12 +5715,17 @@ if('serviceWorker' in navigator){
   // ── 1. PULSE (always live/today) ──
   function buildPulse(data,sets){
     var tm=data.todayMid, todayStr=ymd(data.now.getFullYear(),data.now.getMonth()+1,data.now.getDate());
-    var logsToday=0, wk=0, lastWk=0, activeWk=new Set();
-    data.logs.forEach(function(l){
-      var da=daysAgoOf(l.dateStr,tm);
-      if(l.dateStr===todayStr) logsToday++;
-      if(da>=0&&da<=6){ wk++; activeWk.add(l.player); }
-      else if(da>=7&&da<=13){ lastWk++; }
+    var logsToday=data.dayAll[todayStr]||0, wk=0, lastWk=0, activeWk=new Set();
+    Object.keys(data.dayAll).forEach(function(ds){
+      var da=daysAgoOf(ds,tm);
+      if(da>=0&&da<=6) wk+=data.dayAll[ds];
+      else if(da>=7&&da<=13) lastWk+=data.dayAll[ds];
+    });
+    data.gpList.forEach(function(e){
+      if(activeWk.has(e.player)) return;
+      var hit=false;
+      e.days.forEach(function(ds){ if(hit) return; var a=daysAgoOf(ds,tm); if(a>=0&&a<=6) hit=true; });
+      if(hit) activeWk.add(e.player);
     });
     // At-risk: current members whose most-recent log is >=4 days ago (or never).
     var atRisk=computeAtRisk(data,sets).length;
@@ -5652,11 +5753,15 @@ if('serviceWorker' in navigator){
     var todayDay=data.now.getDate();
     var prevLastDay=new Date(pm.y, pm.m, 0).getDate();   // last calendar day of the previous month
     var cutoffDay=Math.min(todayDay, prevLastDay);
-    var thisMTD=0, prevMTD=0, prevTotal=0;
-    data.logs.forEach(function(l){
-      if(l.y===data.curY && l.m===data.curM){ if(l.d<=todayDay) thisMTD++; }
-      else if(l.y===pm.y && l.m===pm.m){ prevTotal++; if(l.d<=cutoffDay) prevMTD++; }
-    });
+    function monthLogCount(y,m,maxDay){
+      var slice=data.rollups[ymKey(y,m)]||{}, sum=0;
+      Object.keys(slice).forEach(function(code){ var c=(slice[code]||{}).counts||{};
+        Object.keys(c).forEach(function(d){ if(maxDay==null||+d<=maxDay) sum+=c[d]||0; }); });
+      return sum;
+    }
+    var thisMTD=monthLogCount(data.curY,data.curM,todayDay);
+    var prevTotal=monthLogCount(pm.y,pm.m,null);
+    var prevMTD=monthLogCount(pm.y,pm.m,cutoffDay);
     var moChg=prevMTD>0?Math.round((thisMTD-prevMTD)/prevMTD*100):(thisMTD>0?100:0);
     var moUp=thisMTD>=prevMTD, moArrow=moUp?'▲':'▼', moCol=moUp?'var(--green)':'var(--red)';
     var pmAbbr=MONTHS[pm.m-1].slice(0,3), curAbbr=MONTHS[data.curM-1].slice(0,3);
@@ -5793,18 +5898,26 @@ if('serviceWorker' in navigator){
       var members=gi.roster.length;
       var activeSet=new Set(), periodLogs=0, priorLogs=0, groupLastAgo=Infinity;
       var topDays={};
-      data.logs.forEach(function(l){
-        if(l.groupCode!==g.code) return;
-        var a=daysAgoOf(l.dateStr,tm);
+      var pmSel=prevMonth(data.selM,data.selY);
+      var selKey=ymKey(data.selY,data.selM), priKey=ymKey(pmSel.y,pmSel.m);
+      var bg=data.dayByGroup[g.code]||{};
+      Object.keys(bg).forEach(function(ds){
+        var a=daysAgoOf(ds,tm), n=bg[ds];
         if(a>=0&&a<groupLastAgo) groupLastAgo=a;
         var inPeriod, inPrior;
         if(cur){ inPeriod=(a>=0&&a<=6); inPrior=(a>=7&&a<=13); }
-        else {
-          inPeriod=(l.m===data.selM&&l.y===data.selY);
-          var pm=prevMonth(data.selM,data.selY); inPrior=(l.m===pm.m&&l.y===pm.y);
-        }
-        if(inPeriod){ periodLogs++; activeSet.add(l.player); (topDays[l.player]||(topDays[l.player]=new Set())).add(l.dateStr); }
-        if(inPrior) priorLogs++;
+        else { inPeriod=(ds.slice(0,7)===selKey); inPrior=(ds.slice(0,7)===priKey); }
+        if(inPeriod) periodLogs+=n;
+        if(inPrior) priorLogs+=n;
+      });
+      data.gpList.forEach(function(e){
+        if(e.code!==g.code) return;
+        e.days.forEach(function(ds){
+          var inP;
+          if(cur){ var a=daysAgoOf(ds,tm); inP=(a>=0&&a<=6); }
+          else inP=(ds.slice(0,7)===selKey);
+          if(inP){ activeSet.add(e.player); (topDays[e.player]||(topDays[e.player]=new Set())).add(ds); }
+        });
       });
       var top=Object.keys(topDays).map(function(n){return [n,topDays[n].size];}).sort(function(a,b){return b[1]-a[1];})[0];
       var wow=priorLogs>0?Math.round((periodLogs-priorLogs)/priorLogs*100):(periodLogs>0?100:0);
@@ -5853,13 +5966,19 @@ if('serviceWorker' in navigator){
   }
   function buildTrendsInner(data){
     var daysIn=new Date(data.selY,data.selM,0).getDate();
-    // Combined daily counts + per-group daily counts
+    // Combined daily counts + per-group daily counts, from the selected
+    // month's rollup slices.
+    var selSlice=data.rollups[ymKey(data.selY,data.selM)]||{};
     var combined=new Array(daysIn+1).fill(0);
     var perGroup={};
-    data.logs.forEach(function(l){
-      if(l.m!==data.selM||l.y!==data.selY) return;
-      combined[l.d]=(combined[l.d]||0)+1;
-      (perGroup[l.groupCode]||(perGroup[l.groupCode]=new Array(daysIn+1).fill(0)))[l.d]++;
+    Object.keys(selSlice).forEach(function(code){
+      var c=(selSlice[code]||{}).counts||{};
+      Object.keys(c).forEach(function(d){
+        var dd=+d, n=c[d]||0;
+        if(!(dd>=1&&dd<=daysIn)||!n) return;
+        combined[dd]+=n;
+        (perGroup[code]||(perGroup[code]=new Array(daysIn+1).fill(0)))[dd]+=n;
+      });
     });
     var maxC=Math.max(1,...combined.slice(1));
     var toggle='<div style="display:flex;gap:6px;margin-bottom:10px">'
@@ -5870,16 +5989,15 @@ if('serviceWorker' in navigator){
       var codes=Object.keys(perGroup);
       chart=codes.length? codes.map(function(c){
         var gi=data.groupInfo[c], arr=perGroup[c], mx=Math.max(1,...arr.slice(1));
-        var gLogs=data.logs.filter(function(l){return l.groupCode===c && l.m===data.selM && l.y===data.selY;});
         return '<div style="margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)">'
           +'<div style="font-size:11px;color:var(--muted);margin-bottom:3px">'+E(gi?gi.name:c)+' · '+arr.reduce(function(s,n){return s+n;},0)+' logs</div>'+bars(arr,daysIn,mx)
-          +'<div class="sd-subh" style="margin:10px 0 6px">Workout types</div>'+workoutDistHtml(gLogs)+'</div>';
+          +'<div class="sd-subh" style="margin:10px 0 6px">Workout types</div>'+workoutDistHtml((selSlice[c]||{}).wo||{})+'</div>';
       }).join('') : '<div class="tmuted">No logs this month.</div>';
     } else {
       chart=bars(combined,daysIn,maxC)+'<div style="font-size:11px;color:var(--muted);margin-top:4px;text-align:center">Logs per day · '+combined.reduce(function(s,n){return s+n;},0)+' total</div>';
     }
     // Workout distribution (combined) — same helper the per-group view now uses (C4)
-    var wdHtml=workoutDistHtml(data.logs.filter(function(l){return l.m===data.selM&&l.y===data.selY;}));
+    var wdHtml=workoutDistHtml(mergeWo(selSlice));
     // Tab clicks per group (selected month)
     var tabHtml=data.groups.map(function(g){
       var gi=data.groupInfo[g.code]; if(!gi) return '';
@@ -5899,10 +6017,21 @@ if('serviceWorker' in navigator){
     for(var d=1; d<=daysIn; d++){ var h=Math.round((arr[d]||0)/mx*100); b+='<div class="sd-bar" title="'+d+': '+(arr[d]||0)+'"><div style="height:'+h+'%"></div></div>'; }
     return b+'</div>';
   }
-  // Top-8 workout-type % split for a set of logs — used by both the combined and per-group Trends views (C4).
-  function workoutDistHtml(logs){
-    var wc={}, wt=0;
-    logs.forEach(function(l){ l.workouts.forEach(function(w){ var lab=String(w||'').trim(); if(!lab) return; var k=lab.toLowerCase(); (wc[k]||(wc[k]={label:lab,n:0})).n++; wt++; }); });
+  // Merge per-group {key:{label,n}} workout distributions into one (first label
+  // variant wins, counts sum) — feeds the combined Trends split.
+  function mergeWo(slice){
+    var out={};
+    Object.keys(slice).forEach(function(code){
+      var wo=(slice[code]||{}).wo||{};
+      Object.keys(wo).forEach(function(k){ var e=wo[k]; if(!e||!e.n) return;
+        (out[k]||(out[k]={label:e.label,n:0})).n+=e.n; });
+    });
+    return out;
+  }
+  // Top-8 workout-type % split from a {key:{label,n}} distribution map — used
+  // by both the combined and per-group Trends views (C4).
+  function workoutDistHtml(wc){
+    var wt=0; Object.keys(wc).forEach(function(k){ wt+=(wc[k]&&wc[k].n)||0; });
     var wdist=Object.keys(wc).map(function(k){return wc[k];}).sort(function(a,b){return b.n-a.n;}).slice(0,8);
     return wdist.length? wdist.map(function(w){ var p=pct(w.n,wt);
       return '<div class="sd-wd"><div class="sd-wd-l">'+E(w.label)+'</div><div class="sd-wd-bar"><div style="width:'+p+'%"></div></div><div class="sd-wd-n">'+w.n+' · '+p+'%</div></div>';
@@ -5918,9 +6047,13 @@ if('serviceWorker' in navigator){
       if(cs>0) streaks.push({ code:parts[0], name:parts[1], streak:cs }); });
     streaks.sort(function(a,b){return b.streak-a.streak;});
     // top loggers this selected month (distinct days per group,player)
-    var lg={};
-    data.logs.forEach(function(l){ if(l.m!==data.selM||l.y!==data.selY) return; var k=l.groupCode+'||'+l.player; (lg[k]||(lg[k]=new Set())).add(l.dateStr); });
-    var loggers=Object.keys(lg).map(function(k){var p=k.split('||');return {code:p[0],name:p[1],days:lg[k].size};}).sort(function(a,b){return b.days-a.days;});
+    var selKey=ymKey(data.selY,data.selM);
+    var loggers=[];
+    data.gpList.forEach(function(e){
+      var n=0; e.days.forEach(function(ds){ if(ds.slice(0,7)===selKey) n++; });
+      if(n>0) loggers.push({code:e.code,name:e.player,days:n});
+    });
+    loggers.sort(function(a,b){return b.days-a.days;});
     var gname=function(c){ var gi=data.groupInfo[c]; return gi?gi.name:c; };
     function list(arr,fmt){ return arr.slice(0,5).map(function(r,i){
       return '<div class="sd-row"><div><span class="sd-rank">'+(i+1)+'</span> '+nameLink(r.name)+' <span class="sd-sub">'+E(gname(r.code))+'</span></div><div style="font-weight:800;color:var(--gold)">'+fmt(r)+'</div></div>';
@@ -6021,6 +6154,12 @@ if('serviceWorker' in navigator){
   }
 
   // ── PLAYER DRILL-DOWN ──
+  // R4: there is no in-memory platform log scan to filter any more. The
+  // drill-down runs TARGETED queries instead — this player's logs only, for
+  // the same month window fetchAll covers: equality-only filters
+  // (player IN name-variants + month + year), fired only when a name is
+  // clicked. Firestore equality is case-sensitive, so we query every exact
+  // spelling of the name we know about (rollup day-map keys + roster names).
   async function openPlayer(name){
     injectStyle();
     var ov=document.getElementById('sdModal');
@@ -6036,7 +6175,23 @@ if('serviceWorker' in navigator){
         var entry=gi.roster.find(function(p){return p&&p.name&&p.name.toLowerCase()===nlc;});
         if(entry){ groups.push(gi.name); if(entry.userId) userId=entry.userId; } });
       // logs (all fetched months) for this name, across groups
-      var mine=data.logs.filter(function(l){return l.player&&l.player.toLowerCase()===nlc;});
+      var variants={}; variants[name]=1;
+      data.gpList.forEach(function(e){ if(e.player&&e.player.toLowerCase()===nlc) variants[e.player]=1; });
+      data.groups.forEach(function(g){ var gi=data.groupInfo[g.code]; if(!gi) return;
+        gi.roster.forEach(function(p){ if(p&&p.name&&p.name.toLowerCase()===nlc) variants[p.name]=1; }); });
+      var vlist=Object.keys(variants).slice(0,30);
+      var snaps=await Promise.all((data.monthList||[]).map(function(mo){
+        return db.collection('logs').where('month','==',mo.m).where('year','==',mo.y)
+          .where('player','in',vlist).get().catch(function(){ return {docs:[]}; });
+      }));
+      var mine=[];
+      snaps.forEach(function(sn){ sn.docs.forEach(function(dd){
+        var l=dd.data(); if(l.voided) return;
+        if(!l.year||!l.month||!l.day) return;
+        if(!l.player||l.player.toLowerCase()!==nlc) return;
+        mine.push({ id:dd.id, groupCode:l.groupCode, player:l.player,
+          workouts:Array.isArray(l.workouts)?l.workouts:(l.workout?[l.workout]:[]),
+          y:l.year, m:l.month, d:l.day, dateStr:ymd(l.year,l.month,l.day) }); }); });
       var monthLogs=mine.filter(function(l){return l.m===data.selM&&l.y===data.selY;});
       // combined day set across groups → streak (live)
       var allDays=new Set(); mine.forEach(function(l){allDays.add(l.dateStr);});

@@ -159,6 +159,18 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      // R4 SuperDash monthly rollup — analytics/global/monthly/{YYYY-MM}: one
+      // month slice per group (per-player day sets, per-day counts, workout
+      // distribution, identity map), each group's slice recomputed + replaced
+      // by that group's own members (writeMonthlyRollup, mergeFields). The
+      // superadmin cockpit reads these instead of scanning logs + users.
+      match /monthly/{ym} {
+        allow read:   if isAuthed();
+        allow create: if isAuthed();
+        allow update: if isAuthed();
+        allow delete: if false;
+      }
+
       // NOTE: baseline-{YYYY-MM} aggregates are top-level analytics/ DOCS, so
       // the parent match above already covers them (read authed, write denied).
       // A previous nested `match /baseline-{docId}` block was invalid syntax —
