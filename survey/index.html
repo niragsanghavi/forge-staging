@@ -3,16 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Forge — 60-second survey</title>
-<meta name="description" content="A 60-second anonymous survey about Forge.">
+<title>Forge — 40-second survey</title>
+<meta name="description" content="A 40-second anonymous survey about Forge.">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0a0a0d">
 <link rel="icon" href="../icon-192.png">
 <link rel="apple-touch-icon" href="../icon-180.png">
 <style>
 /* ════════════════════════════════════════════════════════════════════
-   FORGE /survey — anonymous product survey. Standalone: no dependencies
-   on the app, no SW registration, not in any cache list.
+   FORGE /survey — anonymous product survey (flow v2). Standalone: no
+   dependencies on the app, no SW registration, not in any cache list.
    Palette law (same as /about): bg #0a0a0d · gold #d4a843 (hot #f0c05a)
    · text #f2f0ec · muted #8f8d98. No other accent colors.
    Gold-keyword rule: each display line carries exactly ONE gold word or
@@ -119,7 +119,7 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
 .pair{display:flex;gap:12px;width:100%;max-width:440px}
 .pair .btn{flex:1;max-width:none}
 
-/* ── Q2 rank ── */
+/* ── Q1 rank ── */
 .rankbox{display:flex;flex-direction:column;gap:22px;width:100%;max-width:440px}
 .pool{display:flex;flex-direction:column;gap:10px}
 .pool .opt{transition:opacity .28s var(--ease),transform .28s var(--ease),background .25s var(--ease),border-color .25s var(--ease)}
@@ -170,7 +170,7 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
 </head>
 <body>
 
-<h1 class="vh">Forge — 60-second anonymous survey</h1>
+<h1 class="vh">Forge — 40-second anonymous survey</h1>
 
 <div id="prog" aria-hidden="true"></div>
 <button id="back" aria-label="Go back one question">
@@ -180,27 +180,14 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
 <!-- SCREEN 0 · INTRO -->
 <section class="scr on" id="s-intro" aria-label="Introduction">
   <div class="wrap">
-    <p class="q"><b class="gk">60 seconds</b>. All taps, no typing.</p>
+    <p class="q"><b class="gk">40 seconds</b>. All taps, no typing.</p>
     <p class="sub">Completely anonymous — I won&rsquo;t know who said what. Be brutal, it&rsquo;s more useful.</p>
     <button class="btn" id="startBtn">Start</button>
   </div>
 </section>
 
-<!-- Q1 -->
+<!-- Q1 · RANK (4 items) -->
 <section class="scr" id="s-q1">
-  <div class="wrap">
-    <p class="q">When you open <b class="gk">Forge</b>, what are you usually there to do?</p>
-    <div class="opts" data-q="q1" data-n="1">
-      <button class="opt">Log a workout</button>
-      <button class="opt">Check where I stand</button>
-      <button class="opt">See what everyone&rsquo;s doing</button>
-      <button class="opt">Just checking in</button>
-    </div>
-  </div>
-</section>
-
-<!-- Q2 · RANK -->
-<section class="scr" id="s-q2">
   <div class="wrap">
     <p class="q">Tap these in <b class="gk">order</b> of how much you use them.</p>
     <p class="sub">Most-used first.</p>
@@ -212,31 +199,31 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
   </div>
 </section>
 
-<!-- Q2 BRANCH A -->
-<section class="scr" id="s-q2a">
+<!-- Q1 BRANCH A — why the #1 pick -->
+<section class="scr" id="s-q1a">
   <div class="wrap">
-    <p class="q" id="q2aPrompt"></p>
-    <div class="opts" data-q="q2a" data-n="2a" id="q2aOpts"></div>
+    <p class="q" id="q1aPrompt"></p>
+    <div class="opts" data-q="q1a" data-n="1a" id="q1aOpts"></div>
   </div>
 </section>
 
-<!-- Q2 BRANCH B -->
-<section class="scr" id="s-q2b">
+<!-- Q1 BRANCH B — what's wrong with the last pick -->
+<section class="scr" id="s-q1b">
   <div class="wrap">
-    <p class="q" id="q2bPrompt"></p>
-    <div class="opts" data-q="q2b" data-n="2b" id="q2bOpts"></div>
-    <div class="else-wrap" id="q2bElse">
-      <input class="else-input" id="q2bInput" type="text" maxlength="200" placeholder="Optional — what is it?">
-      <button class="btn btn-quiet" data-else-continue="q2b">Continue</button>
+    <p class="q" id="q1bPrompt"></p>
+    <div class="opts" data-q="q1b" data-n="1b" id="q1bOpts"></div>
+    <div class="else-wrap" id="q1bElse">
+      <input class="else-input" id="q1bInput" type="text" maxlength="200" placeholder="Optional — what is it?">
+      <button class="btn btn-quiet" data-else-continue="q1b">Continue</button>
     </div>
   </div>
 </section>
 
-<!-- Q3 -->
-<section class="scr" id="s-q3">
+<!-- Q2 · LOGGING FRICTION -->
+<section class="scr" id="s-q2">
   <div class="wrap">
     <p class="q">Have you ever done a workout and <b class="gk">not logged</b> it?</p>
-    <div class="opts" data-q="q3" data-n="3">
+    <div class="opts" data-q="q2" data-n="2">
       <button class="opt">Yes, often</button>
       <button class="opt">Yes, once or twice</button>
       <button class="opt">Never</button>
@@ -244,55 +231,29 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
   </div>
 </section>
 
-<!-- Q3 BRANCH -->
-<section class="scr" id="s-q3b">
+<!-- Q2 BRANCH -->
+<section class="scr" id="s-q2b">
   <div class="wrap">
     <p class="q">What <b class="gk">stopped</b> you?</p>
-    <div class="opts" data-q="q3b" data-n="3b">
+    <div class="opts" data-q="q2b" data-n="2b">
       <button class="opt">Forgot in the moment</button>
       <button class="opt">Too many taps</button>
       <button class="opt">Was offline / app was slow</button>
       <button class="opt">Didn&rsquo;t feel like it counted</button>
-      <button class="opt" data-else="q3b">Something else</button>
+      <button class="opt" data-else="q2b">Something else</button>
     </div>
-    <div class="else-wrap" id="q3bElse">
-      <input class="else-input" id="q3bInput" type="text" maxlength="200" placeholder="Optional — what was it?">
-      <button class="btn btn-quiet" data-else-continue="q3b">Continue</button>
-    </div>
-  </div>
-</section>
-
-<!-- Q4 -->
-<section class="scr" id="s-q4">
-  <div class="wrap">
-    <p class="q">When your <b class="gk">streak broke</b>, what happened in your head?</p>
-    <div class="opts" data-q="q4" data-n="4">
-      <button class="opt">Annoyed — made me want to get back at it</button>
-      <button class="opt">Bummed me out a bit</button>
-      <button class="opt">Didn&rsquo;t care</button>
-      <button class="opt">I&rsquo;ve never had a streak worth losing</button>
+    <div class="else-wrap" id="q2bElse">
+      <input class="else-input" id="q2bInput" type="text" maxlength="200" placeholder="Optional — what was it?">
+      <button class="btn btn-quiet" data-else-continue="q2b">Continue</button>
     </div>
   </div>
 </section>
 
-<!-- Q4 BRANCH -->
-<section class="scr" id="s-q4b">
-  <div class="wrap">
-    <p class="q"><b class="gk">Why</b> do you think that is?</p>
-    <div class="opts" data-q="q4b" data-n="4b">
-      <button class="opt">I train hard but not every single day</button>
-      <button class="opt">I don&rsquo;t train that consistently</button>
-      <button class="opt">I don&rsquo;t really look at the streak</button>
-      <button class="opt">I don&rsquo;t know how the streak works</button>
-    </div>
-  </div>
-</section>
-
-<!-- Q5 -->
-<section class="scr" id="s-q5">
+<!-- Q3 · MOTIVATION -->
+<section class="scr" id="s-q3">
   <div class="wrap">
     <p class="q">Be honest — what actually <b class="gk">makes you log</b>?</p>
-    <div class="opts" data-q="q5" data-n="5">
+    <div class="opts" data-q="q3" data-n="3">
       <button class="opt">Beating someone specific</button>
       <button class="opt">Not letting my team down</button>
       <button class="opt">My own numbers going up</button>
@@ -302,43 +263,11 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
   </div>
 </section>
 
-<!-- Q6 -->
-<section class="scr" id="s-q6">
-  <div class="wrap">
-    <p class="q">If I could fix <b class="gk">one thing</b> about Forge tomorrow?</p>
-    <div class="opts" data-q="q6" data-n="6">
-      <button class="opt">Make logging faster</button>
-      <button class="opt">Make it clearer where I stand</button>
-      <button class="opt">Make it look better</button>
-      <button class="opt">Add something that isn&rsquo;t there</button>
-      <button class="opt">Nothing, it&rsquo;s fine</button>
-    </div>
-  </div>
-</section>
-
-<!-- Q6 BRANCH -->
-<section class="scr" id="s-q6b">
-  <div class="wrap">
-    <p class="q">Like <b class="gk">what</b>?</p>
-    <div class="opts" data-q="q6b" data-n="6b">
-      <button class="opt">Photos with workouts</button>
-      <button class="opt">Chat / comments</button>
-      <button class="opt">Personal goals &amp; targets</button>
-      <button class="opt">Reminders</button>
-      <button class="opt" data-else="q6b">Something else</button>
-    </div>
-    <div class="else-wrap" id="q6bElse">
-      <input class="else-input" id="q6bInput" type="text" maxlength="200" placeholder="Optional — like what?">
-      <button class="btn btn-quiet" data-else-continue="q6b">Continue</button>
-    </div>
-  </div>
-</section>
-
-<!-- Q7 -->
-<section class="scr" id="s-q7">
+<!-- Q4 · EVENTS -->
+<section class="scr" id="s-q4">
   <div class="wrap">
     <p class="q">Real-life <b class="gk">Forge event</b> — turf games, a Sunday walk, a workout party. Are you in?</p>
-    <div class="opts" data-q="q7" data-n="7">
+    <div class="opts" data-q="q4" data-n="4">
       <button class="opt">Yes, absolutely</button>
       <button class="opt">Depends what it is</button>
       <button class="opt">Probably not</button>
@@ -347,54 +276,50 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
   </div>
 </section>
 
-<!-- Q7 BRANCH · MULTI-SELECT -->
-<section class="scr" id="s-q7b">
+<!-- Q4 BRANCH · MULTI-SELECT -->
+<section class="scr" id="s-q4b">
   <div class="wrap">
     <p class="q">What would you actually <b class="gk">show up</b> for?</p>
     <p class="sub">Pick as many as you like.</p>
-    <div class="opts" id="q7bOpts">
+    <div class="opts" id="q4bOpts">
       <button class="opt" data-multi>Cricket / turf sports</button>
       <button class="opt" data-multi>A group walk or run</button>
       <button class="opt" data-multi>Something game-like (cards, challenges)</button>
       <button class="opt" data-multi>Dance / Zumba-type</button>
       <button class="opt" data-multi>Just chai and hanging out</button>
     </div>
-    <button class="btn btn-quiet" id="q7bConfirm">Continue</button>
+    <button class="btn btn-quiet" id="q4bConfirm">Continue</button>
   </div>
 </section>
 
-<!-- Q8 -->
-<section class="scr" id="s-q8">
+<!-- Q5 · THE HABIT TEST -->
+<section class="scr" id="s-q5">
   <div class="wrap">
-    <p class="q">Would you <b class="gk">recommend</b> Forge to a friend?</p>
-    <div class="opts" data-q="q8" data-n="8">
-      <button class="opt">Already have</button>
-      <button class="opt">Yes, would</button>
-      <button class="opt">Maybe</button>
-      <button class="opt">No</button>
+    <p class="q">Be honest — after a workout, opening Forge to log it <b class="gk">feels like</b>&hellip;</p>
+    <div class="opts" data-q="q5" data-n="5">
+      <button class="opt">A reflex — I do it without thinking</button>
+      <button class="opt">A small reward — I want to log it</button>
+      <button class="opt">A task — I know I should, so I do</button>
+      <button class="opt">A chore — I put it off, sometimes forget</button>
+      <button class="opt">Nothing really — I just do it</button>
     </div>
   </div>
 </section>
 
-<!-- Q8 BRANCH -->
-<section class="scr" id="s-q8b">
+<!-- Q6 · THE GLOBAL VERDICT -->
+<section class="scr" id="s-q6">
   <div class="wrap">
-    <p class="q">What&rsquo;s <b class="gk">holding you back</b>?</p>
-    <div class="opts" data-q="q8b" data-n="8b">
-      <button class="opt">It&rsquo;s still rough around the edges</button>
-      <button class="opt">My friends aren&rsquo;t into fitness</button>
-      <button class="opt">It only works if a whole group joins</button>
-      <button class="opt">I&rsquo;m not sure it&rsquo;s for everyone</button>
-      <button class="opt" data-else="q8b">Something else</button>
-    </div>
-    <div class="else-wrap" id="q8bElse">
-      <input class="else-input" id="q8bInput" type="text" maxlength="200" placeholder="Optional — what is it?">
-      <button class="btn btn-quiet" data-else-continue="q8b">Continue</button>
+    <p class="q">The <b class="gk">Global tab</b> — the one showing all groups. Honestly?</p>
+    <div class="opts" data-q="q6" data-n="6">
+      <button class="opt">I check it regularly</button>
+      <button class="opt">I&rsquo;ve looked, it&rsquo;s interesting</button>
+      <button class="opt">I&rsquo;ve looked, don&rsquo;t really care</button>
+      <button class="opt">I didn&rsquo;t know it existed</button>
     </div>
   </div>
 </section>
 
-<!-- FINAL · OPEN-ENDER -->
+<!-- FINAL · THE BRUTAL BOX -->
 <section class="scr" id="s-final">
   <div class="wrap">
     <p class="q">One last thing — be <b class="gk">brutal</b>.</p>
@@ -420,7 +345,8 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
 <!-- Firebase: app + auth only (anonymous session). The response doc is
      written via Firestore REST with the session's ID token — identical
      rules enforcement to an SDK write, but fetch(keepalive) survives the
-     page being dismissed, which makes the abandon-partial write reliable. -->
+     page being dismissed, which makes both the completion write and the
+     abandon-partial write reliable. -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script>
@@ -490,14 +416,15 @@ function writeDoc(doc, keepalive){
 }
 function baseDoc(){
   return { groupCode:groupCode, answers:answers, startedAt:startedAt,
-           attempt:attempt, userAgent:ua, version:'v1' };
+           attempt:attempt, userAgent:ua, version:'v2' };
 }
 
-/* abandon-partial: best-effort, only once they're past Q4, only once, and
-   never after completion. visibilitychange fires on tab-switch (page still
-   alive), pagehide on real dismissal — keepalive lets the POST outlive it. */
+/* abandon-partial: best-effort, only once they're past Q3 (motivation — the
+   new midpoint, past which a response has real value), only once, and never
+   after completion. visibilitychange fires on tab-switch (page still alive),
+   pagehide on real dismissal — keepalive lets the POST outlive it. */
 function sendPartial(){
-  if(completed || partialSent || answers.q4===undefined) return;
+  if(completed || partialSent || answers.q3===undefined) return;
   partialSent=true;
   var d=baseDoc(); d.partial=true; d.completedAt=null; d.abandonedAt=new Date().toISOString();
   try{ writeDoc(d,true).catch(function(){}); }catch(e){}
@@ -506,22 +433,20 @@ function sendPartial(){
 document.addEventListener('visibilitychange',function(){ if(document.hidden) sendPartial(); });
 window.addEventListener('pagehide',sendPartial);
 
-/* ── flow ── */
-var ORDER=['intro','q1','q2','q2a','q2b','q3','q3b','q4','q4b','q5','q6','q6b','q7','q7b','q8','q8b','final','thanks'];
-var PAGES=['Home','Leaderboard','Feed','Global','Profile'];
+/* ── flow v2 — 7 question screens + intro/final/thanks ── */
+var ORDER=['intro','q1','q1a','q1b','q2','q2b','q3','q4','q4b','q5','q6','final','thanks'];
+var PAGES=['Home','Leaderboard','Feed','Global'];
 var BRANCH_A={
   'Home':['It’s just what loads first, honestly','Logging is right there','I get my whole picture in one glance','It’s the fastest way to see if I’m on track'],
   'Leaderboard':['I need to know where I stand','I’m watching someone specific','I want to see if I moved','My team’s position matters to me'],
   'Feed':['I like seeing who’s showing up','It’s the social bit — that’s the point','Keeps me honest when I see others log','It’s the most alive part of the app'],
-  'Global':['I like seeing the bigger picture','Curious how our group compares','Nice to feel part of something larger','It’s interesting data'],
-  'Profile':['My numbers are what I care about','I’m tracking my own progress, not the race','My streak lives there','It’s the only page that’s about me']
+  'Global':['I like seeing the bigger picture','Curious how our group compares','Nice to feel part of something larger','It’s interesting data']
 };
 var BRANCH_B={
   'Home':['Too many cards, don’t know where to look','Nothing on it changes much','I don’t understand half of what’s on it','I just skip past it to the other tabs'],
   'Leaderboard':['I don’t like where I am on it','It’s demotivating to see the gap','The numbers don’t mean much to me','I’m not here to compete'],
   'Feed':['It’s just a list, nothing to do there','Too noisy — too many entries','I don’t care what others logged','Nothing new when I check it'],
-  'Global':['I don’t know what it’s for','Other groups don’t matter to me','It’s slow to load','I forget it’s even there'],
-  'Profile':['Nothing on it I don’t already know','The numbers there feel wrong or off','Boring, no reason to visit','I forget it exists']
+  'Global':['I don’t know what it’s for','Other groups don’t matter to me','It’s slow to load','I forget it’s even there']
 };
 
 var cur='intro', history=[];
@@ -534,8 +459,8 @@ function show(id){
   scr(cur).classList.remove('on');
   cur=id;
   var s=scr(id);
-  if(id==='q2a') buildQ2a();
-  if(id==='q2b') buildQ2b();
+  if(id==='q1a') buildQ1a();
+  if(id==='q1b') buildQ1b();
   s.classList.add('on');
   s.scrollTop=0;
   prog.style.width=(ORDER.indexOf(id)/(ORDER.length-1)*100)+'%';
@@ -545,9 +470,9 @@ function advance(next){ history.push(cur); show(next); }
 
 /* back: pop one step, clear whatever the screen we're returning FROM stored,
    and reset per-screen UI so a mis-tap can be redone cleanly. */
-var CLEARS={ q1:['q1'], q2:['q2_rank'], q2a:['q2a','q2a_first'], q2b:['q2b','q2b_last','q2b_text'],
-  q3:['q3'], q3b:['q3b','q3b_text'], q4:['q4'], q4b:['q4b'], q5:['q5'], q6:['q6'], q6b:['q6b','q6b_text'],
-  q7:['q7'], q7b:['q7b'], q8:['q8'], q8b:['q8b','q8b_text'], final:[] };
+var CLEARS={ q1:['q1_rank'], q1a:['q1a'], q1b:['q1b','q1b_text'],
+  q2:['q2'], q2b:['q2b','q2b_text'], q3:['q3'], q4:['q4'], q4b:['q4b'],
+  q5:['q5'], q6:['q6'], final:[] };
 backBtn.addEventListener('click',function(){
   if(!history.length) return;
   (CLEARS[cur]||[]).forEach(function(k){ delete answers[k]; });
@@ -562,17 +487,14 @@ function resetScreen(id){
   s.querySelectorAll('.opt').forEach(function(b){ b.classList.remove('picked','sel'); });
   s.querySelectorAll('.else-wrap').forEach(function(w){ w.classList.remove('on'); });
   s.querySelectorAll('.else-input').forEach(function(i){ i.value=''; });
-  if(id==='q2') buildRank();
+  if(id==='q1') buildRank();
 }
 
 /* ── generic single-tap options (auto-advance) ── */
-var NEXT_AFTER={ q1:'q2', q2a:'q2b', q2b:'q3', q3b:'q4', q4b:'q5', q5:'q6', q6b:'q7', q7b:'q8', q8b:'final' };
+var NEXT_AFTER={ q1a:'q1b', q1b:'q2', q2b:'q3', q3:'q4', q4b:'q5', q5:'q6', q6:'final' };
 function routeAfter(q,val){
-  if(q==='q3') return (val==='Never')?'q4':'q3b';
-  if(q==='q4') return (val==='I’ve never had a streak worth losing')?'q4b':'q5';
-  if(q==='q6') return (val==='Add something that isn’t there')?'q6b':'q7';
-  if(q==='q7') return (val==='Yes, absolutely'||val==='Depends what it is')?'q7b':'q8';
-  if(q==='q8') return (val==='Maybe'||val==='No')?'q8b':'final';
+  if(q==='q2') return (val==='Never')?'q3':'q2b';
+  if(q==='q4') return (val==='Yes, absolutely'||val==='Depends what it is')?'q4b':'q5';
   return NEXT_AFTER[q];
 }
 function pick(q,n,btn,val){
@@ -607,7 +529,7 @@ document.querySelectorAll('[data-else-continue]').forEach(function(btn){
 /* ── intro ── */
 el('startBtn').addEventListener('click',function(){ track('survey_start'); advance('q1'); });
 
-/* ── Q2 rank ── */
+/* ── Q1 rank (4 items) ── */
 var rank=[];
 function buildRank(){
   rank=[];
@@ -633,10 +555,10 @@ el('pool').addEventListener('click',function(e){
   requestAnimationFrame(function(){ row.classList.add('in'); });
   el('undoBtn').classList.add('on');
   if(rank.length===PAGES.length){
-    answers.q2_rank=rank.slice();
-    track('survey_question',{q_number:'2'});
+    answers.q1_rank=rank.slice();
+    track('survey_question',{q_number:'1'});
     el('undoBtn').classList.remove('on');
-    setTimeout(function(){ advance('q2a'); },550);
+    setTimeout(function(){ advance('q1a'); },550);
   }
 });
 el('undoBtn').addEventListener('click',function(){
@@ -647,35 +569,33 @@ el('undoBtn').addEventListener('click',function(){
   if(!rank.length) el('undoBtn').classList.remove('on');
 });
 
-/* branch builders — prompt + option set follow what was ranked #1 / #5 */
-function buildQ2a(){
-  var first=(answers.q2_rank||PAGES)[0];
-  answers.q2a_first=first;
-  var pr=el('q2aPrompt'); pr.innerHTML='You ranked <b class="gk"></b> first. Why?';
+/* branch builders — prompt + option set follow what was ranked #1 / #4 */
+function buildQ1a(){
+  var first=(answers.q1_rank||PAGES)[0];
+  var pr=el('q1aPrompt'); pr.innerHTML='You ranked <b class="gk"></b> first. Why?';
   pr.querySelector('b').textContent=first;
-  var box=el('q2aOpts'); box.innerHTML='';
+  var box=el('q1aOpts'); box.innerHTML='';
   BRANCH_A[first].forEach(function(t){ var b=document.createElement('button'); b.className='opt'; b.textContent=t; box.appendChild(b); });
 }
-function buildQ2b(){
-  var last=(answers.q2_rank||PAGES)[PAGES.length-1];
-  answers.q2b_last=last;
-  var pr=el('q2bPrompt'); pr.innerHTML='<b class="gk"></b> came last. What&rsquo;s wrong with it?';
+function buildQ1b(){
+  var last=(answers.q1_rank||PAGES)[PAGES.length-1];
+  var pr=el('q1bPrompt'); pr.innerHTML='<b class="gk"></b> came last. What&rsquo;s wrong with it?';
   pr.querySelector('b').textContent=last;
-  var box=el('q2bOpts'); box.innerHTML='';
+  var box=el('q1bOpts'); box.innerHTML='';
   BRANCH_B[last].forEach(function(t){ var b=document.createElement('button'); b.className='opt'; b.textContent=t; box.appendChild(b); });
-  var se=document.createElement('button'); se.className='opt'; se.textContent='Something else'; se.setAttribute('data-else','q2b');
+  var se=document.createElement('button'); se.className='opt'; se.textContent='Something else'; se.setAttribute('data-else','q1b');
   box.appendChild(se);
 }
 
-/* ── Q7b multi-select ── */
-el('q7bOpts').addEventListener('click',function(e){
+/* ── Q4b multi-select ── */
+el('q4bOpts').addEventListener('click',function(e){
   var b=e.target.closest('.opt'); if(!b) return;
   b.classList.toggle('sel');
 });
-el('q7bConfirm').addEventListener('click',function(){
-  answers.q7b=Array.prototype.map.call(el('q7bOpts').querySelectorAll('.opt.sel'),function(b){return b.textContent;});
-  track('survey_question',{q_number:'7b'});
-  advance('q8');
+el('q4bConfirm').addEventListener('click',function(){
+  answers.q4b=Array.prototype.map.call(el('q4bOpts').querySelectorAll('.opt.sel'),function(b){return b.textContent;});
+  track('survey_question',{q_number:'4b'});
+  advance('q5');
 });
 
 /* ── final ── */
