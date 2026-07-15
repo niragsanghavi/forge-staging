@@ -201,6 +201,22 @@ service cloud.firestore {
       allow write: if isAuthed();
     }
 
+    // ── ANONYMOUS SURVEY (goforge.in/survey) ──────────────────────────────
+    // One WRITE-ONLY doc per response: {groupCode|null, answers{...},
+    // startedAt, completedAt|abandonedAt, partial, attempt(random nonce,
+    // NOT an identity), userAgent("mobile"|"desktop"), version}. The page
+    // never writes a name/userId/uid. read:false on purpose — under anon
+    // auth `isAuthed()` would make responses world-readable, and anonymous
+    // answers must stay unreadable from any client. The owner reads them
+    // with an OAuth (gcloud/console) token, which bypasses rules. Immutable
+    // once written.
+    match /survey/{id} {
+      allow create: if isAuthed();
+      allow read:   if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+
     // ── DEFAULT DENY ──────────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;

@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Forge — 60-second survey</title>
+<meta name="description" content="A 60-second anonymous survey about Forge.">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0a0a0d">
+<link rel="icon" href="../icon-192.png">
+<link rel="apple-touch-icon" href="../icon-180.png">
+<style>
+/* ════════════════════════════════════════════════════════════════════
+   FORGE /survey — anonymous product survey. Standalone: no dependencies
+   on the app, no SW registration, not in any cache list.
+   Palette law (same as /about): bg #0a0a0d · gold #d4a843 (hot #f0c05a)
+   · text #f2f0ec · muted #8f8d98. No other accent colors.
+   Gold-keyword rule: each display line carries exactly ONE gold word or
+   phrase via <b class="gk">. ZERO emojis except the 🔨 on the thank-you.
+   Motion: fades only, 250-400ms ease-out; prefers-reduced-motion honored.
+   ════════════════════════════════════════════════════════════════════ */
+:root{
+  --bg:#0a0a0d;
+  --gold:#d4a843;
+  --gold-hot:#f0c05a;
+  --text:#f2f0ec;
+  --muted:#8f8d98;
+  --line:rgba(242,240,236,.08);
+  --gold-line:rgba(212,168,67,.32);
+  --gold-dim:rgba(212,168,67,.10);
+  --ease:cubic-bezier(.22,.61,.36,1);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  background:var(--bg);color:var(--text);line-height:1.6;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  overflow-x:hidden;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+b.gk{font-weight:inherit;color:var(--gold-hot)}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ── progress bar ── */
+#prog{position:fixed;top:0;left:0;height:3px;width:0%;background:var(--gold);
+  z-index:50;transition:width .35s var(--ease)}
+
+/* ── back affordance ── */
+#back{
+  position:fixed;top:10px;left:10px;z-index:50;
+  width:44px;height:44px;display:flex;align-items:center;justify-content:center;
+  color:var(--muted);border-radius:10px;
+  opacity:0;pointer-events:none;transition:opacity .3s var(--ease),color .3s var(--ease);
+}
+#back.on{opacity:1;pointer-events:auto}
+#back:hover{color:var(--gold-hot)}
+#back:focus-visible{outline:2px solid var(--gold-hot);outline-offset:2px}
+#back svg{width:22px;height:22px;stroke:currentColor;stroke-width:1.5;fill:none;
+  stroke-linecap:round;stroke-linejoin:round}
+
+/* ── screens ── */
+.scr{
+  position:fixed;inset:0;overflow-y:auto;overflow-x:hidden;
+  opacity:0;pointer-events:none;transform:translateY(14px);
+  transition:opacity .32s var(--ease),transform .32s var(--ease);
+  z-index:1;
+}
+.scr.on{opacity:1;transform:none;pointer-events:auto;z-index:2}
+.wrap{
+  min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:26px;text-align:center;padding:64px 24px 48px;max-width:560px;margin:0 auto;
+}
+.q{
+  font-weight:900;letter-spacing:-.02em;line-height:1.22;
+  font-size:clamp(1.35rem,5.2vw,1.9rem);max-width:24ch;
+}
+.sub{font-size:clamp(.92rem,3.4vw,1.02rem);color:var(--muted);max-width:38ch;line-height:1.55;margin-top:-12px}
+
+/* ── option buttons ── */
+.opts{display:flex;flex-direction:column;gap:10px;width:100%;max-width:440px}
+.opt{
+  width:100%;min-height:56px;padding:15px 18px;border-radius:12px;text-align:left;
+  font-size:15px;font-weight:500;line-height:1.4;color:var(--text);
+  border:1px solid var(--gold-line);background:transparent;
+  transition:background .25s var(--ease),border-color .25s var(--ease),color .25s var(--ease),opacity .25s var(--ease);
+}
+.opt:hover{background:var(--gold-dim)}
+.opt:focus-visible{outline:2px solid var(--gold-hot);outline-offset:2px}
+.opt.picked{background:var(--gold-dim);border-color:var(--gold-hot);color:var(--gold-hot)}
+.opt.sel{background:var(--gold-dim);border-color:var(--gold-hot);color:var(--gold-hot)}
+
+/* "Something else" reveal */
+.else-wrap{display:none;flex-direction:column;gap:10px;width:100%;max-width:440px}
+.else-wrap.on{display:flex}
+.else-input{
+  width:100%;min-height:52px;padding:14px 16px;border-radius:12px;
+  font:inherit;font-size:15px;color:var(--text);
+  background:transparent;border:1px solid var(--line);
+}
+.else-input::placeholder{color:var(--muted)}
+.else-input:focus{outline:none;border-color:var(--gold-line)}
+
+/* ── primary / paired buttons ── */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;text-align:center;
+  min-height:56px;padding:15px 32px;border-radius:10px;
+  font-size:13px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;
+  background:var(--gold);color:var(--bg);max-width:330px;line-height:1.5;
+  transition:background .3s var(--ease),transform .3s var(--ease),opacity .3s var(--ease);
+}
+.btn:hover{background:var(--gold-hot)}
+.btn:active{transform:translateY(1px)}
+.btn:focus-visible{outline:2px solid var(--gold-hot);outline-offset:3px}
+.btn-quiet{background:transparent;color:var(--gold);border:1px solid var(--gold-line)}
+.btn-quiet:hover{background:var(--gold-dim);color:var(--gold-hot)}
+/* SKIP / SEND — equal weight by design: same size, same border treatment,
+   both gold. Nobody gets guilted into typing "all good". */
+.pair{display:flex;gap:12px;width:100%;max-width:440px}
+.pair .btn{flex:1;max-width:none}
+
+/* ── Q2 rank ── */
+.rankbox{display:flex;flex-direction:column;gap:22px;width:100%;max-width:440px}
+.pool{display:flex;flex-direction:column;gap:10px}
+.pool .opt{transition:opacity .28s var(--ease),transform .28s var(--ease),background .25s var(--ease),border-color .25s var(--ease)}
+.pool .opt.gone{opacity:0;transform:translateY(8px);pointer-events:none;position:absolute;visibility:hidden}
+.ranked{display:flex;flex-direction:column;gap:8px;min-height:20px}
+.rrow{
+  display:flex;align-items:center;gap:14px;min-height:48px;padding:10px 16px;
+  border-radius:12px;border:1px solid var(--line);text-align:left;
+  font-size:15px;font-weight:500;color:var(--gold-hot);
+  opacity:0;transform:translateY(8px);
+  transition:opacity .3s var(--ease),transform .3s var(--ease);
+}
+.rrow.in{opacity:1;transform:none}
+.rnum{font-weight:900;color:var(--gold);width:18px;flex:none;font-variant-numeric:tabular-nums}
+.undo{
+  align-self:center;color:var(--muted);font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+  padding:10px 16px;border-radius:8px;
+  opacity:0;pointer-events:none;transition:opacity .3s var(--ease),color .3s var(--ease);
+}
+.undo.on{opacity:1;pointer-events:auto}
+.undo:hover{color:var(--gold-hot)}
+
+/* ── final textarea ── */
+.bigbox{
+  width:100%;max-width:440px;min-height:170px;resize:vertical;
+  padding:16px;border-radius:12px;font:inherit;font-size:15px;line-height:1.55;
+  color:var(--text);background:transparent;border:1px solid var(--gold-line);
+}
+.bigbox::placeholder{color:var(--muted)}
+.bigbox:focus{outline:none;border-color:var(--gold-hot)}
+
+/* ── thanks ── */
+.hammer{font-size:clamp(2.4rem,9vw,3.4rem);line-height:1}
+
+@media (prefers-reduced-motion: reduce){
+  *{transition:none !important;animation:none !important}
+  .scr{transform:none}
+}
+</style>
+<!-- Google tag (gtag.js) — same property as /about -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-ZDZCF0GX91"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-ZDZCF0GX91');
+</script>
+</head>
+<body>
+
+<h1 class="vh">Forge — 60-second anonymous survey</h1>
+
+<div id="prog" aria-hidden="true"></div>
+<button id="back" aria-label="Go back one question">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+</button>
+
+<!-- SCREEN 0 · INTRO -->
+<section class="scr on" id="s-intro" aria-label="Introduction">
+  <div class="wrap">
+    <p class="q"><b class="gk">60 seconds</b>. All taps, no typing.</p>
+    <p class="sub">Completely anonymous — I won&rsquo;t know who said what. Be brutal, it&rsquo;s more useful.</p>
+    <button class="btn" id="startBtn">Start</button>
+  </div>
+</section>
+
+<!-- Q1 -->
+<section class="scr" id="s-q1">
+  <div class="wrap">
+    <p class="q">When you open <b class="gk">Forge</b>, what are you usually there to do?</p>
+    <div class="opts" data-q="q1" data-n="1">
+      <button class="opt">Log a workout</button>
+      <button class="opt">Check where I stand</button>
+      <button class="opt">See what everyone&rsquo;s doing</button>
+      <button class="opt">Just checking in</button>
+    </div>
+  </div>
+</section>
+
+<!-- Q2 · RANK -->
+<section class="scr" id="s-q2">
+  <div class="wrap">
+    <p class="q">Tap these in <b class="gk">order</b> of how much you use them.</p>
+    <p class="sub">Most-used first.</p>
+    <div class="rankbox">
+      <div class="pool" id="pool"></div>
+      <div class="ranked" id="ranked" aria-live="polite"></div>
+      <button class="undo" id="undoBtn">Undo last</button>
+    </div>
+  </div>
+</section>
+
+<!-- Q2 BRANCH A -->
+<section class="scr" id="s-q2a">
+  <div class="wrap">
+    <p class="q" id="q2aPrompt"></p>
+    <div class="opts" data-q="q2a" data-n="2a" id="q2aOpts"></div>
+  </div>
+</section>
+
+<!-- Q2 BRANCH B -->
+<section class="scr" id="s-q2b">
+  <div class="wrap">
+    <p class="q" id="q2bPrompt"></p>
+    <div class="opts" data-q="q2b" data-n="2b" id="q2bOpts"></div>
+    <div class="else-wrap" id="q2bElse">
+      <input class="else-input" id="q2bInput" type="text" maxlength="200" placeholder="Optional — what is it?">
+      <button class="btn btn-quiet" data-else-continue="q2b">Continue</button>
+    </div>
+  </div>
+</section>
+
+<!-- Q3 -->
+<section class="scr" id="s-q3">
+  <div class="wrap">
+    <p class="q">Have you ever done a workout and <b class="gk">not logged</b> it?</p>
+    <div class="opts" data-q="q3" data-n="3">
+      <button class="opt">Yes, often</button>
+      <button class="opt">Yes, once or twice</button>
+      <button class="opt">Never</button>
+    </div>
+  </div>
+</section>
+
+<!-- Q3 BRANCH -->
+<section class="scr" id="s-q3b">
+  <div class="wrap">
+    <p class="q">What <b class="gk">stopped</b> you?</p>
+    <div class="opts" data-q="q3b" data-n="3b">
+      <button class="opt">Forgot in the moment</button>
+      <button class="opt">Too many taps</button>
+      <button class="opt">Was offline / app was slow</button>
+      <button class="opt">Didn&rsquo;t feel like it counted</button>
+      <button class="opt" data-else="q3b">Something else</button>
+    </div>
+    <div class="else-wrap" id="q3bElse">
+      <input class="else-input" id="q3bInput" type="text" maxlength="200" placeholder="Optional — what was it?">
+      <button class="btn btn-quiet" data-else-continue="q3b">Continue</button>
+    </div>
+  </div>
+</section>
+
+<!-- Q4 -->
+<section class="scr" id="s-q4">
+  <div class="wrap">
+    <p class="q">When your <b class="gk">streak broke</b>, what happened in your head?</p>
+    <div class="opts" data-q="q4" data-n="4">
+      <button class="opt">Annoyed — made me want to get back at it</button>
+      <button class="opt">Bummed me out a bit</button>
+      <button class="opt">Didn&rsquo;t care</button>
+      <button class="opt">I&rsquo;ve never had a streak worth losing</button>
+    </div>
+  </div>
+</section>
+
+<!-- Q4 BRANCH -->
+<section class="scr" id="s-q4b">
+  <div class="wrap">
+    <p class="q"><b class="gk">Why</b> do you think that is?</p>
+    <div class="opts" data-q="q4b" data-n="4b">
+      <button class="opt">I train hard but not every single day</button>
+      <button class="opt">I don&rsquo;t train that consistently</button>
+      <button class="opt">I don&rsquo;t really look at the streak</button>
+      <button class="opt">I don&rsquo;t know how the streak works</button>
+    </div>
+  </div>
+</section>
+
+<!-- Q5 -->
+<section class="scr" id="s-q5">
+  <div class="wrap">
+    <p class="q">Be honest — what actually <b class="gk">makes you log</b>?</p>
+    <div class="opts" data-q="q5" data-n="5">
+      <button class="opt">Beating someone specific</button>
+      <button class="opt">Not letting my team down</button>
+      <button class="opt">My own numbers going up</button>
+      <button class="opt">The group seeing it</button>
+      <button class="opt">Nothing, I just track it</button>
+    </div>
+  </div>
+</section>
+
+<!-- Q6 -->
+<section class="scr" id="s-q6">
+  <div class="wrap">
+    <p class="q">If I could fix <b class="gk">one thing</b> about Forge tomorrow?</p>
+    <div class="opts" data-q="q6" data-n="6">
+      <button class="opt">Make logging faster</button>
+      <button class="opt">Make it clearer where I stand</button>
+      <button class="opt">Make it look better</button>
+      <button class="opt">Add something that isn&rsquo;t there</button>
+      <button class="opt">Nothing, it&rsquo;s fine</button>
+    </div>
+  </div>
+</section>
+
+<!-- Q6 BRANCH -->
+<section class="scr" id="s-q6b">
+  <div class="wrap">
+    <p class="q">Like <b class="gk">what</b>?</p>
+    <div class="opts" data-q="q6b" data-n="6b">
+      <button class="opt">Photos with workouts</button>
+      <button class="opt">Chat / comments</button>
+      <button class="opt">Personal goals &amp; targets</button>
+      <button class="opt">Reminders</button>
+      <button class="opt" data-else="q6b">Something else</button>
+    </div>
+    <div class="else-wrap" id="q6bElse">
+      <input class="else-input" id="q6bInput" type="text" maxlength="200" placeholder="Optional — like what?">
+      <button class="btn btn-quiet" data-else-continue="q6b">Continue</button>
+    </div>
+  </div>
+</section>
+
+<!-- Q7 -->
+<section class="scr" id="s-q7">
+  <div class="wrap">
+    <p class="q">Real-life <b class="gk">Forge event</b> — turf games, a Sunday walk, a workout party. Are you in?</p>
+    <div class="opts" data-q="q7" data-n="7">
+      <button class="opt">Yes, absolutely</button>
+      <button class="opt">Depends what it is</button>
+      <button class="opt">Probably not</button>
+      <button class="opt">No</button>
+    </div>
+  </div>
+</section>
+
+<!-- Q7 BRANCH · MULTI-SELECT -->
+<section class="scr" id="s-q7b">
+  <div class="wrap">
+    <p class="q">What would you actually <b class="gk">show up</b> for?</p>
+    <p class="sub">Pick as many as you like.</p>
+    <div class="opts" id="q7bOpts">
+      <button class="opt" data-multi>Cricket / turf sports</button>
+      <button class="opt" data-multi>A group walk or run</button>
+      <button class="opt" data-multi>Something game-like (cards, challenges)</button>
+      <button class="opt" data-multi>Dance / Zumba-type</button>
+      <button class="opt" data-multi>Just chai and hanging out</button>
+    </div>
+    <button class="btn btn-quiet" id="q7bConfirm">Continue</button>
+  </div>
+</section>
+
+<!-- Q8 -->
+<section class="scr" id="s-q8">
+  <div class="wrap">
+    <p class="q">Would you <b class="gk">recommend</b> Forge to a friend?</p>
+    <div class="opts" data-q="q8" data-n="8">
+      <button class="opt">Already have</button>
+      <button class="opt">Yes, would</button>
+      <button class="opt">Maybe</button>
+      <button class="opt">No</button>
+    </div>
+  </div>
+</section>
+
+<!-- Q8 BRANCH -->
+<section class="scr" id="s-q8b">
+  <div class="wrap">
+    <p class="q">What&rsquo;s <b class="gk">holding you back</b>?</p>
+    <div class="opts" data-q="q8b" data-n="8b">
+      <button class="opt">It&rsquo;s still rough around the edges</button>
+      <button class="opt">My friends aren&rsquo;t into fitness</button>
+      <button class="opt">It only works if a whole group joins</button>
+      <button class="opt">I&rsquo;m not sure it&rsquo;s for everyone</button>
+      <button class="opt" data-else="q8b">Something else</button>
+    </div>
+    <div class="else-wrap" id="q8bElse">
+      <input class="else-input" id="q8bInput" type="text" maxlength="200" placeholder="Optional — what is it?">
+      <button class="btn btn-quiet" data-else-continue="q8b">Continue</button>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL · OPEN-ENDER -->
+<section class="scr" id="s-final">
+  <div class="wrap">
+    <p class="q">One last thing — be <b class="gk">brutal</b>.</p>
+    <p class="sub">The harsher this is, the better Forge gets. I genuinely can&rsquo;t see who wrote what, so don&rsquo;t hold back.</p>
+    <label class="sub" for="finalBox" style="margin-top:0">What would you change?</label>
+    <textarea class="bigbox" id="finalBox" rows="6" maxlength="2000" placeholder="Anything. Layout, points, pace, the tone, a page you hate…"></textarea>
+    <div class="pair">
+      <button class="btn" id="skipBtn">Skip</button>
+      <button class="btn" id="sendBtn">Send</button>
+    </div>
+  </div>
+</section>
+
+<!-- THANK YOU -->
+<section class="scr" id="s-thanks">
+  <div class="wrap">
+    <div class="hammer" aria-hidden="true">&#128296;</div>
+    <p class="q">That&rsquo;s it. <b class="gk">Thank you</b></p>
+    <p class="sub">Every answer changes what I build next.</p>
+  </div>
+</section>
+
+<!-- Firebase: app + auth only (anonymous session). The response doc is
+     written via Firestore REST with the session's ID token — identical
+     rules enforcement to an SDK write, but fetch(keepalive) survives the
+     page being dismissed, which makes the abandon-partial write reliable. -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script>
+(function(){
+'use strict';
+
+/* fail-safe GA4 wrapper — an adblocker or a blocked gtag.js must never throw
+   or affect page behavior (same posture as /about). */
+function track(ev, params){
+  try{ if(typeof gtag === 'function') gtag('event', ev, params || {}); }catch(e){}
+}
+
+/* ── environment (same detection law as src/config/firebase.js) ── */
+var IS_STAGING = location.hostname==='localhost' || location.hostname==='127.0.0.1'
+  || location.pathname.includes('forge-staging');
+var CFG = IS_STAGING
+  ? { apiKey:"AIzaSyD-bFi6X9Hevwmg-p65ajz35G64wco90CA", authDomain:"forge-staging-865ff.firebaseapp.com", projectId:"forge-staging-865ff" }
+  : { apiKey:"AIzaSyCIXojxM6N6f6kp10g7zYV5XYTyLJ6pz2g", authDomain:"forge-25c8c.firebaseapp.com", projectId:"forge-25c8c" };
+
+/* ── anonymous auth (ensureAuth pattern) — kicked off immediately so the
+   ID token is cached long before anyone finishes the survey. NOTHING
+   identifying is ever put in the response doc: no name, no userId, and
+   the anon uid is used only as the write credential, never stored. ── */
+var idToken=null;
+try{
+  firebase.initializeApp(CFG);
+  var auth=firebase.auth();
+  (auth.currentUser ? Promise.resolve(auth.currentUser)
+    : new Promise(function(res,rej){
+        var un=auth.onAuthStateChanged(function(u){ if(u){ un(); res(u); } });
+        auth.signInAnonymously().catch(function(e){ un(); rej(e); });
+      })
+  ).then(function(u){ return u.getIdToken(); })
+   .then(function(t){ idToken=t; })
+   .catch(function(e){ console.warn('[survey] auth unavailable:', e && e.code); });
+}catch(e){ console.warn('[survey] firebase unavailable'); }
+
+/* ── response state ── */
+var qs=new URLSearchParams(location.search);
+var g=(qs.get('g')||'').trim().toUpperCase();
+var groupCode=/^[A-Z0-9]{4,8}$/.test(g)?g:null;    // absent/garbage → null, never blocks
+var answers={};
+var startedAt=new Date().toISOString();
+/* random per-attempt nonce: lets the tally script drop a partial doc once its
+   completed twin arrives. Pure randomness — carries no identity. */
+var attempt=Array.from(crypto.getRandomValues(new Uint8Array(8))).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+var ua=/Mobi|Android|iPhone|iPad/.test(navigator.userAgent)?'mobile':'desktop';
+var completed=false, partialSent=false;
+
+/* ── Firestore REST write (typed-value encoding) ── */
+function fv(v){
+  if(v===null) return {nullValue:null};
+  if(typeof v==='string') return {stringValue:v};
+  if(typeof v==='boolean') return {booleanValue:v};
+  if(typeof v==='number') return {integerValue:String(Math.round(v))};
+  if(Array.isArray(v)) return {arrayValue:{values:v.map(fv)}};
+  var f={}; Object.keys(v).forEach(function(k){ f[k]=fv(v[k]); });
+  return {mapValue:{fields:f}};
+}
+function writeDoc(doc, keepalive){
+  if(!idToken) return Promise.reject(new Error('no auth token'));
+  return fetch('https://firestore.googleapis.com/v1/projects/'+CFG.projectId+'/databases/(default)/documents/survey',{
+    method:'POST', keepalive:!!keepalive,
+    headers:{ 'Authorization':'Bearer '+idToken, 'Content-Type':'application/json' },
+    body:JSON.stringify({ fields:fv(doc).mapValue.fields })
+  }).then(function(r){ if(!r.ok) throw new Error('write '+r.status); });
+}
+function baseDoc(){
+  return { groupCode:groupCode, answers:answers, startedAt:startedAt,
+           attempt:attempt, userAgent:ua, version:'v1' };
+}
+
+/* abandon-partial: best-effort, only once they're past Q4, only once, and
+   never after completion. visibilitychange fires on tab-switch (page still
+   alive), pagehide on real dismissal — keepalive lets the POST outlive it. */
+function sendPartial(){
+  if(completed || partialSent || answers.q4===undefined) return;
+  partialSent=true;
+  var d=baseDoc(); d.partial=true; d.completedAt=null; d.abandonedAt=new Date().toISOString();
+  try{ writeDoc(d,true).catch(function(){}); }catch(e){}
+  track('survey_abandon');
+}
+document.addEventListener('visibilitychange',function(){ if(document.hidden) sendPartial(); });
+window.addEventListener('pagehide',sendPartial);
+
+/* ── flow ── */
+var ORDER=['intro','q1','q2','q2a','q2b','q3','q3b','q4','q4b','q5','q6','q6b','q7','q7b','q8','q8b','final','thanks'];
+var PAGES=['Home','Leaderboard','Feed','Global','Profile'];
+var BRANCH_A={
+  'Home':['It’s just what loads first, honestly','Logging is right there','I get my whole picture in one glance','It’s the fastest way to see if I’m on track'],
+  'Leaderboard':['I need to know where I stand','I’m watching someone specific','I want to see if I moved','My team’s position matters to me'],
+  'Feed':['I like seeing who’s showing up','It’s the social bit — that’s the point','Keeps me honest when I see others log','It’s the most alive part of the app'],
+  'Global':['I like seeing the bigger picture','Curious how our group compares','Nice to feel part of something larger','It’s interesting data'],
+  'Profile':['My numbers are what I care about','I’m tracking my own progress, not the race','My streak lives there','It’s the only page that’s about me']
+};
+var BRANCH_B={
+  'Home':['Too many cards, don’t know where to look','Nothing on it changes much','I don’t understand half of what’s on it','I just skip past it to the other tabs'],
+  'Leaderboard':['I don’t like where I am on it','It’s demotivating to see the gap','The numbers don’t mean much to me','I’m not here to compete'],
+  'Feed':['It’s just a list, nothing to do there','Too noisy — too many entries','I don’t care what others logged','Nothing new when I check it'],
+  'Global':['I don’t know what it’s for','Other groups don’t matter to me','It’s slow to load','I forget it’s even there'],
+  'Profile':['Nothing on it I don’t already know','The numbers there feel wrong or off','Boring, no reason to visit','I forget it exists']
+};
+
+var cur='intro', history=[];
+var prog=document.getElementById('prog');
+var backBtn=document.getElementById('back');
+function el(id){ return document.getElementById(id); }
+function scr(id){ return el('s-'+id); }
+
+function show(id){
+  scr(cur).classList.remove('on');
+  cur=id;
+  var s=scr(id);
+  if(id==='q2a') buildQ2a();
+  if(id==='q2b') buildQ2b();
+  s.classList.add('on');
+  s.scrollTop=0;
+  prog.style.width=(ORDER.indexOf(id)/(ORDER.length-1)*100)+'%';
+  backBtn.classList.toggle('on', id!=='intro' && id!=='thanks');
+}
+function advance(next){ history.push(cur); show(next); }
+
+/* back: pop one step, clear whatever the screen we're returning FROM stored,
+   and reset per-screen UI so a mis-tap can be redone cleanly. */
+var CLEARS={ q1:['q1'], q2:['q2_rank'], q2a:['q2a','q2a_first'], q2b:['q2b','q2b_last','q2b_text'],
+  q3:['q3'], q3b:['q3b','q3b_text'], q4:['q4'], q4b:['q4b'], q5:['q5'], q6:['q6'], q6b:['q6b','q6b_text'],
+  q7:['q7'], q7b:['q7b'], q8:['q8'], q8b:['q8b','q8b_text'], final:[] };
+backBtn.addEventListener('click',function(){
+  if(!history.length) return;
+  (CLEARS[cur]||[]).forEach(function(k){ delete answers[k]; });
+  resetScreen(cur);
+  var prev=history.pop();
+  (CLEARS[prev]||[]).forEach(function(k){ delete answers[k]; });
+  resetScreen(prev);
+  show(prev);
+});
+function resetScreen(id){
+  var s=scr(id); if(!s) return;
+  s.querySelectorAll('.opt').forEach(function(b){ b.classList.remove('picked','sel'); });
+  s.querySelectorAll('.else-wrap').forEach(function(w){ w.classList.remove('on'); });
+  s.querySelectorAll('.else-input').forEach(function(i){ i.value=''; });
+  if(id==='q2') buildRank();
+}
+
+/* ── generic single-tap options (auto-advance) ── */
+var NEXT_AFTER={ q1:'q2', q2a:'q2b', q2b:'q3', q3b:'q4', q4b:'q5', q5:'q6', q6b:'q7', q7b:'q8', q8b:'final' };
+function routeAfter(q,val){
+  if(q==='q3') return (val==='Never')?'q4':'q3b';
+  if(q==='q4') return (val==='I’ve never had a streak worth losing')?'q4b':'q5';
+  if(q==='q6') return (val==='Add something that isn’t there')?'q6b':'q7';
+  if(q==='q7') return (val==='Yes, absolutely'||val==='Depends what it is')?'q7b':'q8';
+  if(q==='q8') return (val==='Maybe'||val==='No')?'q8b':'final';
+  return NEXT_AFTER[q];
+}
+function pick(q,n,btn,val){
+  answers[q]=val;
+  track('survey_question',{q_number:n});
+  btn.classList.add('picked');
+  setTimeout(function(){ advance(routeAfter(q,val)); btn.classList.remove('picked'); },200);
+}
+document.querySelectorAll('.opts[data-q]').forEach(function(box){
+  var q=box.getAttribute('data-q'), n=box.getAttribute('data-n');
+  box.addEventListener('click',function(e){
+    var b=e.target.closest('.opt'); if(!b) return;
+    var elseKey=b.getAttribute('data-else');
+    if(elseKey){ el(elseKey+'Else').classList.add('on'); b.classList.add('sel'); el(elseKey+'Input').focus(); return; }
+    var w=box.parentElement.querySelector('.else-wrap'); if(w) w.classList.remove('on');
+    box.querySelectorAll('.opt').forEach(function(o){ o.classList.remove('sel'); });
+    pick(q,n,b,b.textContent);
+  });
+});
+/* "Something else" continue buttons — store the choice + optional text */
+document.querySelectorAll('[data-else-continue]').forEach(function(btn){
+  btn.addEventListener('click',function(){
+    var q=btn.getAttribute('data-else-continue');
+    var txt=el(q+'Input').value.trim();
+    answers[q]='Something else';
+    if(txt) answers[q+'_text']=txt.slice(0,200);
+    track('survey_question',{q_number:q.replace('q','')});
+    advance(routeAfter(q,'Something else')||NEXT_AFTER[q]);
+  });
+});
+
+/* ── intro ── */
+el('startBtn').addEventListener('click',function(){ track('survey_start'); advance('q1'); });
+
+/* ── Q2 rank ── */
+var rank=[];
+function buildRank(){
+  rank=[];
+  var pool=el('pool'); pool.innerHTML='';
+  PAGES.forEach(function(p){
+    var b=document.createElement('button');
+    b.className='opt'; b.textContent=p; b.setAttribute('data-page',p);
+    pool.appendChild(b);
+  });
+  el('ranked').innerHTML='';
+  el('undoBtn').classList.remove('on');
+}
+el('pool').addEventListener('click',function(e){
+  var b=e.target.closest('.opt'); if(!b||b.classList.contains('gone')) return;
+  var p=b.getAttribute('data-page');
+  rank.push(p);
+  b.classList.add('gone');
+  var row=document.createElement('div');
+  row.className='rrow';
+  row.innerHTML='<span class="rnum">'+rank.length+'</span><span></span>';
+  row.lastChild.textContent=p;
+  el('ranked').appendChild(row);
+  requestAnimationFrame(function(){ row.classList.add('in'); });
+  el('undoBtn').classList.add('on');
+  if(rank.length===PAGES.length){
+    answers.q2_rank=rank.slice();
+    track('survey_question',{q_number:'2'});
+    el('undoBtn').classList.remove('on');
+    setTimeout(function(){ advance('q2a'); },550);
+  }
+});
+el('undoBtn').addEventListener('click',function(){
+  if(!rank.length || rank.length===PAGES.length) return;
+  var p=rank.pop();
+  var rows=el('ranked'); rows.removeChild(rows.lastChild);
+  el('pool').querySelector('[data-page="'+p+'"]').classList.remove('gone');
+  if(!rank.length) el('undoBtn').classList.remove('on');
+});
+
+/* branch builders — prompt + option set follow what was ranked #1 / #5 */
+function buildQ2a(){
+  var first=(answers.q2_rank||PAGES)[0];
+  answers.q2a_first=first;
+  var pr=el('q2aPrompt'); pr.innerHTML='You ranked <b class="gk"></b> first. Why?';
+  pr.querySelector('b').textContent=first;
+  var box=el('q2aOpts'); box.innerHTML='';
+  BRANCH_A[first].forEach(function(t){ var b=document.createElement('button'); b.className='opt'; b.textContent=t; box.appendChild(b); });
+}
+function buildQ2b(){
+  var last=(answers.q2_rank||PAGES)[PAGES.length-1];
+  answers.q2b_last=last;
+  var pr=el('q2bPrompt'); pr.innerHTML='<b class="gk"></b> came last. What&rsquo;s wrong with it?';
+  pr.querySelector('b').textContent=last;
+  var box=el('q2bOpts'); box.innerHTML='';
+  BRANCH_B[last].forEach(function(t){ var b=document.createElement('button'); b.className='opt'; b.textContent=t; box.appendChild(b); });
+  var se=document.createElement('button'); se.className='opt'; se.textContent='Something else'; se.setAttribute('data-else','q2b');
+  box.appendChild(se);
+}
+
+/* ── Q7b multi-select ── */
+el('q7bOpts').addEventListener('click',function(e){
+  var b=e.target.closest('.opt'); if(!b) return;
+  b.classList.toggle('sel');
+});
+el('q7bConfirm').addEventListener('click',function(){
+  answers.q7b=Array.prototype.map.call(el('q7bOpts').querySelectorAll('.opt.sel'),function(b){return b.textContent;});
+  track('survey_question',{q_number:'7b'});
+  advance('q8');
+});
+
+/* ── final ── */
+function submit(withText){
+  if(completed) return;
+  completed=true;                                    // also disarms the abandon writer
+  var txt=el('finalBox').value.trim();
+  if(withText && txt) answers.final_text=txt.slice(0,2000);
+  track('survey_question',{q_number:'final'});
+  track('survey_complete');
+  var d=baseDoc(); d.partial=false; d.completedAt=new Date().toISOString();
+  advance('thanks');                                 // never trap the user on a spinner
+  /* keepalive on the completion write too: people close the tab the moment
+     they see the thank-you, and a plain fetch dies with the page. */
+  writeDoc(d,true).catch(function(){
+    setTimeout(function(){ writeDoc(d,true).catch(function(e){ console.warn('[survey] save failed:',e&&e.message); }); },1200);
+  });
+}
+el('sendBtn').addEventListener('click',function(){ submit(true); });
+el('skipBtn').addEventListener('click',function(){ submit(false); });
+
+buildRank();
+})();
+</script>
+</body>
+</html>
