@@ -378,7 +378,7 @@
       <div class="shdr">Stats Backfill (S1b)</div>
       <div class="card" style="border:1px solid var(--gold)">
         <div class="card-title" style="color:var(--gold)">Recompute users/{userId}.stats from logs</div>
-        <div class="tmuted" style="margin-bottom:12px">Recomputes totalWorkouts, longest &amp; current streak, lastLoggedDay, and seasonsPlayed (distinct group-months with a log) from real logs — per userId, so fragmented identities are counted separately, never combined. Badges are left untouched. Idempotent: overwrite, not increment — safe to re-run. Preview first — Run stays locked until a dry run completes.</div>
+        <div class="tmuted" style="margin-bottom:12px">Recomputes totalWorkouts, longest &amp; current streak, lastLoggedDay, seasonsPlayed (distinct group-months with a log), and monthsLogged (distinct CALENDAR months — the same month in two groups counts once) from real logs — per canonical userId (mergedInto-resolved). Badges are left untouched. Idempotent: overwrite, not increment — safe to re-run. Preview first — Run stays locked until a dry run completes.</div>
         <div style="display:flex;gap:8px">
           <button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="runStatsBackfill(true)">🔍 Preview (dry run)</button>
           <button class="btn btn-gold btn-sm" id="backfillRunBtn" style="flex:1;margin:0" onclick="runStatsBackfill(false)" disabled>▶ Run Backfill</button>
@@ -1040,7 +1040,7 @@ function newUserDocFields(name, pinHash, groupCode, groupName, currentUid, migra
     knownDeviceUids: currentUid ? [currentUid] : [],
     memberships: { [groupCode]: { joinedAt: firebase.firestore.FieldValue.serverTimestamp(), groupName: groupName||groupCode } },
     lastActiveAt: firebase.firestore.FieldValue.serverTimestamp(),
-    stats: { seasonsPlayed:0, badgeCounts:{}, totalWorkouts:0, currentStreak:0, longestStreak:0, lastLoggedDay:null }
+    stats: { seasonsPlayed:0, monthsLogged:0, monthsList:[], badgeCounts:{}, totalWorkouts:0, currentStreak:0, longestStreak:0, lastLoggedDay:null }
   };
 }
 
@@ -1771,8 +1771,8 @@ async function renderProfile(){
           <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Longest streak</div>
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
-          <div style="font-size:24px;font-weight:900;color:var(--text)">${stats.seasonsPlayed||0}</div>
-          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Seasons played</div>
+          <div style="font-size:24px;font-weight:900;color:var(--text)">${stats.monthsLogged||0}</div>
+          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Months logged</div>
         </div>
       </div>
       ${badgeLines?`<div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Badges (${totalBadges})</div>${badgeLines}`:''}
@@ -2007,11 +2007,16 @@ async function _performIdentityLink(ctx){
   const combined=new Set([ ...(await _daysForUserId(selfId)), ...(await _daysForUserId(targetUserId)) ]);
   const streak=computeStreaksFromDays(combined);
 
-  // Summed stats.
+  // Summed stats. monthsLogged is NOT summable (the same calendar month in
+  // both identities must count once) — recompute it from the combined real
+  // day-set, exactly like the streaks above.
   const cs=canonData.stats||{}, ms=mergedData.stats||{};
+  const combinedMonths=[...new Set([...combined].map(d=>String(d).slice(0,7)))].sort();
   const mergedStats={
     totalWorkouts:(cs.totalWorkouts||0)+(ms.totalWorkouts||0),
     seasonsPlayed:(cs.seasonsPlayed||0)+(ms.seasonsPlayed||0),
+    monthsLogged:combinedMonths.length,
+    monthsList:combinedMonths,
     badgeCounts:_sumBadges(cs.badgeCounts, ms.badgeCounts),
     currentStreak:streak.currentStreak, longestStreak:streak.longestStreak, lastLoggedDay:streak.lastLoggedDay
   };
@@ -2331,9 +2336,18 @@ async function updateStreakAndStats(userId, year, month, day){
       // dayDiff < 0 (backlog behind the current tip): leave streak/lastLoggedDay untouched.
     }
     const longestStreak = Math.max(stats.longestStreak || 0, currentStreak);
+    // Months logged: distinct calendar months (YYYY-MM) with >=1 log, deduped
+    // across groups because this transaction is USER-scoped (one call per
+    // submit regardless of broadcast targets). monthsList is the dedupe set —
+    // a backlogged log into an already-counted month is a no-op, so the count
+    // can never inflate. runStatsBackfill rebuilds both from real logs.
+    const ym = year+'-'+String(month).padStart(2,'0');
+    const monthsList = Array.isArray(stats.monthsList) ? stats.monthsList.slice() : [];
+    if(!monthsList.includes(ym)) monthsList.push(ym);
     tx.set(uRef, {
       lastActiveAt: firebase.firestore.FieldValue.serverTimestamp(),
-      stats: { totalWorkouts:(stats.totalWorkouts||0)+1, currentStreak, longestStreak, lastLoggedDay:newLastStr }
+      stats: { totalWorkouts:(stats.totalWorkouts||0)+1, currentStreak, longestStreak, lastLoggedDay:newLastStr,
+               monthsList, monthsLogged: monthsList.length }
     }, {merge:true});
   });
 }
@@ -3927,7 +3941,7 @@ async function runUserMigration(dryRun){
         knownDeviceUids: primary.uid ? [primary.uid] : [],
         memberships,
         lastActiveAt: firebase.firestore.FieldValue.serverTimestamp(),
-        stats: { seasonsPlayed: seasonsPlayedFor(primary), badgeCounts:{}, totalWorkouts:0, currentStreak:0, longestStreak:0, lastLoggedDay:null }
+        stats: { seasonsPlayed: seasonsPlayedFor(primary), monthsLogged:0, monthsList:[], badgeCounts:{}, totalWorkouts:0, currentStreak:0, longestStreak:0, lastLoggedDay:null }
       }, {merge:true});
       opsInBatch++; created++;
 
@@ -3990,7 +4004,7 @@ async function runStatsBackfill(dryRun){
   const log = (msg) => { console.log('[Backfill] '+msg); if(statusEl) statusEl.textContent = msg; };
   if(!dryRun){
     if(!window._backfillDryRunDone){ log('Run a dry-run first — see console for the plan.'); return; }
-    if(!confirm('This OVERWRITES stats (totalWorkouts, longest/currentStreak, lastLoggedDay, seasonsPlayed) on ALL users docs, recomputed from real logs. Badges untouched. Idempotent — safe to re-run. Continue?')){ log('Cancelled — nothing written.'); return; }
+    if(!confirm('This OVERWRITES stats (totalWorkouts, longest/currentStreak, lastLoggedDay, seasonsPlayed, monthsLogged/monthsList) on ALL users docs, recomputed from real logs. Badges untouched. Idempotent — safe to re-run. Continue?')){ log('Cancelled — nothing written.'); return; }
   }
   console.log(`%c[Backfill] ${dryRun?'DRY RUN':'LIVE RUN'} starting`, `font-weight:bold;color:${dryRun?'#3b82f6':'#ef4444'}`);
   try {
@@ -4020,10 +4034,11 @@ async function runStatsBackfill(dryRun){
       if(!uid && l.groupCode && l.player){ uid = rmap.get(l.groupCode+'|'+String(l.player).toLowerCase()) || null; if(uid) viaName++; }
       if(!uid){ orphan++; return; }
       attributed++;
-      if(!agg.has(uid)) agg.set(uid, {count:0, days:new Set(), months:new Set()});
+      if(!agg.has(uid)) agg.set(uid, {count:0, days:new Set(), months:new Set(), cmonths:new Set()});
       const a = agg.get(uid); a.count++;
       a.days.add(ymdOf(l.year, l.month, l.day));
-      a.months.add(l.groupCode+'|'+l.year+'-'+l.month);
+      a.months.add(l.groupCode+'|'+l.year+'-'+l.month);                    // group-months → seasonsPlayed (legacy field, archive system)
+      a.cmonths.add(l.year+'-'+String(l.month).padStart(2,'0'));           // CALENDAR months → monthsLogged (same month in 2 groups = 1)
     });
     log(`Pass 2: ${attributed} logs attributed (${viaUserId} by userId, ${viaName} by name), ${orphan} orphan.`);
     // ---- Pass 3: compute per CANONICAL users doc (skip mergedInto tombstones) + (preview | write) ----
@@ -4031,9 +4046,10 @@ async function runStatsBackfill(dryRun){
     let batch = db.batch(), ops = 0, written = 0;
     for(const uDoc of usersSnap.docs){
       if(uDoc.data().mergedInto) continue;                 // tombstone — its logs already fold into canonical
-      const a = agg.get(uDoc.id) || {count:0, days:new Set(), months:new Set()};
+      const a = agg.get(uDoc.id) || {count:0, days:new Set(), months:new Set(), cmonths:new Set()};
       const st = computeStreaksFromDays(a.days);           // the exact helper the Profile uses
-      const rec = { totalWorkouts:a.count, longestStreak:st.longestStreak, currentStreak:st.currentStreak, lastLoggedDay:st.lastLoggedDay, seasonsPlayed:a.months.size };
+      const monthsList = [...a.cmonths].sort();
+      const rec = { totalWorkouts:a.count, longestStreak:st.longestStreak, currentStreak:st.currentStreak, lastLoggedDay:st.lastLoggedDay, seasonsPlayed:a.months.size, monthsLogged:monthsList.length };
       plan.push({ name: uDoc.data().name, ...rec });
       if(!dryRun){
         batch.update(db.collection('users').doc(uDoc.id), {
@@ -4041,7 +4057,9 @@ async function runStatsBackfill(dryRun){
           'stats.longestStreak': rec.longestStreak,
           'stats.currentStreak': rec.currentStreak,
           'stats.lastLoggedDay': rec.lastLoggedDay,
-          'stats.seasonsPlayed': rec.seasonsPlayed
+          'stats.seasonsPlayed': rec.seasonsPlayed,
+          'stats.monthsLogged': rec.monthsLogged,
+          'stats.monthsList': monthsList
         });
         ops++; written++;
         if(ops>=400){ await batch.commit(); batch=db.batch(); ops=0; }
@@ -4050,7 +4068,7 @@ async function runStatsBackfill(dryRun){
     if(dryRun){
       plan.sort((a,b)=>b.totalWorkouts-a.totalWorkouts);
       console.log('%c[Backfill] DRY RUN — computed stats for '+plan.length+' users docs (writes NOTHING):','font-weight:bold;color:#3b82f6');
-      console.table(plan.map(p=>({ name:p.name, totalWorkouts:p.totalWorkouts, longestStreak:p.longestStreak, currentStreak:p.currentStreak, seasonsPlayed:p.seasonsPlayed, lastLoggedDay:p.lastLoggedDay||'—' })));
+      console.table(plan.map(p=>({ name:p.name, totalWorkouts:p.totalWorkouts, longestStreak:p.longestStreak, currentStreak:p.currentStreak, seasonsPlayed:p.seasonsPlayed, monthsLogged:p.monthsLogged, lastLoggedDay:p.lastLoggedDay||'—' })));
       window._backfillDryRunDone = true;
       const btn = document.getElementById('backfillRunBtn'); if(btn) btn.disabled = false;
       log(`Dry run complete: would update ${plan.length} users docs. Full plan in console. Nothing written.`);
