@@ -294,6 +294,8 @@
     <div class="page-title" style="padding-bottom:4px">Profile</div>
     <div class="tmuted" style="margin-bottom:16px;font-size:12px">Your stats across every group</div>
     <div class="card" id="profileStatsCard"><div class="tmuted">Loading…</div></div>
+    <div class="shdr">Your Workouts</div>
+    <div class="card" id="profileInsightsCard"><div class="tmuted">Loading…</div></div>
     <div class="shdr">Past Seasons</div>
     <div class="card" id="profileSeasonsCard"><div class="tmuted">Loading…</div></div>
     <div class="shdr">Link Another Group</div>
@@ -1741,6 +1743,7 @@ async function renderProfile(){
   }
   statsEl.innerHTML='<div class="tmuted">Loading…</div>';
   seasonsEl.innerHTML='<div class="tmuted">Loading…</div>';
+  renderProfileInsights();   // parallel + independent — an insights failure never blocks stats/seasons
   try{
     const uSnap = await db.collection('users').doc(me.userId).get();
     const stats = (uSnap.exists && uSnap.data().stats) || {};
@@ -1814,6 +1817,58 @@ function openArchivedRecap(i){
   const s=_profileSeasonsCache[i]; if(!s) return;
   const d=buildRecapDataFromArchive(s);
   if(window.__recapShowFromData) window.__recapShowFromData(d);
+}
+
+// ── PROFILE INSIGHTS (direct user request: "in the last 50 workouts, you've
+// done strength 10 times, cardio 10 times") ────────────────────────────────
+// Data source: ONE scoped equality query — this user's own logs across all
+// groups (logs where userId == canonical id; equality-only, no index needed).
+// Profile has no cross-group log data in memory (allLogs = active group,
+// current month only), so this is the smallest possible read; cached 5 min
+// per session. Logs written before userId stamping (pre-S1) aren't returned,
+// which the "your last N workouts" label absorbs honestly.
+let _profileInsights={uid:null, ts:0, logs:null};
+async function renderProfileInsights(){
+  const el=document.getElementById('profileInsightsCard');
+  if(!el) return;
+  if(!me || !me.userId){ el.innerHTML='<div class="tmuted">Insights unlock once your profile finishes setting up.</div>'; return; }
+  try{
+    let logs=_profileInsights.logs;
+    if(_profileInsights.uid!==me.userId || (Date.now()-_profileInsights.ts)>5*60*1000 || !logs){
+      const snap=await db.collection('logs').where('userId','==',me.userId).get();
+      logs=snap.docs.map(d=>d.data()).filter(l=>!l.voided && l.year && l.month && l.day);
+      _profileInsights={uid:me.userId, ts:Date.now(), logs};
+    }
+    if(!logs.length){ el.innerHTML='<div class="tmuted">Log a few workouts and your patterns show up here.</div>'; return; }
+    // newest first: workout date, then submit time
+    const sorted=[...logs].sort((a,b)=>(b.year-a.year)||(b.month-a.month)||(b.day-a.day)||((b.timestamp?.seconds||0)-(a.timestamp?.seconds||0)));
+    const last=sorted.slice(0,50);
+    const wc={}; let wt=0;
+    last.forEach(l=>{
+      const ws=Array.isArray(l.workouts)?l.workouts:(l.workout?[l.workout]:[]);
+      ws.forEach(w=>{ const lab=String(w||'').trim(); if(!lab) return; const k=lab.toLowerCase(); (wc[k]||(wc[k]={label:lab,n:0})).n++; wt++; });
+    });
+    const dist=Object.values(wc).sort((a,b)=>b.n-a.n);
+    const pctOf=n=>wt>0?Math.round(n/wt*100):0;
+    const bars=dist.map(w=>`
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px">
+        <div style="width:92px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(w.label)}</div>
+        <div style="flex:1;background:var(--surface);border-radius:5px;height:9px;overflow:hidden"><div style="width:${pctOf(w.n)}%;height:100%;background:var(--gold);border-radius:5px"></div></div>
+        <div style="width:64px;flex:none;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums">${w.n} · ${pctOf(w.n)}%</div>
+      </div>`).join('');
+    // cheap extras from the SAME fetched data — no additional reads
+    const now=new Date();
+    const ymOf=(y,m)=>y+'-'+String(m).padStart(2,'0');
+    const curYm=ymOf(now.getFullYear(), now.getMonth()+1);
+    const pmv=now.getMonth()===0?{y:now.getFullYear()-1,m:12}:{y:now.getFullYear(),m:now.getMonth()};
+    const cnt=ym=>logs.filter(l=>ymOf(l.year,l.month)===ym).length;
+    const curN=cnt(curYm), prevN=cnt(ymOf(pmv.y,pmv.m));
+    el.innerHTML=`
+      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Workout types · your last ${last.length} workout${last.length===1?'':'s'}</div>
+      ${bars}
+      ${dist.length?`<div style="display:flex;justify-content:space-between;padding:8px 0 7px;border-top:1px solid var(--border);margin-top:6px;font-size:13px"><span>Most logged</span><b style="color:var(--gold)">${esc(dist[0].label)}</b></div>`:''}
+      <div style="display:flex;justify-content:space-between;padding:7px 0 0;font-size:13px"><span>This month vs last</span><b style="color:var(--text)">${curN} <span style="color:var(--muted);font-weight:400">vs</span> ${prevN}</b></div>`;
+  }catch(e){ logErr('renderProfileInsights', e); el.innerHTML='<div class="tmuted">Could not load insights — check connection.</div>'; }
 }
 
 // Maps a users/{userId}/seasons/{code}_{sid} archive doc (S2's snapshot writer
