@@ -566,7 +566,20 @@ const MAX_GROUPS = 3;
 // One place to surface errors: a tagged, searchable console line (DevTools) AND
 // — via ForgeErr — a structured record shipped to errorLogs/ so a failure on a
 // real device leaves a trace we can actually read from the Command Center.
-window.FORGE_BUILD = 'forge-v22';
+// Build tag for error reports — derived at runtime from the service worker's
+// cache name (sw.js CACHE_VERSION), so it updates automatically at every
+// deploy AND reflects the version actually installed on this device, which
+// makes stale-cache cases visible in errorLogs instead of hidden. (Was a
+// hardcoded 'forge-v22' that lied for nine versions.) Best-effort: stays
+// null (reported as '—') until the cache exists — e.g. a first visit.
+window.FORGE_BUILD = null;
+try{
+  if(window.caches && caches.keys) caches.keys().then(function(keys){
+    var vs=keys.filter(function(k){ return /^forge-v\d+$/.test(k); })
+      .sort(function(a,b){ return (+a.slice(7))-(+b.slice(7)); });
+    if(vs.length) window.FORGE_BUILD=vs[vs.length-1];
+  }).catch(function(){});
+}catch(e){}
 
 // Structured error pipeline. Self-contained; never throws, never recurses into
 // itself (a failed errorLogs write is SWALLOWED, not re-reported), and is
@@ -1407,7 +1420,12 @@ function subscribe(){
 }
 
 function refresh(){
-  renderHome(); renderLB(); renderFeed(); renderFlagQueue(); renderGlobalConsent(); renderIronPledgePage(); renderIronPledgeAdmin();
+  // Each renderer is isolated: one throwing must never abort the rest of the
+  // pass (a single renderFeed ReferenceError used to leave the whole app
+  // half-rendered and looking frozen). logErr dedupes, so a persistently
+  // failing renderer can't flood errorLogs.
+  [renderHome, renderLB, renderFeed, renderFlagQueue, renderGlobalConsent, renderIronPledgePage, renderIronPledgeAdmin]
+    .forEach(fn=>{ try{ fn(); }catch(e){ logErr('refresh:'+(fn.name||'renderer'), e); } });
   checkPledgeAutoSettlement().catch(e=>logErr('checkPledgeAutoSettlement',e));
   scheduleGlobalStats();   // R3: keep this group's denormalized global-board aggregate fresh (debounced, fire-and-forget)
 }

@@ -107,6 +107,10 @@ window.jackAwards = [];         // groups/{CODE}/seasons/{ID}/jackAwards subcoll
 window.bets = {};               // groups/{CODE}/seasons/{ID}/bets — keyed by playerName
 window.ironPledgeBonuses = [];  // bonuses_iron_pledge top-level collection
 window.twistWindows = [];       // groups/{CODE}/seasons/{ID}/twistWindows — permanent week-bound twist docs
+window.reactions = [];          // S5 🔥 reactions. MUST be pre-declared: renderFeed reads it on the
+                                // very first refresh(), before the reactions listener's first snapshot —
+                                // as an implicit global that was a boot-order ReferenceError that could
+                                // kill the whole render pass (seen live on Android, blocked a real user).
 window.selDay = null;
 window.selW = [];
 window.adminUnlocked = false;
