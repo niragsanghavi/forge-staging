@@ -6,14 +6,51 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // RANK 3: groups.globalStats shape/type/bounds guard. Only invoked when a
+    // write actually touches globalStats. Bounds are generous-but-finite — no
+    // real group's season total/avg reaches 200k at this app's scale, so the
+    // demonstrated 999999 injection is rejected while every legitimate
+    // writeGlobalStats() write passes. (Rules can't recompute the true value,
+    // so this stops absurd/overflow/type-confusion injection, not a same-group
+    // attacker writing a plausible wrong number — that needs Module 1.)
+    function validGlobalStats() {
+      return !('globalStats' in request.resource.data)
+        || ( request.resource.data.globalStats is map
+          && request.resource.data.globalStats.keys().hasOnly(['seasonId','total','avg','count','players','computedAt'])
+          && request.resource.data.globalStats.total is int
+          && request.resource.data.globalStats.total >= 0
+          && request.resource.data.globalStats.total <= 200000
+          && request.resource.data.globalStats.avg is int
+          && request.resource.data.globalStats.avg >= 0
+          && request.resource.data.globalStats.avg <= 200000
+          && request.resource.data.globalStats.count is int
+          && request.resource.data.globalStats.count >= 0
+          && request.resource.data.globalStats.count <= 1000
+          && request.resource.data.globalStats.players is list );
+    }
+
     // ── GROUPS + SEASON SUBCOLLECTIONS ────────────────────────────────────
+    // RANK 1 (SECURITY_REDTEAM.md): delete:false on group + season docs. The
+    // client NEVER deletes a group or season doc — grep of the app found only
+    // reactions/flags .delete() calls; group teardown (e.g. YH60EP) has always
+    // been an owner-token script, which is rules-exempt. Removing client delete
+    // closes the single worst irreversible action (a stranger scripting group
+    // deletion). create/update stay isAuthed() — unchanged from `write`.
+    // RANK 3: globalStats, when written, is shape/type/bounds-validated so the
+    // 999999-into-Global-aggregate poison is rejected (numbers can't be
+    // recomputed in rules, so magnitude bounds are generous-but-finite).
     match /groups/{groupCode} {
-      allow read:  if isAuthed();
-      allow write: if isAuthed();
+      allow read:   if isAuthed();
+      allow create: if isAuthed() && validGlobalStats();
+      allow update: if isAuthed()
+        && ( !request.resource.data.diff(resource.data).affectedKeys().hasAny(['globalStats']) || validGlobalStats() );
+      allow delete: if false;
 
       match /seasons/{sid} {
-        allow read:  if isAuthed();
-        allow write: if isAuthed();
+        allow read:   if isAuthed();
+        allow create: if isAuthed();
+        allow update: if isAuthed();
+        allow delete: if false;
 
         match /twists/{twistId} {
           allow read:  if isAuthed();
@@ -28,10 +65,13 @@ service cloud.firestore {
           allow delete: if false;
         }
 
-        // Jack of All Trades awards — written by client, never deleted
+        // Jack of All Trades awards — written by client, never deleted.
+        // RANK 3: update:false (was `write` = mutable-after-create, flagged by
+        // the prior audit's verifier, never fixed → award-farming). Create-only.
         match /jackAwards/{id} {
-          allow read:  if isAuthed();
-          allow write: if isAuthed();
+          allow read:   if isAuthed();
+          allow create: if isAuthed();
+          allow update: if false;
           allow delete: if false;
         }
 
@@ -73,9 +113,15 @@ service cloud.firestore {
     // in the app filters voided:true out. update is scoped to EXACTLY those
     // three fields so a void can never be used to rewrite a log's actual
     // content (workouts/day/player/etc are frozen from the moment of create).
+    // RANK 3: create is size-capped (blunt the oversized-doc spam vector; a
+    // legit log has 11 fields + a small workouts array). update stays scoped
+    // to the three void fields (tombstone rule, unchanged).
     match /logs/{id} {
       allow read:   if isAuthed();
-      allow create: if isAuthed();
+      allow create: if isAuthed()
+        && request.resource.data.size() <= 16
+        && request.resource.data.workouts is list
+        && request.resource.data.workouts.size() <= 50;
       allow delete: if false;
       allow update: if isAuthed()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['voided','voidedBy','voidedAt']);
@@ -127,8 +173,18 @@ service cloud.firestore {
     // (Firebase console this sprint, or a custom-claim admin per AUTH_UPGRADE).
     // Flip `read` to isAuthed() ONLY as a deliberate, documented choice that
     // accepts errorLogs joining the known anon-readable set. Immutable once written.
+    // RANK 3: create is size-capped (field count + the unbounded string fields)
+    // to blunt oversized-doc spam. The client already truncates these strings;
+    // the caps are generous headroom over those limits so no legit report is
+    // rejected. (Firestore's 1 MiB doc ceiling + these caps bound per-doc cost;
+    // many-small-docs spam is a rate-limit problem → App Check, not rules.)
     match /errorLogs/{id} {
-      allow create: if isAuthed();
+      allow create: if isAuthed()
+        && request.resource.data.size() <= 16
+        && (!('message' in request.resource.data) || request.resource.data.message.size() <= 1000)
+        && (!('stack' in request.resource.data)   || request.resource.data.stack.size() <= 4000)
+        && (!('context' in request.resource.data) || request.resource.data.context.size() <= 500)
+        && (!('url' in request.resource.data)      || request.resource.data.url.size() <= 500);
       allow read:   if false;
       allow update: if false;
       allow delete: if false;
@@ -152,10 +208,19 @@ service cloud.firestore {
       // count of logs submitted that day, powering the Global tab's "active
       // today" board without an all-platform logs scan. Members increment via
       // merge on submit / decrement on void; the Global tab + backfill read it.
+      // RANK 3: shape-validated. Only byGroup(map) + updatedAt; updatedAt must
+      // equal request.time, i.e. written via serverTimestamp() — every legit
+      // writer (bumpDailyRollup + backfill) does, so a REST attacker sending a
+      // literal timestamp is rejected, and no arbitrary top-level field can be
+      // added. (Per-group integer VALUES inside byGroup can't be bounded — rules
+      // can't iterate a dynamic map — so a plausible integer still passes; that
+      // residue needs Module 1. Structural + timestamp injection is closed.)
       match /daily/{ymd} {
         allow read:   if isAuthed();
-        allow create: if isAuthed();
-        allow update: if isAuthed();
+        allow create, update: if isAuthed()
+          && request.resource.data.keys().hasOnly(['byGroup','updatedAt'])
+          && request.resource.data.byGroup is map
+          && request.resource.data.updatedAt == request.time;
         allow delete: if false;
       }
 
@@ -164,10 +229,20 @@ service cloud.firestore {
       // distribution, identity map), each group's slice recomputed + replaced
       // by that group's own members (writeMonthlyRollup, mergeFields). The
       // superadmin cockpit reads these instead of scanning logs + users.
+      // RANK 3: shape/type-validated. Only month(int 1-12) + year(int) +
+      // groups(map). Blocks arbitrary top-level fields and type confusion on
+      // the SHARED SuperDash rollup. (Nested per-group slices aren't deep-
+      // validated — rules can't iterate the dynamic groups map — so this is a
+      // structural guard, not aggregate integrity, which needs Module 1.)
       match /monthly/{ym} {
         allow read:   if isAuthed();
-        allow create: if isAuthed();
-        allow update: if isAuthed();
+        allow create, update: if isAuthed()
+          && request.resource.data.keys().hasOnly(['month','year','groups'])
+          && request.resource.data.month is int
+          && request.resource.data.month >= 1 && request.resource.data.month <= 12
+          && request.resource.data.year is int
+          && request.resource.data.year >= 2020 && request.resource.data.year <= 2100
+          && request.resource.data.groups is map;
         allow delete: if false;
       }
 
@@ -210,8 +285,15 @@ service cloud.firestore {
     // answers must stay unreadable from any client. The owner reads them
     // with an OAuth (gcloud/console) token, which bypasses rules. Immutable
     // once written.
+    // RANK 3: create size-capped — top-level field count + answers(map) key
+    // count. A legit response has ~9 top-level fields and ≤~13 answer keys;
+    // caps are generous headroom. Read stays denied (anonymity). Blunts
+    // oversized-doc spam; per-doc only (rate-limit → App Check).
     match /survey/{id} {
-      allow create: if isAuthed();
+      allow create: if isAuthed()
+        && request.resource.data.size() <= 12
+        && (!('answers' in request.resource.data)
+            || (request.resource.data.answers is map && request.resource.data.answers.size() <= 30));
       allow read:   if false;
       allow update: if false;
       allow delete: if false;
