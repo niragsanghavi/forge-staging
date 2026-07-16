@@ -172,14 +172,25 @@
       </div>
       <button class="btn btn-green" id="subBtn" onclick="submitLog()" disabled>Log Workout</button>
     </div>
-    <div id="ls3" class="hidden">
+    <!-- Post-log reward (survey: personal progress is the hero, rivalry is not).
+         Hierarchy is deliberate: ONE hero number + pace, then quieter team
+         context, then rank movement ONLY when it actually moved. Auto-dismisses
+         after ~4s or on tap — never blocks logging a second workout. -->
+    <div id="ls3" class="hidden" onclick="dismissReward()">
       <div class="succ">
         <div class="succ-icon">🔥</div>
         <div class="succ-title" id="succTitle">Forged!</div>
         <div class="succ-sub" id="succSub"></div>
         <div id="comebackMsg" class="comeback-msg hidden"></div>
-        <div class="card" id="succStats" style="text-align:left;margin-bottom:20px"></div>
-        <button class="btn btn-gold" onclick="resetLog()">Done</button>
+        <div id="rwWrap" style="margin:20px 0 6px">
+          <div id="rwHeroNum" style="font-size:58px;font-weight:900;color:var(--gold);line-height:1;font-variant-numeric:tabular-nums">0</div>
+          <div id="rwHeroLbl" style="font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text);margin-top:6px">workouts this month</div>
+          <div id="rwPace" style="font-size:13px;color:var(--muted);margin-top:4px"></div>
+          <div id="rwBest" class="hidden" style="margin-top:14px;font-size:13px;font-weight:800;color:var(--gold)"></div>
+          <div id="rwTeam" style="margin-top:16px;font-size:13px;color:var(--muted)"></div>
+          <div id="rwRank" class="hidden" style="margin-top:6px;font-size:13px;font-weight:800;color:var(--green)"></div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:16px">tap anywhere to continue</div>
       </div>
     </div>
   </div>
@@ -2370,8 +2381,10 @@ async function submitLog(){
     }));
 
     const batch = db.batch();
+    const newLogIds = new Set();   // reward screen: tells "already echoed into allLogs" apart from listener lag
     targets.forEach(sess => {
       const ref = db.collection('logs').doc();
+      newLogIds.add(ref.id);
       batch.set(ref, {
         groupCode: sess.code,
         player: sess.player.name,
@@ -2445,9 +2458,9 @@ async function submitLog(){
         catch(e){ logErr('submitLog: jack check failed', e); }
       }
 
-      let sc;
-      try { sc = score(me.name); }
-      catch(e){ logErr('submitLog: score computation failed', e); sc = {total:0,wo:0,streak:0}; }
+      let rw=null;
+      try { rw = computeRewardData(newLogIds); }
+      catch(e){ logErr('submitLog: reward computation failed', e); }
 
       const myDays=[...allLogs.filter(l=>l.player===me.name).map(l=>l.day)].sort((a,b)=>a-b);
       const lastDay=myDays.length>=2?myDays[myDays.length-2]:null;
@@ -2464,13 +2477,12 @@ async function submitLog(){
         : `${selW.join(', ')} · Day ${selDay}${multiNote}`;
       const cbMsg=document.getElementById('comebackMsg');
       if(isComeback && commitSettled){cbMsg.textContent=getRandomComeback();cbMsg.classList.remove('hidden');}else{cbMsg.classList.add('hidden');}
-      document.getElementById('succStats').innerHTML=`<div class="srow" style="margin-bottom:0"><div class="sc"><div class="sv cu" id="cuPoints">0</div><div class="sl">POINTS</div></div><div class="sc"><div class="sv cu" id="cuWo">0</div><div class="sl">WORKOUTS</div></div><div class="sc"><div class="sv cu" id="cuStreak" style="color:var(--orange)">0</div><div class="sl">STREAK</div></div></div>`;
       const si=document.querySelector('#ls3 .succ-icon'); if(si){si.classList.remove('strike-icon');void si.offsetWidth;si.classList.add('strike-icon');}
 
       try {
         fireSparks();
         if(navigator.vibrate) navigator.vibrate(200);
-        celebrateLog(sc);
+        celebrateReward(rw);
       } catch(e){
         logErr('submitLog: celebration failed', e);
       }
@@ -2479,7 +2491,7 @@ async function submitLog(){
     }
   } catch(e){ console.error('submitLog failed:',e); toast('Error saving. Check connection.','error'); btn.disabled=false; btn.textContent='Log Workout'; }
 }
-function resetLog(){ selDay=null; selW=[]; ['ls1','ls2','ls3'].forEach((id,i)=>document.getElementById(id).classList[i===0?'remove':'add']('hidden')); document.getElementById('pickerWrap').classList.add('hidden'); showTab('home'); }
+function resetLog(){ clearTimeout(_rwTimer); _rwTimer=null; selDay=null; selW=[]; ['ls1','ls2','ls3'].forEach((id,i)=>document.getElementById(id).classList[i===0?'remove':'add']('hidden')); document.getElementById('pickerWrap').classList.add('hidden'); showTab('home'); }
 function backToS1(){ document.getElementById('ls1').classList.remove('hidden'); document.getElementById('ls2').classList.add('hidden'); }
 
 function fireSparks(){
@@ -2527,14 +2539,98 @@ function fireConfetti(){
 }
 
 // The whole celebration, fired after a successful log.
-function celebrateLog(sc){
+// ── POST-LOG REWARD (survey-driven: 11/15 log for their own numbers, 0 for
+// rivalry) ───────────────────────────────────────────────────────────────
+// Everything below is computed from data ALREADY in memory at log time
+// (allLogs/season/roster/twists/bonuses) — zero Firestore reads. Values that
+// would need a read (e.g. all-time bests) are deliberately absent.
+function computeRewardData(newLogIds){
+  const now=new Date();
+  const daysInMonth=season.days||new Date(season.year,season.month,0).getDate();
+  const isCurMonth = now.getMonth()+1===season.month && now.getFullYear()===season.year;
+  const daysElapsed = isCurMonth ? Math.min(now.getDate(), daysInMonth) : daysInMonth;
+  // The offline-persistence echo usually lands the new log in allLogs before
+  // this runs; when it hasn't yet, count it manually (`bump`) so the hero
+  // number is never one short.
+  const landed = allLogs.some(l=>newLogIds.has(l.id));
+  const bump = landed ? 0 : 1;
+  const myLogs = allLogs.filter(l=>l.player===me.name);
+  const myCount = myLogs.length + bump;
+  const pace = Math.round((myCount/Math.max(1,daysElapsed))*daysInMonth);
+  const teamCount = allLogs.filter(l=>(season.roster||[]).find(p=>p.name===l.player&&p.team===me.team)).length + bump;
+  // Rank movement — TERTIARY, shown ONLY if this log actually moved them.
+  // Needs before+after states, so it requires the echo to have landed;
+  // when it hasn't, show nothing rather than guess. Adding a log can only
+  // improve your own rank, so `after < before` is the complete condition.
+  let movedTo=null;
+  if(landed && (season.roster||[]).length>1){
+    const rankIn = ctx => {
+      const rows=(season.roster||[]).map(p=>({name:p.name,total:score(p.name,ctx).total}))
+        .sort((a,b)=>b.total-a.total);
+      return rows.findIndex(r=>r.name===me.name)+1;
+    };
+    const before=rankIn({ season, groupCode, logs: allLogs.filter(l=>!newLogIds.has(l.id)),
+      twists:activeTwists, bonuses:bonus30, jackAwards, ironPledgeBonuses, twistWindows });
+    const after=rankIn(undefined);
+    if(after>0 && before>0 && after<before) movedTo=after;
+  }
+  // Honest personal-best: biggest week of THIS month (distinct trained days
+  // per Mon–Sun bucket). Only claimed when the current week strictly beats
+  // every other week that has data AND is >=3 days — never trivial week-1
+  // praise, never fabricated. All-time "best month yet" would need a read,
+  // so it's out by the no-reads rule.
+  let bestWeek=false;
+  try{
+    const daysSet=new Set(myLogs.map(l=>l.day)); if(bump) daysSet.add(selDay);
+    const wkOf=d=>{ const dow=(new Date(season.year,season.month-1,d).getDay()+6)%7; return d-dow; };
+    const buckets={};
+    daysSet.forEach(d=>{ const k=wkOf(d); buckets[k]=(buckets[k]||0)+1; });
+    const curWk=wkOf(selDay), cur=buckets[curWk]||0;
+    const others=Object.keys(buckets).filter(k=>+k!==curWk).map(k=>buckets[k]);
+    bestWeek = cur>=3 && others.length>0 && others.every(n=>cur>n);
+  }catch(e){}
+  return { myCount, pace, teamName:'Team '+(me.team||'—'), teamCount, movedTo, bestWeek };
+}
+
+let _rwTimer=null;
+function celebrateReward(rw){
   const ic=document.querySelector('#ls3 .succ-icon');
   if(ic){ ic.style.animation='none'; void ic.offsetWidth; ic.style.animation='succPop .7s cubic-bezier(.22,1,.36,1)'; }
-  const p=document.getElementById('cuPoints'), w=document.getElementById('cuWo'), s=document.getElementById('cuStreak');
-  if(p) countUp(p, sc.total, 900);
-  if(w) countUp(w, sc.wo, 700);
-  if(s) countUp(s, sc.streak, 700);
+  const wrap=document.getElementById('rwWrap');
+  const hero=document.getElementById('rwHeroNum'), pace=document.getElementById('rwPace');
+  const team=document.getElementById('rwTeam'), rank=document.getElementById('rwRank'), best=document.getElementById('rwBest');
+  if(!wrap||!hero){ fireConfetti(); scheduleRewardDismiss(); return; }
+  if(!rw){ wrap.classList.add('hidden'); fireConfetti(); scheduleRewardDismiss(); return; }
+  wrap.classList.remove('hidden');
+  pace.textContent='on pace for '+rw.pace;
+  team.textContent=rw.teamName+': '+rw.teamCount+' this month';
+  if(rw.bestWeek){ best.textContent='Your biggest week this month'; best.classList.remove('hidden'); } else best.classList.add('hidden');
+  if(rw.movedTo){ rank.textContent='moved to #'+rw.movedTo; rank.classList.remove('hidden'); } else rank.classList.add('hidden');
+  const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(reduced){
+    hero.textContent=rw.myCount;
+    team.style.transition=rank.style.transition='none';
+    team.style.opacity=rank.style.opacity='1';
+  } else {
+    // hero lands first (count-up ~500ms), secondary fades in after, tertiary last
+    hero.textContent='0';
+    team.style.transition=rank.style.transition='none';
+    team.style.opacity=rank.style.opacity='0';
+    countUp(hero, rw.myCount, 500);
+    setTimeout(()=>{ team.style.transition='opacity .4s ease-out'; team.style.opacity='1'; },350);
+    setTimeout(()=>{ rank.style.transition='opacity .4s ease-out'; rank.style.opacity='1'; },550);
+  }
   fireConfetti();
+  scheduleRewardDismiss();
+}
+// Auto-dismiss after ~4s OR on tap (ls3's onclick), whichever first — logging
+// a second workout is never blocked behind this screen.
+function scheduleRewardDismiss(){ clearTimeout(_rwTimer); _rwTimer=setTimeout(dismissReward, 4200); }
+function dismissReward(){
+  clearTimeout(_rwTimer); _rwTimer=null;
+  const ls3=document.getElementById('ls3');
+  if(!ls3 || ls3.classList.contains('hidden')) return;   // idempotent: tap + timer can both fire
+  resetLog();
 }
   
 // ── LEADERBOARD ───────────────────────────────────────────────────────────
