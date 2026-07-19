@@ -1100,7 +1100,11 @@ async function submitNewPin(){
       const sRef = gRef.collection('seasons').doc(seasonId);
       const uRef = db.collection('users').doc(userId);
       let wPlayers=null, wRoster=null;
-      await db.runTransaction(async tx=>{
+      // Self-heal watchdog wraps the write from OUTSIDE (transaction body
+      // unchanged). On timeout/sick error it surfaces recovery + rethrows, so
+      // the existing catch below still runs. A timed-out tx may still land
+      // server-side; the fix-flow reload reconciles from the server.
+      await withWriteWatchdog(db.runTransaction(async tx=>{
         const gSnap=await tx.get(gRef);               // ALL reads first
         const sSnap=await tx.get(sRef);
         if(!sSnap.exists) throw new Error('SEASON_MISSING');
@@ -1115,7 +1119,7 @@ async function submitNewPin(){
         tx.update(sRef,{roster});
         tx.set(uRef, newUserDocFields(flow.name, pinHash, groupCode, groupData?.name, window.currentUid, 'signup'));
         wPlayers=players; wRoster=roster;
-      });
+      }), 'submitNewPin:register');
       bumpGlobalStat('totalUsers', 1);   // new canonical identity (fire-and-forget)
       groupData.players=wPlayers;
       season.roster=wRoster;
@@ -1132,7 +1136,7 @@ async function submitNewPin(){
       const candidateUserId = db.collection('users').doc().id;
       const sRef = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
       let wRoster=null, myEntry=null, createdUserDoc=false;
-      await db.runTransaction(async tx=>{
+      await withWriteWatchdog(db.runTransaction(async tx=>{
         createdUserDoc=false;   // reset per attempt — tx retries must not overcount
         const sSnap=await tx.get(sRef);
         if(!sSnap.exists) throw new Error('SEASON_MISSING');
@@ -1160,7 +1164,7 @@ async function submitNewPin(){
           tx.set(db.collection('users').doc(entry.userId), { pinHash }, { merge:true });
         }
         wRoster=roster; myEntry=entry;
-      });
+      }), 'submitNewPin:grace');
       if(createdUserDoc) bumpGlobalStat('totalUsers', 1);   // fire-and-forget
       season.roster=wRoster;
       me=myEntry;
@@ -2487,9 +2491,16 @@ async function submitLog(){
     // absorb a slow-but-connected network without lying to an online user,
     // short enough that an offline user isn't stuck staring at it.
     let commitSettled=false, commitFailed=null;
-    const commitPromise = batch.commit()
+    const rawCommit = batch.commit();
+    const commitPromise = rawCommit
       .then(()=>{ commitSettled=true; })
       .catch(err=>{ commitSettled=true; commitFailed=err; });
+    // Self-heal watchdog (fire-and-forget): if this commit is stuck/sick while
+    // ONLINE (10s), surface the recovery banner. Observes the RAW commit so it
+    // sees the real reject code; the .catch swallows the rethrow so this never
+    // disturbs the offline-tolerant optimistic flow below (genuine offline is
+    // guarded inside the watchdog's policy). batch.commit() is still called once.
+    withWriteWatchdog(rawCommit, 'submitLog').catch(()=>{});
     // Global counter: one increment per log DOC actually committed (a multi-
     // group broadcast writes `targets.length` docs). Chained on commitPromise
     // so it fires whenever the write truly lands — even after the 4s grace

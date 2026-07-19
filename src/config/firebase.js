@@ -138,7 +138,10 @@ window.showBootFailureRecovery = function(message){
   document.body.innerHTML = '';
   document.body.appendChild(wrap);
   document.getElementById('forgeBootTryAgain').onclick = () => location.reload();
-  document.getElementById('forgeBootReset').onclick = () => window.resetFirestoreState('boot-failure-manual-reset');
+  // Boot-path and write-path failures now share ONE heal implementation:
+  // fixLocalState is the fuller reset (SW + caches + persistence + auth session
+  // + Forge session keys), superseding the IndexedDB-only resetFirestoreState.
+  document.getElementById('forgeBootReset').onclick = () => window.fixLocalState('boot-failure-manual-reset');
 };
 
 window.db = db;
@@ -175,3 +178,179 @@ window.ensureAuth = function(){
     });
   });
 };
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SELF-HEAL — device-local-corruption recovery (July 18 incident)
+   Failure mode: Firestore offline cache serves READS (app looks healthy,
+   roster renders) while every WRITE silently dies — stale anon-auth session +
+   stale SW cache + poisoned IndexedDB persistence. Incognito worked, proving
+   it's device-local. Manual fix was "clear website data"; this detects the
+   state and heals it in one tap. Nothing here touches pinSet/pinHash routing,
+   transaction bodies, or scoring — it only observes writes and resets local
+   caches. Identity is server-side (userId + pinHash), so a reset loses nothing.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+// Race any promise against a timeout that REJECTS with code 'timeout'.
+function _withTimeout(promise, ms, label){
+  let timer;
+  const t = new Promise((_, rej) => { timer = setTimeout(() => {
+    rej(Object.assign(new Error((label||'op')+' timed out after '+ms+'ms'), { code:'timeout' }));
+  }, ms); });
+  return Promise.race([promise, t]).finally(() => clearTimeout(timer));
+}
+function _isAuthErr(e){ return !!(e && typeof e.code === 'string' && e.code.indexOf('auth/') === 0); }
+function _isTransientErr(e){ return !!(e && (e.code === 'unavailable' || e.code === 'deadline-exceeded')); }
+function _isTimeoutErr(e){ return !!(e && e.code === 'timeout'); }
+
+// ── STEP 3: fixLocalState() — the one-tap heal ──────────────────────────────
+// Each step in its own try/catch so one failure never aborts the rest, then
+// reload. Boot mints fresh anon auth; user lands on group-code → name → PIN.
+window.fixLocalState = async function(reason){
+  try { console.warn('[Forge] fixLocalState running. Reason:', reason); } catch(e){}
+  // 1. unregister service workers (kills the stale SW controlling the page)
+  try {
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister().catch(()=>{})));
+    }
+  } catch(e){ console.warn('[Forge] fixLocalState step1 (SW unregister):', e); }
+  // 2. delete all Cache Storage entries (stale app shell)
+  try {
+    if (window.caches) { const keys = await caches.keys(); await Promise.all(keys.map(k => caches.delete(k).catch(()=>{}))); }
+  } catch(e){ console.warn('[Forge] fixLocalState step2 (caches):', e); }
+  // 3. terminate Firestore (must precede clearPersistence)
+  try { await db.terminate(); } catch(e){ console.warn('[Forge] fixLocalState step3 (terminate):', e); }
+  // 4. clear the poisoned offline persistence. 'failed-precondition' = another
+  //    tab still holds it — log and continue; the IndexedDB purge (below) and
+  //    reload still recover this tab.
+  try { await db.clearPersistence(); }
+  catch(e){ console.warn('[Forge] fixLocalState step4 (clearPersistence, code='+(e&&e.code)+'):', e); }
+  // 4b. belt-and-suspenders: purge Firebase's own IndexedDB stores directly too
+  //     (covers auth-session corruption + any store clearPersistence missed).
+  try {
+    const known = ['firebaseLocalStorageDb','firebase-heartbeat-database',`firestore/[DEFAULT]/${FB_CFG.projectId}/main`];
+    const names = new Set(known);
+    try { if (indexedDB.databases) { (await indexedDB.databases()).forEach(d => { if(d.name && /firebase|firestore/i.test(d.name)) names.add(d.name); }); } } catch(e){}
+    await Promise.all([...names].map(n => new Promise(res => {
+      let done=false; const fin=()=>{ if(!done){done=true;res();} };
+      try { const rq=indexedDB.deleteDatabase(n); rq.onsuccess=fin; rq.onerror=fin; rq.onblocked=fin; } catch(e){ fin(); }
+      setTimeout(fin, 600);
+    })));
+  } catch(e){ console.warn('[Forge] fixLocalState step4b (indexedDB purge):', e); }
+  // 5. kill the (possibly corrupted) anonymous auth session
+  try { await auth.signOut(); } catch(e){ console.warn('[Forge] fixLocalState step5 (signOut):', e); }
+  // 6. clear ONLY Forge's own session pointers — NOT localStorage.clear()
+  //    (leaves forge_theme / forge_goal_* / unrelated origin data intact).
+  //    forge_session is the legacy single-session key migrateLegacySession
+  //    re-imports, so it must go too or the reset wouldn't log them out.
+  try { ['forge_sessions','forge_active','forge_session'].forEach(k => { try{ localStorage.removeItem(k); }catch(e){} }); }
+  catch(e){ console.warn('[Forge] fixLocalState step6 (localStorage):', e); }
+  // 7. hard reload → fresh anon auth + onboarding. Server identity intact.
+  try { location.reload(); } catch(e){ location.href = location.pathname; }
+};
+
+// ── STEP 4: reusable recovery UI (self-contained, inline-styled like the boot
+// recovery screen; matches the app palette). Non-blocking bottom card. Shown at
+// most once per session unless dismissed and a later failure re-surfaces it. ──
+window._forgeRecoveryVisible = false;
+window.showConnectionRecovery = function(){
+  if (window._forgeRecoveryVisible) return;                 // already up — don't stack
+  if (document.getElementById('forgeRecovery')) return;
+  if (typeof navigator.onLine === 'boolean' && !navigator.onLine) return;   // genuine offline is supported
+  window._forgeRecoveryVisible = true;
+  const wrap = document.createElement('div');
+  wrap.id = 'forgeRecovery';
+  wrap.setAttribute('role','alertdialog');
+  wrap.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:100000;margin:0 auto;max-width:440px;'+
+    'background:#121218;border:1px solid rgba(212,168,67,.30);border-radius:16px;padding:18px 18px 16px;'+
+    'box-shadow:0 12px 40px rgba(0,0,0,.55);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;'+
+    'color:#f2f0ec;opacity:0;transform:translateY(12px);transition:opacity .28s ease-out,transform .28s ease-out';
+  wrap.innerHTML =
+    '<div style="font-size:15px;font-weight:800;margin-bottom:6px">Connection stuck?</div>'+
+    '<div id="forgeRecoveryMsg" style="font-size:13px;line-height:1.5;color:#b9b7c2;margin-bottom:14px">'+
+      'Having trouble saving. Your connection looks fine but the app&rsquo;s local data may be stuck. '+
+      '<b style="color:#f2f0ec;font-weight:600">Fix it</b> takes ~30 seconds — you&rsquo;ll re-enter your group code and PIN. Nothing is lost.'+
+    '</div>'+
+    '<div style="display:flex;gap:10px">'+
+      '<button id="forgeRecoveryFix" style="flex:1;min-height:46px;border:none;border-radius:11px;cursor:pointer;'+
+        'background:linear-gradient(180deg,#e7bf58,#c69d35);color:#221804;font-size:14px;font-weight:800">Fix it</button>'+
+      '<button id="forgeRecoveryLater" style="flex:0 0 auto;min-height:46px;padding:0 18px;border-radius:11px;cursor:pointer;'+
+        'background:transparent;border:1px solid rgba(255,255,255,.18);color:#b9b7c2;font-size:14px;font-weight:600">Not now</button>'+
+    '</div>';
+  document.body.appendChild(wrap);
+  requestAnimationFrame(() => { wrap.style.opacity='1'; wrap.style.transform='none'; });
+  document.getElementById('forgeRecoveryLater').onclick = function(){
+    wrap.remove(); window._forgeRecoveryVisible = false;   // dismissed → a later failure may re-surface it
+  };
+  document.getElementById('forgeRecoveryFix').onclick = function(){
+    const b = document.getElementById('forgeRecoveryFix');
+    if(b){ b.disabled = true; b.textContent = 'Fixing… ~30s'; b.style.opacity='.8'; }
+    const later = document.getElementById('forgeRecoveryLater'); if(later) later.disabled = true;
+    window.fixLocalState('user-tapped-fix');                // async → ends in location.reload()
+  };
+};
+
+// Shared write-sickness policy (STEP 2). navigator.onLine guard lives here so
+// EVERY caller (probe, watchdog, log path) respects genuine-offline.
+window._forgeSickWriteCount = 0;
+function _noteSickWrite(code){
+  if (typeof navigator.onLine === 'boolean' && !navigator.onLine) return;   // offline is supported
+  // auth/* and outright timeouts are unambiguous → surface immediately.
+  // transient unavailable/deadline can be one-off network noise → only after 2+.
+  if (_isAuthErr({code}) || code === 'timeout') { window._backendSick = true; window.showConnectionRecovery(); return; }
+  if (code === 'unavailable' || code === 'deadline-exceeded') {
+    window._forgeSickWriteCount++;
+    if (window._forgeSickWriteCount >= 2) { window._backendSick = true; window.showConnectionRecovery(); }
+  }
+}
+
+// ── STEP 2: withWriteWatchdog — race a user-blocking WRITE against a timeout;
+// on timeout / sick error, surface recovery as a SIDE EFFECT and rethrow so the
+// caller's existing catch (logErr, err.textContent, toast) runs unchanged. Wrap
+// OUTSIDE transactions — never alters their internal logic. NOTE: a timed-out
+// transaction may still commit server-side; the fix-flow reload reconciles from
+// the server, so surfacing recovery here is safe (no double-write risk). ──
+window.withWriteWatchdog = function(promise, label, ms){
+  ms = ms || 10000;
+  return _withTimeout(Promise.resolve(promise), ms, 'write:'+(label||'')).catch(function(e){
+    if (_isTimeoutErr(e) || _isAuthErr(e) || _isTransientErr(e)) _noteSickWrite(e.code);
+    throw e;   // preserve existing catch behavior
+  });
+};
+
+// ── STEP 1: buildHealthProbe — boot-time backend reachability check. Proves the
+// auth backend + Firestore SERVER are reachable past the offline cache. Runs
+// after first paint (never delays render). Exactly 1 Firestore read (public
+// stats/global, source:'server'). Genuine offline is NOT flagged. ──
+window.buildHealthProbe = async function(){
+  try {
+    if (typeof navigator.onLine === 'boolean' && !navigator.onLine) return;   // offline is a supported state
+    // (a) forced token refresh proves the auth backend is reachable AND the anon
+    //     session is alive — a corrupted session rejects here with auth/*.
+    if (auth.currentUser) {
+      try { await _withTimeout(auth.currentUser.getIdToken(true), 10000, 'getIdToken'); }
+      catch(e){
+        if (_isAuthErr(e) || _isTimeoutErr(e)) { window._backendSick = true; window.showConnectionRecovery(); return; }
+        // any other error: not a definitive corruption signal — fall through to (b)
+      }
+    }
+    // (b) 1 server read of a public doc proves Firestore server reachability
+    //     past the offline cache. Retry once on 'unavailable' before flagging.
+    async function serverPing(){ return _withTimeout(db.collection('stats').doc('global').get({ source:'server' }), 10000, 'stats-ping'); }
+    try { await serverPing(); }
+    catch(e1){
+      if (typeof navigator.onLine === 'boolean' && !navigator.onLine) return;   // went offline mid-probe
+      try { await serverPing(); }        // one retry
+      catch(e2){
+        if (_isTimeoutErr(e2) || e2.code === 'unavailable' || _isAuthErr(e2)) { window._backendSick = true; window.showConnectionRecovery(); }
+      }
+    }
+  } catch(e){ /* the probe must never break boot */ try{ console.warn('[Forge] health probe error', e); }catch(_){} }
+};
+// Self-schedule after first paint (two rAFs) so it never delays render. No
+// index.html change needed; runs once per load.
+try {
+  window.addEventListener('load', function(){
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){ window.buildHealthProbe(); }); });
+  });
+} catch(e){}
