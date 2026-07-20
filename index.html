@@ -113,32 +113,87 @@
     <div class="tab" id="pledgeTab" onclick="showTab('pledge')" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg><span>Pledge</span></div>
   </div>
 
-  <!-- HOME -->
+  <!-- HOME — THE MIRROR (pass 1). Foundry hero/streak/foundry/twist/global-
+       consent surfaces removed per FRICTION_POINTS #3/#4; the header flame is
+       the ONLY streak display. Old Log tab stays functional (see #page-log). -->
   <div class="page active" id="page-home">
-    <div style="padding:12px 0 16px">
-      <div style="font-size:28px;font-weight:800;letter-spacing:-.022em;line-height:1.15" id="hGreet"></div>
-      <div style="font-size:13px;color:var(--muted);margin-top:4px" id="hDate"></div>
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+      <g id="i-flame"><path d="M12 3c1 3-2.5 4.5-2.5 8a4.5 4.5 0 0 0 9 0c0-1.6-.7-2.9-1.5-4-.3 1-.8 1.7-1.7 2.2C15.6 7 14.8 4.6 12 3z"/><path d="M9.5 11c-1.4 1-2.5 2.4-2.5 4.3A5 5 0 0 0 12 20"/></g>
+      <g id="i-gym"><path d="M7.5 9.5v5M16.5 9.5v5M7.5 12h9"/><rect x="4.6" y="8.2" width="2.9" height="7.6" rx="1.2"/><rect x="16.5" y="8.2" width="2.9" height="7.6" rx="1.2"/></g>
+      <g id="i-walk"><circle cx="13" cy="4.4" r="1.7"/><path d="M13 6.6l-1.6 4.4 2.4 2 1 6M11.4 11l-2.8 1.4M13.8 8.4l2.8 1.4-1 3"/></g>
+      <g id="i-run"><circle cx="14.5" cy="4.4" r="1.7"/><path d="M8 20l2.6-4.2 1.2-3.8 2.7 2 1.2 4M12 12l-1-3 3.4-1 1.8 2 2 .4M7.2 13.2l3-1"/></g>
+      <g id="i-swim"><circle cx="16" cy="6" r="1.7"/><path d="M4 13l6-3 3.5 2 3.5-1.5"/><path d="M3.5 17.4c1.7-1.5 3.3-1.5 5 0s3.3 1.5 5 0 3.3-1.5 5 0"/></g>
+      <g id="i-cycle"><circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16l3.5-6.5h4.5L18 16M9.5 9.5 8.5 7h-2M12 16l2.5-6.5"/></g>
+      <g id="i-cardio"><path d="M3 12h4l2-5 3 10 2-7 1.6 2H21"/></g>
+      <g id="i-racket"><circle cx="10" cy="9" r="5.4"/><path d="M13.8 12.8l4.4 4.6c.6.6.6 1.5 0 2.1s-1.5.6-2.1 0l-4.4-4.6"/><path d="M7 9h6M10 6v6" stroke-opacity=".5"/></g>
+      <g id="i-ball"><circle cx="12" cy="12" r="8.4"/><path d="M12 3.6v16.8M3.6 12h16.8M6.2 6.2c2 2 3 4 3 5.8s-1 3.8-3 5.8M17.8 6.2c-2 2-3 4-3 5.8s1 3.8 3 5.8" stroke-opacity=".5"/></g>
+      <g id="i-cricket"><path d="M6.5 8v10M11 8v10M15.5 8v10"/><path d="M4.5 18h13"/><path d="M5.2 5.8l3.6 1M13 4.6l3.8.4"/></g>
+      <g id="i-yoga"><circle cx="12" cy="4.6" r="1.9"/><path d="M12 8.2v4.4"/><path d="M8 9.6l4 1.4 4-1.4"/><path d="M12 12.6l-4.4 3.6c-.8.7-.3 2 .8 2h7.2c1.1 0 1.6-1.3.8-2L12 12.6z"/></g>
+      <g id="i-dance"><circle cx="12" cy="4.8" r="1.9"/><path d="M12 7.5v5l-2.5 6M12 12.5l3 5.5M12 8.5 8 11M12 8.5l4.5-1.5"/></g>
+      <g id="i-user"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/></g>
+      <g id="i-help"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1 .9-1 1.7"/><circle cx="12" cy="16.4" r=".7" fill="currentColor" stroke="none"/></g>
+      <g id="i-chevL"><path d="M15 6l-6 6 6 6"/></g>
+      <g id="i-chevR"><path d="M9 6l6 6-6 6"/></g>
+      <g id="i-plus"><path d="M12 5v14M5 12h14"/></g>
+      <g id="i-sparkle"><path d="M12 3l1.8 4.7L18.5 9.5 13.8 11.3 12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M18 15l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></g>
+      <g id="i-chartline"><path d="M4 5v14h16"/><path d="M4 15l4-4 3 2 5-6"/></g>
+      <g id="i-chartbar"><path d="M4 4v16h16"/><rect x="7" y="12" width="2.6" height="6" rx=".6"/><rect x="11.7" y="8" width="2.6" height="10" rx=".6"/><rect x="16.4" y="14" width="2.6" height="4" rx=".6"/></g>
+      <g id="i-share"><circle cx="6" cy="12" r="2.4"/><circle cx="17" cy="6" r="2.4"/><circle cx="17" cy="18" r="2.4"/><path d="M8.1 10.9l6.8-3.8M8.1 13.1l6.8 3.8"/></g>
+    </defs></svg>
+
+    <div class="mir-hdr">
+      <div class="mir-ava"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-user"/></svg></div>
+      <div class="mir-id"><div class="mir-name" id="mirName"></div><div class="mir-ctx" id="mirCtx"></div></div>
+      <div class="mir-right">
+        <div class="mir-flame" id="mirFlame"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-flame"/></svg><span id="mirStreak">0</span></div>
+        <div class="mir-pills" id="mirPills"></div>
+        <div class="gplus" onclick="openLinkGroup()" title="Link another group"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-plus"/></svg></div>
+      </div>
     </div>
-    <div id="witnessStrip"></div>
-    <div id="heroCard"></div>
-    <div id="pledgeStatusCard"></div>
-    <div id="goalRingCard"></div>
-    <div id="nudgeCard"></div>
-    <div id="factCard"></div>
-    <div id="streakCardHighlight"></div>
-    <div id="roleBar"></div>
-    <div class="srow" id="hStats"></div>
-    <div id="twistBanner"></div>
-    <div class="shdr">Your Calendar</div>
-    <div class="card" style="padding:12px"><div class="cg" id="calGrid"></div></div>
-    <div class="shdr">Team Streak Days</div>
-    <div class="card" id="streakCard"></div>
-    <div class="shdr">Global Leaderboard</div>
-    <div class="card" id="globalConsentCard"></div>
-    <div class="shdr">Quick Log</div>
-    <button class="btn btn-gold" onclick="showTab('log')">Log Today's Workout</button>
-    <div class="shdr">Groups</div>
-    <button class="btn btn-surface" onclick="joinAnotherGroup()">+ Join another group</button>
+
+    <div class="card mir-calcard">
+      <div class="mir-calnav">
+        <div class="left"><div class="m"><span id="mirCalMonth"></span><span class="ro" id="mirCalRO"></span></div><div class="c" id="mirCalCount"></div></div>
+        <div class="mir-calright">
+          <div class="mir-qmark" onclick="document.getElementById('mirLegend').classList.toggle('on')"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-help"/></svg></div>
+          <div class="mir-arrows">
+            <div class="mir-arr" id="mirArrPrev" onclick="mirNavMonth(-1)"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-chevL"/></svg></div>
+            <div class="mir-arr off" id="mirArrNext" onclick="mirNavMonth(1)"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-chevR"/></svg></div>
+          </div>
+        </div>
+      </div>
+      <div class="mir-legend" id="mirLegend">
+        <span><i style="background:var(--c-cardio)"></i>Cardio</span>
+        <span><i style="background:var(--c-strength)"></i>Strength</span>
+        <span><i style="background:var(--c-sport)"></i>Sport</span>
+        <span><i style="background:var(--c-mind)"></i>Mind-body</span>
+        <span><i style="background:var(--c-dance)"></i>Dance</span>
+      </div>
+      <div class="mir-caltrack" id="mirCaltrack"></div>
+      <div class="mir-calfoot" id="mirCalFoot"></div>
+      <div id="mirRecap"></div>
+    </div>
+
+    <div class="card" id="mirChartCard">
+      <div class="row" style="margin-bottom:8px">
+        <div class="card-title" style="margin:0;display:flex;align-items:center;gap:6px"><svg class="mir-ico" viewBox="0 0 24 24" style="width:15px;height:15px"><use href="#i-chartline"/></svg><span id="mirChartTitle"></span></div>
+        <span class="mir-chartchip" id="mirChartChip"></span>
+      </div>
+      <div id="mirChart"></div>
+      <div class="mir-axis" id="mirChartAxis"></div>
+    </div>
+
+    <div class="card mir-caption" id="mirCaptionCard">
+      <div class="in"><span class="cico"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-sparkle"/></svg></span><div class="tx" id="mirCaption"></div></div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="margin-bottom:12px">
+        <div class="card-title" style="margin:0;display:flex;align-items:center;gap:6px"><svg class="mir-ico" viewBox="0 0 24 24" style="width:15px;height:15px"><use href="#i-chartbar"/></svg>Your mix</div>
+        <span style="font-size:11px;color:var(--muted)">all time</span>
+      </div>
+      <div id="mirMix"></div>
+    </div>
   </div>
 
   <!-- LOG -->
@@ -313,6 +368,28 @@
   <div class="page" id="page-pledge">
     <div class="page-title">The Iron Pledge</div>
     <div id="pledgeContent"></div>
+  </div>
+
+  <!-- MIRROR overlays: log-picker sheet + afterglow report (Home tap-to-log) -->
+  <div class="mir-scrim" id="mirScrim" onclick="mirCloseSheet()"></div>
+  <div class="mir-sheet" id="mirSheet">
+    <div class="mir-grab"></div>
+    <h3 id="mirSheetTitle"></h3>
+    <div class="ssub" id="mirSheetSub"></div>
+    <div id="mirSheetBody"></div>
+  </div>
+  <div class="mir-report" id="mirReport">
+    <div class="rinner">
+      <div class="mir-rgrab"></div>
+      <div class="mir-check"><svg viewBox="0 0 24 24"><path d="M5 13l4.5 4.5L19 7"/></svg></div>
+      <div class="big">LOGGED</div>
+      <div class="rwhat" id="mirRWhat"></div>
+      <div class="mir-rcard" id="mirRRank" style="display:none"></div>
+      <div class="mir-rcard" id="mirRStreak"></div>
+      <div class="mir-rcard" id="mirRWitness" style="display:none"></div>
+      <button class="mir-closebtn" onclick="mirCloseReport()">Close</button>
+      <div class="mir-staynote">swipe down or close — no timer</div>
+    </div>
   </div>
 
 </div>
@@ -1312,7 +1389,10 @@ function switchGroup(code){
   setActiveCode(code);
   groupCode = s.code; me = s.player;
   allLogs=[]; bonus30=[]; flags=[]; reactions=[]; activeTwists={}; jackAwards=[]; bets={}; ironPledgeBonuses=[]; twistWindows=[]; adminUnlocked=false; _myGoals=null;
-  ['heroCard','nudgeCard','streakCardHighlight','roleBar','hStats','twistBanner','calGrid','streakCard','teamStand','indLb','ptsBk','feedList','globalConsentCard'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=''; });
+  ['roleBar','teamStand','indLb','ptsBk','feedList','mirPills','mirCaltrack','mirChart','mirMix','mirCalFoot','mirRecap','mirCaption'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=''; });
+  // Mirror: drop the previous group's calendar panels so a switch can't ghost
+  // the old group's months (session caches keyed by code are safe to keep).
+  _mirMonths=[]; _mirIdx=0; _mirNoMore=false;
   showTab('home');
   loadGroup(groupCode, true);
 }
@@ -1456,160 +1536,644 @@ function renderWitnessStrip(){
     </div>
   </div>`;
 }
+// ── HOME entry point — now paints THE MIRROR (pass 1). Kept as renderHome so
+// every existing call site (refresh, switchGroup, boot) is unchanged.
 function renderHome(){
   if(!groupData||!me) return;
-  renderWitnessStrip();
-  const now=new Date();
-  const h=now.getHours();
-  const g=h<12?'Good morning':h<17?'Good afternoon':'Good evening';
-  document.getElementById('hGreet').textContent=`${g}, ${me.name} 👋`;
-  document.getElementById('hDate').textContent=now.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  try { renderMirrorHome(); }
+  catch(e){ logErr('renderMirrorHome', e); }
+}
 
+/* ══════════════════════════════════════════════════════════════════════════
+   THE MIRROR — Home pass 1 engine. Everything below is Home-only. Reuses the
+   scoring engine (score), the log write path (submitLog, mirror-mode branch),
+   the tombstone void (voidLogDoc), and the existing Log-tab full picker (goS2).
+   ══════════════════════════════════════════════════════════════════════════ */
+// Category + icon maps (case-insensitive). "map EVERY workout in COMMON_WORKOUTS
+// plus custom": Rowing/Spinning/Hiking → cardio (confirmed decision); anything
+// unmapped → strength colour + flame icon (the spec fallback).
+const MIR_CATLIST = {
+  cardio:  ['walk','run','swimming','cycling','hiit','cardio','skipping','stairs','rowing','spinning','hiking'],
+  strength:['gym','weight training','strength training','crossfit','boxing','calisthenics'],
+  sport:   ['padel','cricket','tennis','badminton','pickleball','football','basketball','volleyball','squash','golf'],
+  mind:    ['yoga','pilates','stretching','meditation','physiotherapy'],
+  dance:   ['zumba','dance']
+};
+const MIR_ICONLIST = {
+  'i-walk':['walk','hiking'], 'i-run':['run'], 'i-swim':['swimming'], 'i-cycle':['cycling','spinning'],
+  'i-cardio':['hiit','cardio','skipping','stairs','rowing'],
+  'i-gym':['gym','weight training','strength training','crossfit','boxing','calisthenics'],
+  'i-racket':['padel','tennis','badminton','pickleball','squash'], 'i-cricket':['cricket'],
+  'i-ball':['football','basketball','volleyball'],
+  'i-yoga':['yoga','pilates','stretching','meditation','physiotherapy'], 'i-dance':['zumba','dance']
+};
+const MIR_CAT={}, MIR_ICON={};
+Object.keys(MIR_CATLIST).forEach(c=>MIR_CATLIST[c].forEach(w=>MIR_CAT[w]=c));
+Object.keys(MIR_ICONLIST).forEach(ic=>MIR_ICONLIST[ic].forEach(w=>MIR_ICON[w]=ic));
+const MIR_COL={cardio:'var(--c-cardio)',strength:'var(--c-strength)',sport:'var(--c-sport)',mind:'var(--c-mind)',dance:'var(--c-dance)'};
+const MIR_SOFT={cardio:'var(--c-cardio-s)',strength:'var(--c-strength-s)',sport:'var(--c-sport-s)',mind:'var(--c-mind-s)',dance:'var(--c-dance-s)'};
+const _mk=w=>String(w||'').toLowerCase().trim();
+function mirCatOf(w){ return MIR_CAT[_mk(w)] || 'strength'; }
+function mirIconOf(w){ return MIR_ICON[_mk(w)] || 'i-flame'; }
+function mirColOf(w){ return MIR_COL[mirCatOf(w)]; }
+function mirSoftOf(w){ return MIR_SOFT[mirCatOf(w)]; }
+function mirIco(id,style){ return `<svg class="mir-ico" viewBox="0 0 24 24"${style?` style="${style}"`:''}><use href="#${id}"/></svg>`; }
+const MIR_MONTHNAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+// per-session state
+let _mirMonths=[];          // chronological [oldest … current]; each = descriptor
+let _mirIdx=0;              // centered panel index
+let _mirLoading=false, _mirNoMore=false;
+let _mirRanks=null;         // {code:rank} from users doc, cached per session
+let _mirBestMonth=null;     // max distinct-day month count, from season archives
+let _mirPendingDay=null;    // day being logged via the sheet
+const _mirLogCache={};      // `${code}_${y}_${m}` -> [{day,workouts,id}] (own logs)
+const _mirInflight={};      // in-flight promise dedup (renderMirrorHome fires per snapshot)
+
+// distinct logged days for a list of my logs
+function _mirDaySet(logs){ const s=new Set(); (logs||[]).forEach(l=>{ if(l&&l.day) s.add(l.day); }); return s; }
+
+// Build a month panel descriptor from THIS user's logs for that (month,year).
+function mirMonthDesc(month, year, readonly, myLogs){
+  const days = new Date(year, month, 0).getDate();
+  const firstDOW = (new Date(year, month-1, 1).getDay()+6)%7;   // Mon=0
+  const byDay={};              // day -> [{workouts:[...], id}]
+  const iconByDay={};          // day -> primary icon id
+  (myLogs||[]).forEach(l=>{
+    if(!l||!l.day) return;
+    const ws=Array.isArray(l.workouts)?l.workouts:(l.workout?[l.workout]:[]);
+    (byDay[l.day]||(byDay[l.day]=[])).push({workouts:ws, id:l.id});
+    if(!iconByDay[l.day] && ws.length) iconByDay[l.day]=mirIconOf(ws[0]);
+  });
+  const loggedDays=Object.keys(byDay).map(Number);
+  const count=loggedDays.length;
+  return {month,year,readonly,days,firstDOW,byDay,iconByDay,count,
+          label:MIR_MONTHNAMES[month-1], sid:seasonIdOf(month,year)};
+}
+
+// The current (active season) month, built from in-memory allLogs (my logs).
+function mirCurrentDesc(){
+  const myLogs=(allLogs||[]).filter(l=>l.player===me.name).map(l=>({day:l.day, workouts:l.workouts||(l.workout?[l.workout]:[]), id:l.id}));
+  return mirMonthDesc(season.month, season.year, false, myLogs);
+}
+
+// One-time query of the user's OWN logs for a month+group (spec: query ONLY this
+// user's logs, cache per session). Equality-only filters → single-field index
+// merge, no composite index needed. Falls back to a group-month query filtered
+// client-side if the narrow query errors (index safety).
+async function mirLoadMonthLogs(month, year){
+  const key=`${groupCode}_${year}_${month}`;
+  if(_mirLogCache[key]) return _mirLogCache[key];
+  if(_mirInflight['ml_'+key]) return _mirInflight['ml_'+key];
+  const p=_mirLoadMonthLogsInner(month, year, key);
+  _mirInflight['ml_'+key]=p;
+  try{ return await p; } finally { delete _mirInflight['ml_'+key]; }
+}
+async function _mirLoadMonthLogsInner(month, year, key){
+  let out=[];
+  try{
+    const snap=await db.collection('logs')
+      .where('groupCode','==',groupCode).where('year','==',year)
+      .where('month','==',month).where('player','==',me.name).get({source:'default'});
+    out=snap.docs.map(d=>({id:d.id,...d.data()})).filter(l=>!l.voided)
+       .map(l=>({day:l.day, workouts:l.workouts||(l.workout?[l.workout]:[]), id:l.id}));
+    window._mirReadCount=(window._mirReadCount||0)+snap.size;
+  }catch(e){
+    logErr('mirLoadMonthLogs('+month+'/'+year+')', e);
+    try{
+      const snap=await db.collection('logs').where('groupCode','==',groupCode)
+        .where('year','==',year).where('month','==',month).get();
+      out=snap.docs.map(d=>({id:d.id,...d.data()})).filter(l=>!l.voided && l.player===me.name)
+         .map(l=>({day:l.day, workouts:l.workouts||(l.workout?[l.workout]:[]), id:l.id}));
+      window._mirReadCount=(window._mirReadCount||0)+snap.size;
+    }catch(e2){ logErr('mirLoadMonthLogs fallback', e2); }
+  }
+  _mirLogCache[key]=out;
+  return out;
+}
+
+function _mirPrevMonth(m,y){ return m===1?{month:12,year:y-1}:{month:m-1,year:y}; }
+
+// ── MAIN PAINT ──
+function renderMirrorHome(){
+  if(!groupData||!me) return;
   const sc=score(me.name);
-  const pl=(season.roster||[]).find(p=>p.name===me.name)||me;
-  const tc=pl.team==='A'?'#ef4444':pl.team==='B'?'#3b82f6':'#22c55e';
-
-  // Daily fact
-  document.getElementById('factCard').innerHTML=`<div class="fact-card"><div class="fact-icon">🧠</div><div class="fact-text"><strong>Did you know?</strong> ${getDailyFact()}</div></div>`;
-
-  // ── THE STEEL: personal rank + points + competitive sting ──
-  const rosterN=(season.roster||[]).length;
-  const sorted=(season.roster||[]).map(p=>({name:p.name,pts:score(p.name).total})).sort((a,b)=>b.pts-a.pts);
-  const myIdx=sorted.findIndex(p=>p.name===me.name);
-  const rank=myIdx+1;
-  let behindHTML='';
-  if(myIdx>0){
-    const ahead=sorted[myIdx-1];
-    const gap=ahead.pts-sc.total;
-    behindHTML=`<div class="steel-behind">#${rank} of ${rosterN} · <strong>${gap} pts behind ${esc(ahead.name)}</strong></div>`;
-  } else if(rosterN>1){
-    const gap=sc.total-(sorted[1]?.pts||0);
-    behindHTML=`<div class="steel-behind lead">👑 #1 of ${rosterN} · <strong>${gap} pts ahead</strong> — defend it</div>`;
-  } else {
-    behindHTML=`<div class="steel-behind lead">👑 Top spot's yours — invite the squad and defend it</div>`;
+  // header
+  document.getElementById('mirName').textContent=me.name;
+  document.getElementById('mirCtx').textContent=`${sc.wo} workout${sc.wo===1?'':'s'} this month`;
+  const fl=document.getElementById('mirFlame');
+  document.getElementById('mirStreak').textContent=sc.streak;
+  fl.classList.toggle('cold', sc.streak<1);
+  mirRenderPills(sc);
+  // calendar (rebuild current-month panel each render; keep loaded prev panels)
+  const cur=mirCurrentDesc();
+  if(!_mirMonths.length){ _mirMonths=[cur]; _mirIdx=0; }
+  else { _mirMonths[_mirMonths.length-1]=cur; }   // replace current with fresh
+  mirRenderPanels();
+  mirWireScroll();
+  mirSyncCalHead();
+  requestAnimationFrame(()=>mirScrollToIdx(_mirIdx,false));
+  // molten flash on a just-logged tile
+  if(window._mirLast && window._mirLast.day && !cur.readonly){
+    const el=document.querySelector(`.mir-calpanel[data-idx="${_mirMonths.length-1}"] [data-day="${window._mirLast.day}"]`);
+    if(el){ el.classList.add('justlogged'); }
+    window._mirLast=null;
   }
-  // heat (streak) scaling: faster flicker + taller flame as streak grows
-  const st=sc.streak;
-  const fdur=Math.max(0.45,0.95-st*0.05).toFixed(2);
-  const flameScale=Math.min(1.6,0.85+st*0.06).toFixed(2);
-  const cold=st<1;
-  const smsg=getStreakMsg(st);
-  document.getElementById('heroCard').innerHTML=`
-    <div class="steel-hero">
-      <span class="steel-rank">⚒️ RANK #${rank} OF ${rosterN}</span>
-      <div class="steel-label">Your steel</div>
-      <div class="steel-pts cu" id="steelPts">${sc.total}<span class="u">pts</span></div>
-      ${behindHTML}
-      <div class="heat-wrap">
-        <div class="flame ${cold?'cold':''}" style="--fdur:${fdur}s;transform:scale(${cold?1:flameScale});transform-origin:center bottom">
-          <i class="f1"></i><i class="f2"></i><i class="f3"></i>
-        </div>
-        <div class="heat-meta">
-          <div class="heat-num ${cold?'cold':''}">${st}<span style="font-size:15px"> day${st===1?'':'s'}</span></div>
-          <div class="heat-cap">${cold?'Fire&#39;s out':'The heat'}</div>
-          <div class="heat-msg">${cold?'Log today to spark it back up.':(smsg||'Keep it lit — don&#39;t let it cool.')}</div>
-        </div>
-      </div>
-    </div>`;
+  // Deferred repaints recompute score() fresh (never reuse this call's `sc` —
+  // an early empty-data render's promise must not stamp stale footer/caption).
+  mirRenderChart(sc).then(mirRepaintDerived);
+  mirRenderCaption(sc);
+  mirRenderMix();
+  // async enrich (fire-and-forget): ranks + best-month
+  if(_mirRanks===null) mirLoadRanks();
+  if(_mirBestMonth===null) mirLoadBestMonth().then(mirRepaintDerived);
+}
+// Re-paint the score-derived surfaces (footer + caption) with a FRESH score,
+// used by deferred loaders so a late-resolving promise reflects current data.
+function mirRepaintDerived(){ try{ if(window.groupData && window.me){ mirSyncCalHead(); mirRenderCaption(score(me.name)); } }catch(e){} }
 
-  // ── THE FOUNDRY: shared season goal ──
-  const totalStrikes=allLogs.length;
-  const perPerson=(season.minWorkouts||12)+8; // ambition target per member
-  const goal=season.foundryGoal||Math.max(50,rosterN*perPerson);
-  const pct=Math.min(100,Math.round(totalStrikes/goal*100));
-  const ingotN=10;
-  const litN=Math.round(pct/100*ingotN);
-  let ingots='';
-  for(let i=0;i<ingotN;i++){
-    const lit=i<litN;
-    const hgt=28+i*9; // rising staircase monument
-    ingots+=`<div class="ingot ${lit?'molten':''}" style="height:${hgt}px"></div>`;
+// ── PILLS ──
+function mirRenderPills(sc){
+  const wrap=document.getElementById('mirPills'); if(!wrap) return;
+  const sessions=getSessions();
+  if(window.fromSuper){ wrap.innerHTML=''; return; }
+  // live rank in the ACTIVE group (most accurate); stored ranks for others
+  const liveRank=(()=>{ const s=(season.roster||[]).map(p=>({n:p.name,t:score(p.name).total})).sort((a,b)=>b.t-a.t); const i=s.findIndex(x=>x.n===me.name); return i<0?null:i+1; })();
+  wrap.innerHTML=sessions.map(s=>{
+    const active=s.code===groupCode;
+    const rank=active?liveRank:(_mirRanks&&_mirRanks[s.code]);
+    const initials=(s.name||s.code).replace(/[^A-Za-z ]/g,'').split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join('')||s.code.slice(0,2).toUpperCase();
+    return `<div class="gpill${active?' active':''}" onclick="mirTapPill('${s.code}')"><span class="gi">${esc(initials)}</span><span class="gr">${rank?('#'+rank):'—'}</span></div>`;
+  }).join('');
+}
+function mirTapPill(code){
+  const s=getSessions().find(x=>x.code===code); if(!s) return;
+  if(code===groupCode) return;
+  switchGroup(code);                      // existing group-switch mechanism
+  toast(`Board set to ${s.name||code}`);
+}
+async function mirLoadRanks(){
+  _mirRanks={};
+  try{ if(me.userId){ const d=await db.collection('users').doc(me.userId).get(); window._mirReadCount=(window._mirReadCount||0)+1; const gr=d.exists&&d.data().groupRanks; if(gr) _mirRanks=Object.assign({},gr); } }
+  catch(e){ logErr('mirLoadRanks', e); }
+  try{ mirRenderPills(); }catch(e){}
+}
+// Best distinct-day month count across archived seasons + current — one cached
+// query on the user's own season archives (same docs Profile already reads).
+function mirLoadBestMonth(){
+  if(_mirInflight['bm']) return _mirInflight['bm'];
+  const p=_mirLoadBestMonthInner();
+  _mirInflight['bm']=p;
+  return p.finally(()=>{ delete _mirInflight['bm']; });
+}
+async function _mirLoadBestMonthInner(){
+  let best=0;   // max distinct-day count across ARCHIVED seasons only — the
+                // current month is compared against this LIVE in the footer, so
+                // a partial-load snapshot can never bake in a wrong "best".
+  try{
+    if(me.userId){
+      const snap=await db.collection('users').doc(me.userId).collection('seasons').get();
+      window._mirReadCount=(window._mirReadCount||0)+snap.size;
+      snap.docs.forEach(d=>{ const w=d.data().wo; if(typeof w==='number') best=Math.max(best,w); });
+    }
+  }catch(e){ logErr('mirLoadBestMonth', e); }
+  _mirBestMonth=best;
+  return best;
+}
+
+// ── CALENDAR ──
+function mirRenderPanels(){
+  const track=document.getElementById('mirCaltrack'); if(!track) return;
+  const todayD=(new Date().getMonth()+1===season.month && new Date().getFullYear()===season.year)?new Date().getDate():-1;
+  const MIN_TAP=Math.max(1, todayD-7);
+  track.innerHTML=_mirMonths.map((M,ix)=>{
+    let cells=['M','T','W','T','F','S','S'].map(d=>`<div class="mir-dh">${d}</div>`).join('');
+    for(let b=0;b<M.firstDOW;b++) cells+=`<div class="mir-day empty"></div>`;
+    for(let d=1;d<=M.days;d++){
+      const isCurrent=!M.readonly;
+      const inWin=isCurrent && d>=MIN_TAP && d<=todayD;
+      const logged=M.byDay[d];
+      const woCount=logged?logged.reduce((n,l)=>n+(l.workouts.length||1),0):0;
+      if(logged){
+        const ic=M.iconByDay[d]||'i-flame';
+        const col=mirColOf((logged[0].workouts||[])[0]||'');
+        cells+=`<div class="mir-day hit${(!inWin&&isCurrent)?' capped':''}" data-day="${d}" style="background:${mirSoftOf((logged[0].workouts||[])[0]||'')}" onclick="mirTapDay(${ix},${d})"><span class="n" style="color:${col}">${d}</span><svg class="mir-ico" viewBox="0 0 24 24" style="color:${col}"><use href="#${ic}"/></svg>${woCount>1?`<span class="multi">${woCount}</span>`:''}</div>`;
+      } else if(isCurrent && d===todayD){
+        cells+=`<div class="mir-day today" data-day="${d}" onclick="mirTapDay(${ix},${d})"><span class="plus">+</span><span class="n">${d}</span></div>`;
+      } else if(isCurrent && d>todayD){
+        cells+=`<div class="mir-day future" data-day="${d}" onclick="mirTapDay(${ix},${d})"><span class="n">${d}</span></div>`;
+      } else {
+        cells+=`<div class="mir-day${(!inWin&&isCurrent)?' capped':''}" data-day="${d}" onclick="mirTapDay(${ix},${d})"><span class="n">${d}</span></div>`;
+      }
+    }
+    return `<div class="mir-calpanel" data-idx="${ix}"><div class="mir-cal">${cells}</div></div>`;
+  }).join('');
+}
+function mirSyncCalHead(){
+  const M=_mirMonths[_mirIdx]; if(!M) return;
+  document.getElementById('mirCalMonth').textContent=`${M.label} ${M.year}`;
+  document.getElementById('mirCalRO').textContent=M.readonly?'CLOSED':'';
+  document.getElementById('mirCalCount').innerHTML=`<b>${M.count}</b> of ${M.days} days marked`;
+  document.getElementById('mirArrPrev').classList.toggle('off', _mirNoMore && _mirIdx===0);
+  document.getElementById('mirArrNext').classList.toggle('off', _mirIdx>=_mirMonths.length-1);
+  // recap artifact on closed months
+  const slot=document.getElementById('mirRecap');
+  if(M.readonly){
+    slot.innerHTML=`<div class="mir-recap"><div style="flex:1"><div class="month">${M.label.toUpperCase()} ${M.year} · CLOSED</div><div class="big">${M.count}<span style="font-size:14px;color:var(--muted);font-weight:600"> days trained</span></div><div class="sub2">This month is minted — read-only.</div></div><div class="mir-qmark" style="width:40px;height:40px;color:var(--gold)">${mirIco('i-share')}</div></div>`;
+  } else slot.innerHTML='';
+  // footer (current month only) — honest best-month logic
+  const foot=document.getElementById('mirCalFoot');
+  if(M.readonly){ foot.innerHTML=''; return; }
+  foot.innerHTML=mirFooter();
+}
+function mirFooter(){
+  const sc=score(me.name);
+  const archivedBest=_mirBestMonth!==null?_mirBestMonth:0;   // best PRIOR month
+  // "Best month yet" only when this month strictly beats every archived month —
+  // and only when there IS archived history to beat (never on a first month).
+  if(archivedBest>0 && sc.wo>archivedBest) return `<b>Best month yet</b> — ${sc.wo} and counting.`;
+  const bestShown=Math.max(archivedBest, sc.wo);
+  const prev=_mirPrevMonth(season.month,season.year);
+  const ghost=_mirLogCache['ghost_'+`${groupCode}_${prev.year}_${prev.month}`];
+  const pLabel=MIR_MONTHNAMES[prev.month-1];
+  if(ghost){   // a Set of the user's prev-month distinct days
+    const now=new Date();
+    const todayD=(now.getMonth()+1===season.month&&now.getFullYear()===season.year)?now.getDate():season.days;
+    const prevToDate=[...ghost].filter(d=>d<=todayD).length;
+    const delta=sc.wo-prevToDate;
+    const cmp=delta>=0?`<b>${delta} ahead</b> of ${pLabel}-you`:`${Math.abs(delta)} behind ${pLabel}-you`;
+    return archivedBest>0?`${cmp} · best month: ${bestShown}`:cmp;
   }
-  document.getElementById('nudgeCard').innerHTML=`
-    <div class="foundry-card">
-      <div class="foundry-head">
-        <span class="foundry-title">The Foundry · Season Goal</span>
-        <span class="foundry-trophy">🏆 ${pct}%</span>
-      </div>
-      <div class="ingot-rail">${ingots}</div>
-      <div class="foundry-bar"><div class="foundry-fill" style="width:${pct}%"></div></div>
-      <div class="foundry-stat"><span class="n">${totalStrikes} <span class="g" style="font-size:13px;font-weight:600">/ ${goal} strikes</span></span><span class="g">${Math.max(0,goal-totalStrikes)} to go</span></div>
-      <div class="foundry-sub">Every workout the squad logs is a strike on the anvil. Hit the goal to forge the season trophy.</div>
-    </div>`;
+  return archivedBest>0?`best month: ${bestShown}`:`${sc.wo} days marked`;
+}
+function mirScrollToIdx(ix, smooth){
+  const track=document.getElementById('mirCaltrack'); if(!track) return;
+  const w=track.clientWidth+28;
+  track.scrollTo({left:ix*w, behavior:smooth?'smooth':'auto'});
+}
+// Scroll listener = the single source of truth for _mirIdx (so the header,
+// count, footer + recap follow the panel actually in view), plus lazy-load of
+// an older month when the user reaches the left edge. Wired once.
+function mirWireScroll(){
+  if(window.__mirScrollWired) return;
+  const track=document.getElementById('mirCaltrack'); if(!track) return;
+  track.addEventListener('scroll', ()=>{ clearTimeout(window.__mirScrollT); window.__mirScrollT=setTimeout(_mirOnScroll, 60); }, {passive:true});
+  window.__mirScrollWired=true;
+}
+function _mirOnScroll(){
+  const track=document.getElementById('mirCaltrack'); if(!track) return;
+  const w=track.clientWidth+28;
+  const ix=Math.max(0, Math.min(_mirMonths.length-1, Math.round(track.scrollLeft/w)));
+  if(ix!==_mirIdx){ _mirIdx=ix; mirSyncCalHead(); }
+  if(track.scrollLeft<=6 && !_mirNoMore && !_mirLoading) mirLoadOlder();
+}
+async function mirNavMonth(dir){
+  const track=document.getElementById('mirCaltrack'); if(!track) return;
+  if(dir<0){
+    if(_mirIdx>0){ mirScrollToIdx(_mirIdx-1,true); }
+    else if(!_mirNoMore){ await mirLoadOlder(); mirScrollToIdx(Math.max(0,_mirIdx-1),true); }
+  } else if(_mirIdx<_mirMonths.length-1){ mirScrollToIdx(_mirIdx+1,true); }
+}
+async function mirLoadOlder(){
+  if(_mirLoading||_mirNoMore) return false;
+  _mirLoading=true;
+  const track=document.getElementById('mirCaltrack');
+  try{
+    const oldest=_mirMonths[0];
+    const {month,year}=_mirPrevMonth(oldest.month, oldest.year);
+    // history floor: the group's own createdAt month (else 12 months back), so
+    // we never query months that predate the group's existence.
+    let fY, fM; const ca=groupData && groupData.createdAt;
+    if(ca && ca.seconds){ const d=new Date(ca.seconds*1000); fY=d.getFullYear(); fM=d.getMonth()+1; }
+    else { const d=new Date(); d.setMonth(d.getMonth()-12); fY=d.getFullYear(); fM=d.getMonth()+1; }
+    if((year<fY)||(year===fY&&month<fM)){ _mirNoMore=true; mirSyncCalHead(); return false; }
+    const logs=await mirLoadMonthLogs(month,year);
+    const w=track?track.clientWidth+28:0;
+    _mirMonths.unshift(mirMonthDesc(month,year,true,logs));
+    _mirIdx++;                                 // the panel in view shifted right by one
+    mirRenderPanels();
+    if(track) track.scrollLeft=_mirIdx*w;      // keep the same panel in view (no visual jump)
+    mirSyncCalHead();
+    return true;
+  }catch(e){ logErr('mirLoadOlder', e); return false; }
+  finally{ _mirLoading=false; }
+}
 
-  // (steel-hero replaces old streak highlight + stats row)
-  document.getElementById('streakCardHighlight').innerHTML='';
-  document.getElementById('hStats').innerHTML='';
+// ── DAY TAP → sheet or day-detail ──
+function mirTapDay(ix, d){
+  const M=_mirMonths[ix]; if(!M) return;
+  const el=document.querySelector(`.mir-calpanel[data-idx="${ix}"] [data-day="${d}"]`);
+  const shake=()=>{ if(el){ el.classList.add('shake'); setTimeout(()=>el.classList.remove('shake'),320); } };
+  if(M.readonly){ shake(); toast('This month is closed.'); return; }
+  const todayD=new Date().getDate();
+  const MIN_TAP=Math.max(1, todayD-7);
+  if(d>todayD){ shake(); return; }                          // future
+  if(d<MIN_TAP){ shake(); toast("Logs older than a week can't be added — Forge counts the week you're living."); return; }
+  if(M.byDay[d]){ mirOpenDayDetail(d); return; }            // logged, in window → detail
+  _mirPendingDay=d;                                          // empty, in window → log sheet
+  mirOpenLogSheet(d);
+}
 
-  // Role bar
-  const {capTarget=16,vcTarget=20,minWorkouts=12,days:DAYS=31,month,year}=season;
-  let rHTML='';
-  const rolesOn = season.rolesEnabled !== false;
-  if(rolesOn && pl.role!=='Player'){
-    const tgt=pl.role==='Captain'?capTarget:vcTarget;
-    const bonus=pl.role==='Captain'?10:15;
-    const penalty=10;
-    const pct=Math.min(100,Math.round(sc.wo/tgt*100));
-    const ok=sc.wo>=tgt;
-    const bc=ok?'var(--green)':pct>60?'var(--gold)':'var(--red)';
-    const remaining=Math.max(0,tgt-sc.wo);
-    rHTML=`<div class="card">
-      <div class="row">
-        <div><div style="font-size:14px;font-weight:700">${esc(pl.role)} Target</div><div class="tmuted" style="font-size:12px">${sc.wo}/${tgt} workouts</div></div>
-        <div class="rbadge ${pl.role==='Captain'?'rCaptain':'rVC'}">${esc(pl.role)}</div>
-      </div>
-      <div class="pwrap"><div class="pbar" style="width:${pct}%;background:${bc}"></div></div>
-      ${ok?`<div class="warn-box warn-green" style="margin-top:10px;margin-bottom:0">✅ Target hit — +${bonus} pts on day ${DAYS}</div>`:`<div class="warn-box warn-red" style="margin-top:10px;margin-bottom:0">⚠️ ${remaining} more workouts needed — missing target deducts ${penalty} pts on day ${DAYS}</div>`}
-    </div>`;
+// ── SHEET: log picker ──
+function mirRecent5(){
+  const mine=(allLogs||[]).filter(l=>l.player===me.name);
+  const lastDay={};
+  mine.forEach(l=>{ (l.workouts||[]).forEach(w=>{ lastDay[w]=Math.max(lastDay[w]||0, l.day||0); }); });
+  let types=Object.keys(lastDay).sort((a,b)=>lastDay[b]-lastDay[a]).slice(0,5);
+  if(types.length<5){ for(const w of ['Walk','Gym','Run','Yoga','Cricket']){ if(types.length>=5) break; if(!types.includes(w)) types.push(w); } }
+  return types.slice(0,5);
+}
+function mirOpenLogSheet(d){
+  const dt=new Date(season.year, season.month-1, d);
+  const DOW=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const already=(_mirMonths[_mirMonths.length-1].byDay[d]);
+  document.getElementById('mirSheetTitle').textContent=already?`Add another to ${MIR_MONTHNAMES[season.month-1]} ${d}?`:(d===new Date().getDate()?'Log today?':`Log for ${MIR_MONTHNAMES[season.month-1]} ${d}?`);
+  document.getElementById('mirSheetSub').textContent=`${DOW[dt.getDay()]}, ${MIR_MONTHNAMES[season.month-1]} ${d} · logging to ${groupData.name||groupCode}`;
+  const picks=mirRecent5().map(w=>`<div class="mir-pick" onclick="mirLogQuick('${escForInlineJsAttr(w)}')">${mirIco(mirIconOf(w),'color:'+mirColOf(w))}<span class="lbl">${esc(w)}</span></div>`).join('');
+  document.getElementById('mirSheetBody').innerHTML=`<div class="mir-picks">${picks}</div><div class="mir-else" onclick="mirOpenFull()">Something else? <b>Open full list</b></div>`;
+  mirOpenSheet();
+}
+function mirOpenDayDetail(d){
+  _mirPendingDay=d;
+  const cur=_mirMonths[_mirMonths.length-1];
+  const logs=cur.byDay[d]||[];
+  const dt=new Date(season.year, season.month-1, d);
+  const DOW=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  document.getElementById('mirSheetTitle').textContent=`${MIR_MONTHNAMES[season.month-1]} ${d}`;
+  document.getElementById('mirSheetSub').textContent=`${DOW[dt.getDay()]} · ${logs.reduce((n,l)=>n+l.workouts.length,0)} logged`;
+  // One row PER LOG (Remove tombstones the whole log — Forge logs are atomic);
+  // a multi-workout log shows its workouts joined so nothing is hidden.
+  const rows=logs.map(l=>`<div class="ddrow">${mirIco(mirIconOf(l.workouts[0]||''),'color:'+mirColOf(l.workouts[0]||''))}<span class="ddw">${esc((l.workouts||[]).join(' · ')||'Workout')}</span><span class="ddvoid" onclick="mirVoidLog('${l.id}')">Remove</span></div>`).join('');
+  document.getElementById('mirSheetBody').innerHTML=`<div class="mir-daydetail">${rows}<button class="btn btn-surface mir-daddbtn" onclick="mirOpenLogSheet(${d})">+ Add another</button></div>`;
+  mirOpenSheet();
+}
+async function mirVoidLog(id){
+  try{ await voidLogDoc(id, me.name); toast('Removed'); mirCloseSheet(); }
+  catch(e){ logErr('mirVoidLog', e); toast('Remove failed — check connection.','error'); }
+}
+function mirOpenSheet(){ document.getElementById('mirScrim').classList.add('on'); document.getElementById('mirSheet').classList.add('on'); }
+function mirCloseSheet(){ document.getElementById('mirScrim').classList.remove('on'); document.getElementById('mirSheet').classList.remove('on'); }
+function mirLogQuick(w){
+  mirCloseSheet();
+  selDay=_mirPendingDay; selW=[w];
+  window._mirrorLogMode=true;
+  submitLog();
+}
+function mirOpenFull(){
+  mirCloseSheet();
+  selDay=_mirPendingDay;
+  showTab('log');
+  goS2();                          // existing full picker (chips + custom entry) for this day
+}
+
+// ── CHART: {Month} vs {PrevMonth}-you (cumulative distinct days) ──
+async function mirRenderChart(sc){
+  const prev=_mirPrevMonth(season.month, season.year);
+  document.getElementById('mirChartTitle').textContent=`${MIR_MONTHNAMES[season.month-1]} vs ${MIR_MONTHNAMES[prev.month-1]}-you`;
+  const daysInMonth=season.days||new Date(season.year,season.month,0).getDate();
+  const todayD=(new Date().getMonth()+1===season.month&&new Date().getFullYear()===season.year)?new Date().getDate():daysInMonth;
+  const myDays=sc.days;                                   // Set of my logged days this month
+  const prevDays=await mirGhostDays(prev.month, prev.year);
+  mirPaintChart(myDays, prevDays, daysInMonth, todayD, MIR_MONTHNAMES[prev.month-1]);
+}
+// Ghost source order: (a) prev season snapshot dayCounts, (b) fallback own-log
+// query. Returns a Set of distinct logged days (or null if none).
+async function mirGhostDays(month, year){
+  const key=`${groupCode}_${year}_${month}`;
+  if(_mirLogCache['ghost_'+key]!==undefined) return _mirLogCache['ghost_'+key];
+  if(_mirInflight['gh_'+key]) return _mirInflight['gh_'+key];
+  const p=_mirGhostDaysInner(month, year, key);
+  _mirInflight['gh_'+key]=p;
+  try{ return await p; } finally { delete _mirInflight['gh_'+key]; }
+}
+async function _mirGhostDaysInner(month, year, key){
+  let set=null;
+  try{
+    if(me.userId){
+      const d=await db.collection('users').doc(me.userId).collection('seasons').doc(`${groupCode}_${seasonIdOf(month,year)}`).get();
+      window._mirReadCount=(window._mirReadCount||0)+1;
+      const dc=d.exists && d.data().dayCounts;
+      if(Array.isArray(dc)){ set=new Set(); dc.forEach((c,i)=>{ if(c>0) set.add(i+1); }); }
+    }
+  }catch(e){ logErr('mirGhostDays snapshot', e); }
+  if(set===null){
+    const logs=await mirLoadMonthLogs(month,year);
+    set=logs.length?_mirDaySet(logs):null;
   }
-  if(sc.wo<minWorkouts){
-    const missing=minWorkouts-sc.wo;
-    rHTML=`<div class="warn-box warn-red" style="color:var(--red)">⚠️ You need ${missing} more workouts to avoid a <strong>${missing*5} pt deduction</strong> on day ${DAYS}</div>`+rHTML;
-  }
-  document.getElementById('roleBar').innerHTML=rHTML;
+  _mirLogCache['ghost_'+key]=set;
+  return set;
+}
+function mirPaintChart(myDays, prevDays, daysInMonth, todayD, prevLabel){
+  const W=320,H=104,PT=8,PB=8;
+  const cum=(set,upTo)=>{ const a=[0]; let run=0; for(let d=1;d<=daysInMonth;d++){ if(set&&set.has(d)&&d<=upTo) run++; a[d]=run; } return a; };
+  const myC=cum(myDays, todayD), prC=prevDays?cum(prevDays, daysInMonth):null;
+  const maxY=Math.max(1, myC[todayD], prC?Math.max(...prC):0);
+  const X=d=>((d-1)/Math.max(1,daysInMonth-1))*W;
+  const Y=v=>H-PB-(v/maxY)*(H-PT-PB);
+  const path=(arr,upTo)=>{ let s=''; for(let d=1;d<=upTo;d++){ s+=(d===1?'M':'L')+X(d).toFixed(1)+','+Y(arr[d]).toFixed(1)+' '; } return s.trim(); };
+  let svg=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block">`;
+  [0.5,0.25].forEach(f=>{ const y=(H-PB)-(f)*(H-PT-PB); svg+=`<line x1="0" y1="${y.toFixed(0)}" x2="${W}" y2="${y.toFixed(0)}" stroke="var(--border)"/>`; });
+  svg+=`<line x1="0" y1="${H-PB}" x2="${W}" y2="${H-PB}" stroke="var(--border)"/>`;
+  if(prC) svg+=`<path d="${path(prC,daysInMonth)}" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4 4" opacity=".55"/>`;
+  svg+=`<path d="${path(myC,todayD)}" fill="none" stroke="var(--gold)" stroke-width="2.5" stroke-linecap="round"/>`;
+  const tipX=X(todayD), tipY=Y(myC[todayD]);
+  svg+=`<circle cx="${tipX.toFixed(1)}" cy="${tipY.toFixed(1)}" r="4" fill="var(--gold)"/>`;
+  svg+=`</svg>`;
+  document.getElementById('mirChart').innerHTML=svg;
+  document.getElementById('mirChartAxis').innerHTML=`<span>${MIR_MONTHNAMES[season.month-1].slice(0,3)} 1</span><span>today · ${todayD}</span><span>${MIR_MONTHNAMES[season.month-1].slice(0,3)} ${daysInMonth}</span>`;
+  const chip=document.getElementById('mirChartChip');
+  if(prC){
+    const delta=myC[todayD]-prC[todayD];
+    chip.className='mir-chartchip '+(delta>=0?'ahead':'behind');
+    chip.textContent=`${Math.abs(delta)} day${Math.abs(delta)===1?'':'s'} ${delta>=0?'ahead':'behind'}`;
+  } else { chip.className='mir-chartchip behind'; chip.textContent=`No ${prevLabel}-you yet`; }
+}
 
-  // Twist banner (Boss/Underdog are window-bound now — not surfaced via the toggle list)
-  const activeTwistList=TWIST_LIBRARY.filter(t=>t.id!=='boss_week'&&t.id!=='underdog_week'&&activeTwists[t.id]?.enabled);
-  document.getElementById('twistBanner').innerHTML=activeTwistList.length===0?'':
-    `<div class="card" style="border-color:var(--purple)">
-      <div style="font-size:12px;font-weight:600;color:var(--purple);margin-bottom:8px">⚡ ACTIVE TWISTS THIS MONTH</div>
-      ${activeTwistList.map(t=>`<div style="font-size:13px;margin-bottom:4px">• <strong>${t.name}</strong> — ${t.desc}</div>`).join('')}
-    </div>`;
-
-  // Calendar with tooltip
-  const todayD=now.getMonth()+1===month&&now.getFullYear()===year?now.getDate():-1;
-  const firstDOW=(new Date(year,month-1,1).getDay()||7)-1;
-  const hdrs=['M','T','W','T','F','S','S'];
-  let cal=hdrs.map(d=>`<div class="cdh">${d}</div>`).join('');
-  for(let i=0;i<firstDOW;i++) cal+=`<div class="cd empty"></div>`;
-  for(let d=1;d<=DAYS;d++){
-    const logged=sc.days.has(d),isToday=d===todayD;
-    if(logged){
-      const workoutsToday=[...new Set(allLogs.filter(l=>l.player===me.name&&l.day===d).flatMap(l=>l.workouts||[l.workout]).filter(Boolean))].join(', ');
-      cal+=`<div class="cd logged" onclick="showCalTip(this,'${escForInlineJsAttr(workoutsToday)}')">${d}</div>`;
-    } else {
-      cal+=`<div class="cd${isToday?' today':''}">${d}</div>`;
+// ── CAPTION LADDER (8 rules, first match wins, seeded per day, no repeat) ──
+function mirRenderCaption(sc){
+  const el=document.getElementById('mirCaption'); if(!el) return;
+  const cap=mirCaption(sc);
+  el.innerHTML=cap;
+}
+function mirCaption(sc){
+  const now=new Date();
+  const todayD=(now.getMonth()+1===season.month&&now.getFullYear()===season.year)?now.getDate():-1;
+  const loggedToday=todayD>0 && sc.days.has(todayD);
+  const hour=now.getHours();
+  const myLogs=(allLogs||[]).filter(l=>l.player===me.name);
+  const daysSorted=[...sc.days].sort((a,b)=>a-b);
+  const lastDay=daysSorted.length?daysSorted[daysSorted.length-1]:0;
+  const gapNow=todayD>0?todayD-lastDay:0;
+  const cands=[];  // {id, html}
+  const B=t=>`<b>${esc(String(t))}</b>`;
+  // rules 1-3 skipped if today already logged
+  if(!loggedToday){
+    if(sc.streak>0 && hour>=17) cands.push({id:1, html:`Log today to keep ${B(sc.streak)}-day streak alive.`});
+    // rule 2: team trailing in active group
+    try{
+      const myTeam=(season.roster||[]).find(p=>p.name===me.name)?.team;
+      if(myTeam){
+        const teams=[...new Set((season.roster||[]).map(p=>p.team))];
+        const avgs=teams.map(t=>({t, a:teamTotal(t)})).sort((a,b)=>b.a-a.a);
+        const mine=avgs.find(x=>x.t===myTeam), lead=avgs[0];
+        if(mine && lead && mine.t!==lead.t){ const gap=lead.a-mine.a; cands.push({id:2, html:`Team ${esc(myTeam)} is ${B(gap)} behind — your log counts.`}); }
+      }
+    }catch(e){}
+    if(gapNow>=3){
+      // longest gap this month
+      let longest=0,prev=0; daysSorted.forEach(d=>{ if(prev) longest=Math.max(longest,d-prev); prev=d; });
+      longest=Math.max(longest, gapNow);
+      cands.push({id:3, html:`${B(gapNow)} days quiet — your longest gap this month is ${B(longest)}.`});
     }
   }
-  document.getElementById('calGrid').innerHTML=cal;
+  // rule 4: a workout >=15% of mix and unlogged >=10 days
+  try{
+    const freq={}; myLogs.forEach(l=>(l.workouts||[]).forEach(w=>{ freq[w]=(freq[w]||0)+1; }));
+    const total=Object.values(freq).reduce((a,b)=>a+b,0);
+    if(total>0){
+      const ranked=Object.keys(freq).sort((a,b)=>freq[b]-freq[a]);
+      ranked.forEach((w,idx)=>{
+        if(freq[w]/total>=0.15){
+          const lastW=Math.max(0,...myLogs.filter(l=>(l.workouts||[]).includes(w)).map(l=>l.day||0));
+          const since=todayD>0?todayD-lastW:0;
+          if(since>=10) cands.push({id:4, html:`${B(since)} days since your last ${B(w)} — it's your #${idx+1}.`});
+        }
+      });
+    }
+  }catch(e){}
+  // rule 5: within 2 of prev-month cumulative / just passed
+  try{
+    const prev=_mirPrevMonth(season.month,season.year);
+    const prevSet=_mirLogCache['ghost_'+`${groupCode}_${prev.year}_${prev.month}`];
+    if(prevSet && todayD>0){
+      const prevCumToday=[...prevSet].filter(d=>d<=todayD).length;
+      const diff=prevCumToday-sc.wo;
+      const pLabel=MIR_MONTHNAMES[prev.month-1];
+      if(diff>0 && diff<=2) cands.push({id:5, html:`One more and you pass ${B(pLabel+'-you')}.`});
+      else if(diff<0) cands.push({id:5, html:`You're ahead of ${B(pLabel+'-you')}.`});
+    }
+  }catch(e){}
+  // rule 6: within 3 of best month
+  if(_mirBestMonth!==null && _mirBestMonth>sc.wo && _mirBestMonth-sc.wo<=3){
+    cands.push({id:6, html:`${B(_mirBestMonth-sc.wo)} away from your best month ever.`});
+  }
+  // rule 7: never-logged weekday pattern
+  try{
+    if(myLogs.length>=8){
+      const DOWn=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+      const cnt=[0,0,0,0,0,0,0];
+      myLogs.forEach(l=>{ if(l.day){ cnt[new Date(season.year,season.month-1,l.day).getDay()]++; } });
+      const zero=cnt.map((c,i)=>({c,i})).filter(x=>x.c===0);
+      if(zero.length===1) cands.push({id:7, html:`You've never logged a ${B(DOWn[zero[0].i])} — this month's blank spot.`});
+    }
+  }catch(e){}
+  // rule 8: fallback mix note
+  try{
+    const recent=myLogs.slice().sort((a,b)=>(b.day||0)-(a.day||0)).slice(0,5);
+    const catCnt={}; recent.forEach(l=>(l.workouts||[]).forEach(w=>{ const c=mirCatOf(w); catCnt[c]=(catCnt[c]||0)+1; }));
+    const top=Object.keys(catCnt).sort((a,b)=>catCnt[b]-catCnt[a])[0];
+    if(top) cands.push({id:8, html:`${B(top.charAt(0).toUpperCase()+top.slice(1))}-heavy week — ${B(catCnt[top])} of your last 5.`});
+  }catch(e){}
+  cands.push({id:0, html:`Every day you log is a strike on the anvil. ${loggedToday?"Today's counted.":'Tap today to add one.'}`});
+  // deterministic pick: first match, but skip the one shown yesterday if a
+  // different candidate exists (no repeat two days running).
+  const dateKey=ymdToday();
+  let lastShown=null; try{ lastShown=JSON.parse(localStorage.getItem('mir_cap')||'null'); }catch(e){}
+  let pick=cands[0];
+  if(lastShown && lastShown.date!==dateKey && lastShown.id===pick.id && cands.length>1){ pick=cands[1]; }
+  try{ localStorage.setItem('mir_cap', JSON.stringify({date:dateKey, id:pick.id})); }catch(e){}
+  return pick.html;
+}
 
-  // Team streak card
-  const team=pl.team;
-  const teamMembers=(season.roster||[]).filter(p=>p.team===team);
-  const threshold=Math.ceil(teamMembers.length*(season.teamStreakThreshold??0.6));
-  const teamLogs=allLogs.filter(l=>(season.roster||[]).find(p=>p.name===l.player&&p.team===team));
-  const dc={};
-  teamLogs.forEach(l=>{ if(!dc[l.day]) dc[l.day]=new Set(); dc[l.day].add(l.player); });
-  const bonusDays=Object.entries(dc).filter(([d,ps])=>ps.size>=threshold).map(([d])=>+d).sort((a,b)=>a-b);
-  document.getElementById('streakCard').innerHTML=`
-    <div class="card-title">Team ${team} — qualifying streak days</div>
-    ${bonusDays.length===0
-      ?`<div class="tmuted">No days yet. Get ${threshold}+ teammates to log on the same day!</div>`
-      :bonusDays.map(d=>`<div class="row" style="padding:6px 0;border-bottom:1px solid var(--border)"><span style="font-size:13px">Day ${d} — ${dc[d].size} members</span><span style="font-size:11px;color:var(--green)">✅ Streak bonus</span></div>`).join('')
-    }`;
+// ── MIX BARS (top-5 all-time, from users.workoutCounts; self-heal if missing) ──
+function mirRenderMix(){
+  const el=document.getElementById('mirMix'); if(!el) return;
+  let counts=window._mirWorkoutCounts;
+  if(!counts){ mirLoadWorkoutCounts().then(()=>mirRenderMix()); el.innerHTML='<div class="tmuted" style="font-size:12px">Loading your mix…</div>'; return; }
+  const entries=Object.keys(counts).map(k=>({name:counts[k].label||k, n:counts[k].n||counts[k]||0}))
+    .filter(e=>e.n>0).sort((a,b)=>b.n-a.n).slice(0,5);
+  if(!entries.length){ el.innerHTML='<div class="tmuted" style="font-size:12px">Log a few workouts and your all-time mix builds here.</div>'; return; }
+  const max=entries[0].n;
+  el.innerHTML=entries.map(e=>{
+    const col=mirColOf(e.name);
+    return `<div class="mir-bar"><div class="lbl" style="color:${col}">${mirIco(mirIconOf(e.name))}<span>${esc(e.name)}</span></div><div class="track"><div class="fill" style="width:${Math.max(6,Math.round(e.n/max*100))}%;background:${col}"></div></div><div class="bv">${e.n}</div></div>`;
+  }).join('');
+}
+// Reads users.workoutCounts; self-heals ONCE from the user's own logs if absent.
+function mirLoadWorkoutCounts(){
+  if(_mirInflight['wc']) return _mirInflight['wc'];
+  const p=_mirLoadWorkoutCountsInner();
+  _mirInflight['wc']=p;
+  return p.finally(()=>{ delete _mirInflight['wc']; });
+}
+async function _mirLoadWorkoutCountsInner(){
+  try{
+    if(!me.userId){ window._mirWorkoutCounts={}; return; }
+    const d=await db.collection('users').doc(me.userId).get();
+    window._mirReadCount=(window._mirReadCount||0)+1;
+    let wc=d.exists && d.data().workoutCounts;
+    if(wc && Object.keys(wc).length){ window._mirWorkoutCounts=wc; return; }
+    // self-heal backfill from own logs (single query), write once
+    const snap=await db.collection('logs').where('userId','==',me.userId).get();
+    window._mirReadCount=(window._mirReadCount||0)+snap.size;
+    const built={};
+    snap.docs.map(x=>x.data()).filter(l=>!l.voided).forEach(l=>{
+      (l.workouts||(l.workout?[l.workout]:[])).forEach(w=>{ const lab=String(w||'').trim(); if(!lab) return; const k=lab.toLowerCase(); (built[k]||(built[k]={label:lab,n:0})).n++; });
+    });
+    window._mirWorkoutCounts=built;
+    if(Object.keys(built).length){ db.collection('users').doc(me.userId).set({workoutCounts:built},{merge:true}).catch(()=>{}); }
+  }catch(e){ logErr('mirLoadWorkoutCounts', e); window._mirWorkoutCounts=window._mirWorkoutCounts||{}; }
+}
 
-  renderPledgeStatusCard();
-  renderGoalRing();
+// ── AFTERGLOW REPORT (Home log path) ──
+function mirShowReport(rw){
+  const now=new Date();
+  const todayD=now.getDate();
+  const isToday = _mirPendingDay===todayD && now.getMonth()+1===season.month && now.getFullYear()===season.year;
+  const woName=(selW||[]).join(', ')||'Workout';
+  const ord=n=>n%10==1&&n%100!=11?'st':n%10==2&&n%100!=12?'nd':n%10==3&&n%100!=13?'rd':'th';
+  const count=rw?rw.myCount:(allLogs.filter(l=>l.player===me.name).length);
+  document.getElementById('mirRWhat').textContent=`${woName} · your ${count}${ord(count)} this month`;
+  // rank card ONLY when today + rank actually moved
+  const rr=document.getElementById('mirRRank');
+  if(isToday && rw && rw.movedTo){
+    const from=rw.movedTo+1;   // improved by at least one; show a simple up-move
+    rr.style.display=''; rr.innerHTML=`<div class="mir-rankrow"><span class="from">#${from>rw.movedTo?from:rw.movedTo+1}</span><span class="arrow">→</span><span class="to">#${rw.movedTo}</span></div><div class="rcap">That log moved you up the board</div>`;
+  } else rr.style.display='none';
+  // streak line (NO rest-day copy)
+  const streakNow=score(me.name).streak;
+  document.getElementById('mirRStreak').innerHTML=`<div class="mir-rline">${mirIco('i-flame','color:var(--gold)')}<span>Streak now <b>${streakNow}</b> — see you tomorrow</span></div>`;
+  // witnesses from already-loaded feed data
+  const witness=[...new Set(allLogs.filter(l=>l.day===todayD && l.player!==me.name).map(l=>l.player))].slice(0,3);
+  const wc=document.getElementById('mirRWitness');
+  if(witness.length && isToday){
+    wc.style.display='';
+    wc.innerHTML=`<div class="mir-rline"><span><b>${esc(witness.join(', '))}</b> also showed up today</span></div>`;
+  } else wc.style.display='none';
+  window._mirLast={day:_mirPendingDay};
+  if(navigator.vibrate) navigator.vibrate([25,30,60]);
+  const rep=document.getElementById('mirReport');
+  rep.classList.add('on'); rep.style.transform='';
+}
+function mirCloseReport(){
+  const rep=document.getElementById('mirReport');
+  rep.classList.remove('on'); rep.style.transform='';
+  selDay=null; selW=[]; window._mirrorLogMode=false;
+  try{ renderMirrorHome(); }catch(e){ logErr('mirCloseReport render', e); }
+}
+// swipe-down dismiss on the report
+(function(){
+  const rep=document.getElementById('mirReport'); if(!rep) return;
+  let ry=null;
+  rep.addEventListener('touchstart',e=>{ ry=e.touches[0].clientY; },{passive:true});
+  rep.addEventListener('touchmove',e=>{ if(ry===null) return; const dy=e.touches[0].clientY-ry; if(dy>0) rep.style.transform=`translateY(${dy*0.5}px)`; },{passive:true});
+  rep.addEventListener('touchend',e=>{ if(ry===null) return; const dy=e.changedTouches[0].clientY-ry; ry=null; if(dy>70) mirCloseReport(); else rep.style.transform=''; },{passive:true});
+})();
+
+// + pill → existing Profile "Link Another Group" flow (no new Groups page)
+function openLinkGroup(){
+  showTab('profile');
+  setTimeout(()=>{ const el=document.getElementById('linkGroupCode'); if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.focus(); } }, 120);
 }
 
 // ── PERSONAL MONTHLY GOAL RING ────────────────────────────────────────────
@@ -2441,6 +3005,11 @@ async function updateStreakAndStats(userId, year, month, day){
 }
 
 async function submitLog(){
+  // Mirror Home sets this flag before calling: log the write EXACTLY the same
+  // way (multi-group broadcast + self-heal watchdog + denorm, all untouched),
+  // but present the afterglow report instead of the Log-tab ls3 screen.
+  // Consumed once per call so the Log tab's own submits are never affected.
+  const _mir = window._mirrorLogMode === true; window._mirrorLogMode=false;
   const btn=document.getElementById('subBtn');
   btn.disabled=true; btn.textContent='Saving...';
   try{
@@ -2509,6 +3078,26 @@ async function submitLog(){
     // R3: bump the "active today" daily rollup, one per target group (fire-and-
     // forget, chained on a genuine commit — never on failure, never blocks).
     commitPromise.then(()=>{ if(commitFailed) return; const cc={}; targets.forEach(s=>{ cc[s.code]=(cc[s.code]||0)+1; }); bumpDailyRollup(ymdToday(), cc); });
+    // MIRROR denorm (a) groupRanks + (b) workoutCounts — USER-scoped, one write
+    // per submit (never per broadcast target). Fire-and-forget on a genuine
+    // commit; the pills read groupRanks so we never query another group's logs.
+    commitPromise.then(()=>{
+      if(commitFailed || !me.userId) return;
+      try{
+        // (a) my live rank in the ACTIVE group (only group whose logs are loaded)
+        const s=(season.roster||[]).map(p=>({n:p.name,t:score(p.name).total})).sort((a,b)=>b.t-a.t);
+        const rank=s.findIndex(x=>x.n===me.name)+1;
+        // (b) per-type increments for THIS submit (deduped set of workouts)
+        const wc={}; [...new Set(selW||[])].forEach(w=>{ const lab=String(w||'').trim(); if(!lab) return; const k=lab.toLowerCase(); (wc[k]||(wc[k]={label:lab,n:0})).n++; });
+        const upd={};
+        if(rank>0) upd.groupRanks={ [groupCode]: rank };
+        if(Object.keys(wc).length){ const inc={}; Object.keys(wc).forEach(k=>{ inc[k]={ label:wc[k].label, n:firebase.firestore.FieldValue.increment(wc[k].n) }; }); upd.workoutCounts=inc; }
+        if(Object.keys(upd).length) db.collection('users').doc(me.userId).set(upd,{merge:true}).catch(()=>{});
+        // optimistic in-memory reflect so the mix bars + pill don't wait on a re-read
+        if(window._mirWorkoutCounts) Object.keys(wc).forEach(k=>{ (window._mirWorkoutCounts[k]||(window._mirWorkoutCounts[k]={label:wc[k].label,n:0})).n+=wc[k].n; });
+        if(_mirRanks && rank>0) _mirRanks[groupCode]=rank;
+      }catch(e){ logErr('submitLog: mirror denorm', e); }
+    });
     await Promise.race([commitPromise, new Promise(r=>setTimeout(r,4000))]);
 
     if(!commitSettled){
@@ -2546,6 +3135,11 @@ async function submitLog(){
       try { rw = computeRewardData(newLogIds); }
       catch(e){ logErr('submitLog: reward computation failed', e); }
 
+      if(_mir){
+        // Mirror Home log path → the afterglow report (Log-tab ls3 is skipped).
+        try { mirShowReport(rw); }
+        catch(e){ logErr('submitLog: mirror afterglow failed', e); }
+      } else {
       const myDays=[...allLogs.filter(l=>l.player===me.name).map(l=>l.day)].sort((a,b)=>a-b);
       const lastDay=myDays.length>=2?myDays[myDays.length-2]:null;
       const isComeback=lastDay&&(selDay-lastDay)>=3;
@@ -2569,6 +3163,7 @@ async function submitLog(){
         celebrateReward(rw);
       } catch(e){
         logErr('submitLog: celebration failed', e);
+      }
       }
     } catch(e){
       logErr('submitLog: post-commit presentation failed', e);
@@ -3719,6 +4314,13 @@ async function writeSeasonSnapshot(code){
 
   const seasonKey = `${code}_${sid}`;
   let archivesWritten = 0;
+  // MIRROR denorm (c): per-player per-day workout-entry counts for the archived
+  // month. ADDITIVE field only — the Mirror chart's prev-month ghost reads it
+  // (index i → day i+1). Computed once from the already-loaded non-voided logs;
+  // no existing snapshot field or rollover logic is altered.
+  const _dim = sData.days || new Date(year, month, 0).getDate();
+  const _dcByPlayer = {};
+  logs.forEach(l=>{ if(!l.player || !l.day || l.day<1 || l.day>_dim) return; const arr=_dcByPlayer[l.player]||(_dcByPlayer[l.player]=new Array(_dim).fill(0)); arr[l.day-1]+=(Array.isArray(l.workouts)?l.workouts.length:1); });
   finalStandings.forEach(e=>{
     if(!e.userId) return; // unmigrated entry — nothing to archive against yet
     const badges = (badgesAwarded.find(b=>b.name===e.name)||{}).badges||[];
@@ -3726,7 +4328,7 @@ async function writeSeasonSnapshot(code){
     batch.set(db.collection('users').doc(e.userId).collection('seasons').doc(seasonKey), {
       groupCode:code, sid, groupName: gSnap.data().name, month, year,
       rank:e.rank, total:e.total, wo:e.wo, streak:e.streak, team:e.team, teamRank, rosterSize:roster.length,
-      badges
+      badges, dayCounts: _dcByPlayer[e.name] || new Array(_dim).fill(0)
     });
     const badgeCountFields = {};
     badges.forEach(b=>{ badgeCountFields[`stats.badgeCounts.${b}`] = firebase.firestore.FieldValue.increment(1); });
@@ -5591,8 +6193,9 @@ if('serviceWorker' in navigator){
     wrap.querySelector('.recap-trigger-card').addEventListener('click', function(){
       try{ var data=computeRecap(); if(data) showModal(data); }catch(e){}
     });
-    var hero = document.getElementById('heroCard');
-    if(hero && hero.parentNode) hero.parentNode.insertBefore(wrap, hero.nextSibling);
+    // Mirror: anchor the recap trigger before the chart card (heroCard is gone).
+    var anchor = document.getElementById('mirChartCard') || document.getElementById('mirCaptionCard');
+    if(anchor && anchor.parentNode) anchor.parentNode.insertBefore(wrap, anchor);
   }
 
   function removeRecapBtn(){
@@ -5604,8 +6207,8 @@ if('serviceWorker' in navigator){
       var appScreen = document.getElementById('screen-app');
       if(!appScreen || !appScreen.classList.contains('active')) return;
       if(!window.season || !window.me || !window.groupCode) return;
-      var hero = document.getElementById('heroCard');
-      if(!hero || !hero.innerHTML.trim()) return;   // wait for renderHome() to paint
+      var painted = document.getElementById('mirName');
+      if(!painted || !painted.textContent.trim()) return;   // wait for renderMirrorHome() to paint
       if(shouldShowBtn()) injectRecapBtn(); else removeRecapBtn();
     }catch(e){}
   }

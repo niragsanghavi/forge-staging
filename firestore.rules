@@ -121,7 +121,19 @@ service cloud.firestore {
       allow create: if isAuthed()
         && request.resource.data.size() <= 16
         && request.resource.data.workouts is list
-        && request.resource.data.workouts.size() <= 50;
+        && request.resource.data.workouts.size() <= 50
+        // Mirror pass-1 backlog clamp: a workout's calendar date (year/month/day)
+        // must be the same calendar month as the server clock AND within an
+        // ~8-day backlog window. Mirrors the client's "max(1st, today-7)…today"
+        // tappable window; the extra day of slack (8 not 7) absorbs clock skew.
+        // request.time is UTC; Forge's users are IST (UTC+5:30, always AHEAD of
+        // UTC), so an early-morning IST "today" can be one calendar day ahead of
+        // the UTC day — the "+ 1" on the upper bound admits that legitimate log
+        // instead of false-rejecting it for ~5.5h every night.
+        && request.resource.data.year == request.time.year()
+        && request.resource.data.month == request.time.month()
+        && request.resource.data.day >= request.time.day() - 8
+        && request.resource.data.day <= request.time.day() + 1;
       allow delete: if false;
       allow update: if isAuthed()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['voided','voidedBy','voidedAt']);
