@@ -128,12 +128,23 @@ service cloud.firestore {
         // tappable window; the extra day of slack (8 not 7) absorbs clock skew.
         // request.time is UTC; Forge's users are IST (UTC+5:30, always AHEAD of
         // UTC), so an early-morning IST "today" can be one calendar day ahead of
-        // the UTC day — the "+ 1" on the upper bound admits that legitimate log
-        // instead of false-rejecting it for ~5.5h every night.
-        && request.resource.data.year == request.time.year()
-        && request.resource.data.month == request.time.month()
-        && request.resource.data.day >= request.time.day() - 8
-        && request.resource.data.day <= request.time.day() + 1;
+        // the UTC day — the "+ 1" on the upper bound admits that legitimate log.
+        // MONTH SEAM: the same 5.5h IST lead crosses a MONTH boundary on the
+        // 1st (e.g. Aug 1 00:30 IST is still Jul 31 UTC), where the month
+        // equality alone would false-reject "log today" for the first hours of
+        // every month. The OR branch admits exactly day 1 of the month that
+        // begins within the next 24h of server time — nothing else.
+        && (
+          (request.resource.data.year == request.time.year()
+            && request.resource.data.month == request.time.month()
+            && request.resource.data.day >= request.time.day() - 8
+            && request.resource.data.day <= request.time.day() + 1)
+          ||
+          (request.resource.data.day == 1
+            && (request.time + duration.value(1, 'd')).day() == 1
+            && request.resource.data.month == (request.time + duration.value(1, 'd')).month()
+            && request.resource.data.year == (request.time + duration.value(1, 'd')).year())
+        );
       allow delete: if false;
       allow update: if isAuthed()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['voided','voidedBy','voidedAt']);
