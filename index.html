@@ -14,6 +14,54 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 </head>
 <body>
+<!-- ══ ICON LIBRARY ══ Document-level so every surface (Home, Feed, sheet,
+     report) can <use> it regardless of which page is display:none.
+     STROKE set `i-*`  : outline glyphs, stroke-width 1.7, currentColor.
+     FILLED set `f-*`  : solid silhouettes for the Feed's category glyph.
+     Pass-2: i-flame redesigned (candidate A — see scratchpad/icon-sheet.html)
+     and i-yoga redesigned from the "chess piece" to a seated-lotus figure. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <!-- flame — candidate A (CHOSEN): single elegant outer flame + inner tongue -->
+  <g id="i-flame"><path d="M12 2.6c0 3.1-4.7 4.6-4.7 9a4.7 4.7 0 0 0 9.4 0c0-2.2-1.2-3.9-2.3-5.1-.4 1-.9 1.6-1.7 2 .2-2.2-.2-4.1-.7-5.9z"/><path d="M12 13.5c1.2 1.2 1.9 2 1.9 3a1.9 1.9 0 1 1-3.8 0c0-1 .7-1.8 1.9-3z"/></g>
+  <g id="i-flameB"><path d="M13.1 2.5c.5 2.6-1.5 3.9-2.7 5.4-1.3 1.7-2.3 3.2-2.3 5.1a4.9 4.9 0 0 0 9.8 0c0-3.2-2.5-5.3-3.3-8-.6 1.2-1.3 1.8-2.1 2.2.3-1.6.4-3.1.6-4.7z"/></g>
+  <g id="i-flameC"><path d="M12 2.6c2.7 2.6 4.5 5.1 4.5 8.4 0 3.2-2 5.3-4.5 5.3s-4.5-2.1-4.5-5.3c0-1.7.6-3 1.6-4.3.2 1 .7 1.6 1.3 2 .1-2.2.7-4.1 1.6-6.1z"/><path d="M12 16.3v3"/></g>
+  <g id="i-gym"><path d="M7.5 9.5v5M16.5 9.5v5M7.5 12h9"/><rect x="4.6" y="8.2" width="2.9" height="7.6" rx="1.2"/><rect x="16.5" y="8.2" width="2.9" height="7.6" rx="1.2"/></g>
+  <g id="i-walk"><circle cx="13" cy="4.4" r="1.7"/><path d="M13 6.6l-1.6 4.4 2.4 2 1 6M11.4 11l-2.8 1.4M13.8 8.4l2.8 1.4-1 3"/></g>
+  <g id="i-run"><circle cx="14.5" cy="4.4" r="1.7"/><path d="M8 20l2.6-4.2 1.2-3.8 2.7 2 1.2 4M12 12l-1-3 3.4-1 1.8 2 2 .4M7.2 13.2l3-1"/></g>
+  <g id="i-swim"><circle cx="16" cy="6" r="1.7"/><path d="M4 13l6-3 3.5 2 3.5-1.5"/><path d="M3.5 17.4c1.7-1.5 3.3-1.5 5 0s3.3 1.5 5 0 3.3-1.5 5 0"/></g>
+  <g id="i-cycle"><circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16l3.5-6.5h4.5L18 16M9.5 9.5 8.5 7h-2M12 16l2.5-6.5"/></g>
+  <g id="i-cardio"><path d="M3 12h4l2-5 3 10 2-7 1.6 2H21"/></g>
+  <g id="i-racket"><circle cx="10" cy="9" r="5.4"/><path d="M13.8 12.8l4.4 4.6c.6.6.6 1.5 0 2.1s-1.5.6-2.1 0l-4.4-4.6"/><path d="M7 9h6M10 6v6" stroke-opacity=".5"/></g>
+  <g id="i-ball"><circle cx="12" cy="12" r="8.4"/><path d="M12 3.6v16.8M3.6 12h16.8M6.2 6.2c2 2 3 4 3 5.8s-1 3.8-3 5.8M17.8 6.2c-2 2-3 4-3 5.8s1 3.8 3 5.8" stroke-opacity=".5"/></g>
+  <g id="i-cricket"><path d="M6.5 8v10M11 8v10M15.5 8v10"/><path d="M4.5 18h13"/><path d="M5.2 5.8l3.6 1M13 4.6l3.8.4"/></g>
+  <!-- yoga — seated lotus: head, spine, arms to knees, crossed-leg base -->
+  <g id="i-yoga"><circle cx="12" cy="4.5" r="2"/><path d="M12 7.5v3.3"/><path d="M12 10.8c-2.6 0-4.6 1.2-5.7 2.7M12 10.8c2.6 0 4.6 1.2 5.7 2.7"/><path d="M6.3 17.3c1.4-1.6 3.4-2.5 5.7-2.5s4.3.9 5.7 2.5c-1.4 1.1-3.5 1.6-5.7 1.6s-4.3-.5-5.7-1.6z"/></g>
+  <g id="i-dance"><circle cx="12" cy="4.8" r="1.9"/><path d="M12 7.5v5l-2.5 6M12 12.5l3 5.5M12 8.5 8 11M12 8.5l4.5-1.5"/></g>
+  <g id="i-user"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/></g>
+  <g id="i-help"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1 .9-1 1.7"/><circle cx="12" cy="16.4" r=".7" fill="currentColor" stroke="none"/></g>
+  <g id="i-chevL"><path d="M15 6l-6 6 6 6"/></g>
+  <g id="i-chevR"><path d="M9 6l6 6-6 6"/></g>
+  <g id="i-plus"><path d="M12 5v14M5 12h14"/></g>
+  <g id="i-sparkle"><path d="M12 3l1.8 4.7L18.5 9.5 13.8 11.3 12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M18 15l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></g>
+  <g id="i-chartline"><path d="M4 5v14h16"/><path d="M4 15l4-4 3 2 5-6"/></g>
+  <g id="i-chartbar"><path d="M4 4v16h16"/><rect x="7" y="12" width="2.6" height="6" rx=".6"/><rect x="11.7" y="8" width="2.6" height="10" rx=".6"/><rect x="16.4" y="14" width="2.6" height="4" rx=".6"/></g>
+  <g id="i-share"><circle cx="6" cy="12" r="2.4"/><circle cx="17" cy="6" r="2.4"/><circle cx="17" cy="18" r="2.4"/><path d="M8.1 10.9l6.8-3.8M8.1 13.1l6.8 3.8"/></g>
+  <g id="i-flag"><path d="M5 21V4M5 4.5h11l-1.8 3.2L16 11H5"/></g>
+  <g id="i-close"><path d="M6 6l12 12M18 6L6 18"/></g>
+  <!-- ── FILLED set (feed category glyph). fill:currentColor, no stroke. ── -->
+  <g id="f-flame"><path d="M12 2.2c.4 3.4-4.9 4.9-4.9 9.5a4.9 4.9 0 0 0 9.8 0c0-2.3-1.3-4.1-2.4-5.4-.4 1-1 1.7-1.8 2.1.3-2.3-.2-4.3-.7-6.2zm0 11.6c1.3 1.3 2 2.1 2 3.2a2 2 0 1 1-4 0c0-1.1.7-1.9 2-3.2z"/></g>
+  <g id="f-gym"><rect x="3.2" y="8" width="3.4" height="8" rx="1.4"/><rect x="17.4" y="8" width="3.4" height="8" rx="1.4"/><rect x="6.9" y="9.6" width="2.4" height="4.8" rx="1"/><rect x="14.7" y="9.6" width="2.4" height="4.8" rx="1"/><rect x="9" y="10.8" width="6" height="2.4" rx="1.1"/></g>
+  <g id="f-walk"><circle cx="13.4" cy="4.2" r="2.1"/><path d="M12.6 7.1c-1 .2-1.7.9-2 1.9l-1 3.4 2.2 1.5-1.5 5.5a1.2 1.2 0 0 0 2.3.6l1.7-5.6c.2-.7-.1-1.4-.7-1.8l-1.3-.9.9-2.8 1.9 1.2-.6 2.3a1 1 0 0 0 2 .5l.8-3a1.3 1.3 0 0 0-.6-1.4l-3-1.9c-.3-.2-.7-.3-1.1-.2z"/><path d="M10.8 9.7l-2.6 1.3a1 1 0 0 0 .9 1.8l2.2-1.1z"/></g>
+  <g id="f-run"><circle cx="14.8" cy="4.2" r="2.1"/><path d="M13.6 7.2 10 8.4a1.3 1.3 0 0 0-.8.8l-1 2.9a1.1 1.1 0 0 0 2 .7l.8-2.2 1.6-.5-1 3.3c-.2.6 0 1.2.5 1.6l2.3 1.7 1 3.3a1.2 1.2 0 0 0 2.3-.7l-1.1-3.7c-.1-.4-.3-.7-.6-.9l-1.9-1.4 1.2-3.7 1.3 1.4c.2.3.6.4.9.5l2 .2a1 1 0 0 0 .2-2l-1.6-.2-1.9-2.1a2 2 0 0 0-2-.6z"/><path d="M9.6 19.9a1.2 1.2 0 0 1-1-1.8l2-3.3 1.9 1.4-1.9 3.1c-.2.4-.6.6-1 .6z"/></g>
+  <g id="f-swim"><circle cx="16.2" cy="5.8" r="2"/><path d="M4.4 12.1a1 1 0 0 0 .9 1.8l4.9-2.4 3 1.7c.3.2.7.2 1 .1l3.5-1.5a1 1 0 0 0-.8-1.9l-3 1.3-3.1-1.8a1.2 1.2 0 0 0-1.1 0z"/><path d="M3.1 16.8c1.9-1.7 3.9-1.7 5.8 0 1.5 1.3 3 1.3 4.4 0 1.9-1.7 3.9-1.7 5.8 0a1 1 0 0 0 1.4-1.5c-2.6-2.3-5.5-2.3-8.1 0-.7.6-1.4.6-2.1 0-2.6-2.3-5.5-2.3-8.1 0a1 1 0 0 0 1.3 1.5z"/></g>
+  <g id="f-cycle"><path d="M6 11.4a4.6 4.6 0 1 0 0 9.2 4.6 4.6 0 0 0 0-9.2zm0 2a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2zM18 11.4a4.6 4.6 0 1 0 0 9.2 4.6 4.6 0 0 0 0-9.2zm0 2a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2z"/><path d="M14.2 5.6a1.1 1.1 0 0 0 0 2.2h1.3l1.1 2.3-3.3 4.4-2.7-4.6h2.6a1.1 1.1 0 0 0 0-2.2H9.3c-.4 0-.8.2-1 .6l-2.6 5a1.1 1.1 0 0 0 2 1l1.1-2.2 2.5 4.3c.4.7 1.5.7 1.9 0l4.2-5.6c.3-.3.3-.8.1-1.2l-1.7-3.4c-.2-.4-.6-.6-1-.6z"/></g>
+  <g id="f-cardio"><path d="M3 11.1a1.1 1.1 0 0 0 0 2.2h4.3c.5 0 .9-.3 1-.7l1.1-2.8 2.1 7c.3 1 1.7 1 2-.1l1.3-4.5.5.7c.2.3.6.5.9.5H21a1.1 1.1 0 0 0 0-2.2h-4.2l-1.5-2c-.5-.7-1.7-.5-1.9.4l-1 3.4-2.1-6.9c-.3-1-1.7-1-2.1 0l-1.9 4.9z"/></g>
+  <g id="f-racket"><path d="M10 2.8a6.4 6.4 0 1 0 0 12.8 6.4 6.4 0 0 0 0-12.8zm0 2a4.4 4.4 0 1 1 0 8.8 4.4 4.4 0 0 1 0-8.8z"/><path d="M13.4 13.6a1.3 1.3 0 0 0-1.9 1.8l4.6 4.8a1.6 1.6 0 0 0 2.3-2.2z"/><circle cx="10" cy="9.2" r="1.5"/></g>
+  <g id="f-ball"><path d="M12 2.6a9.4 9.4 0 1 0 0 18.8 9.4 9.4 0 0 0 0-18.8zm-1 2.1v5.3H5.9c.2-1.3.7-2.5 1.5-3.5.9.4 2 .1 2.4-.9zm2 0c.7.2 1.4.5 2 .9.5.9 1.5 1.2 2.4.9.8 1 1.4 2.2 1.6 3.5H13zm-7.1 7.3H11v5.3c-1-.4-2 0-2.5.9a7.4 7.4 0 0 1-2.6-6.2zm7.1 0h5.1a7.4 7.4 0 0 1-2 5c-.5-.8-1.5-1.1-2.4-.8-.2.1-.5.2-.7.2z"/></g>
+  <g id="f-cricket"><rect x="5.4" y="7.4" width="1.9" height="10.6" rx=".9"/><rect x="11.1" y="7.4" width="1.9" height="10.6" rx=".9"/><rect x="16.8" y="7.4" width="1.9" height="10.6" rx=".9"/><rect x="4" y="18.4" width="16" height="1.8" rx=".9"/><rect x="4.6" y="5.2" width="4.4" height="1.6" rx=".8" transform="rotate(14 4.6 5.2)"/><rect x="14.4" y="4.2" width="4.4" height="1.6" rx=".8" transform="rotate(6 14.4 4.2)"/></g>
+  <g id="f-yoga"><circle cx="12" cy="4.4" r="2.3"/><path d="M12 7.3c-.8 0-1.4.6-1.4 1.4v2.2c-2.4.3-4.2 1.5-5.2 2.9a1 1 0 0 0 1.6 1.2c.9-1.2 2.5-2.2 5-2.2s4.1 1 5 2.2a1 1 0 0 0 1.6-1.2c-1-1.4-2.8-2.6-5.2-2.9V8.7c0-.8-.6-1.4-1.4-1.4z"/><path d="M12 14.2c-2.4 0-4.5 1-5.9 2.6-.4.4-.3 1 .2 1.3 1.6 1 3.6 1.5 5.7 1.5s4.1-.5 5.7-1.5c.5-.3.6-.9.2-1.3-1.4-1.6-3.5-2.6-5.9-2.6z"/></g>
+  <g id="f-dance"><circle cx="12.2" cy="4.5" r="2.1"/><path d="M11.4 7.3c-.5.1-.9.4-1.1.9l-1.6 3.3a1.1 1.1 0 0 0 2 1l1-2 .5 3.3-2.6 5.4a1.2 1.2 0 0 0 2.2 1.1l2.4-5 2.1 4.6a1.2 1.2 0 0 0 2.2-1l-2.7-5.8-.7-4.6 2.9-1a1.1 1.1 0 0 0-.7-2.1l-3.4 1.2z"/><path d="M9.9 8.9 7.4 10.6a1.1 1.1 0 0 0 1.2 1.8l2.2-1.5z"/></g>
+</defs></svg>
 
 <!-- ══ ONBOARDING ══ -->
 <div class="screen active" id="screen-onboard">
@@ -107,7 +155,6 @@
   <div class="tabs">
     <div class="tab-pill" id="tabPill"></div>
     <div class="tab active" onclick="showTab('home')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg><span>Home</span></div>
-    <div class="tab" onclick="showTab('log')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg><span>Log</span></div>
     <div class="tab" onclick="showTab('lb')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 20v-6M12 20V8M18 20v-10"/><path d="M3 20h18"/></svg><span>Board</span></div>
     <div class="tab" onclick="showTab('feed')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg><span>Feed</span></div>
     <div class="tab" onclick="showTab('global')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.7 2.7 2.7 15.3 0 18M12 3c-2.7 2.7-2.7 15.3 0 18"/></svg><span>Global</span></div>
@@ -119,30 +166,6 @@
        consent surfaces removed per FRICTION_POINTS #3/#4; the header flame is
        the ONLY streak display. Old Log tab stays functional (see #page-log). -->
   <div class="page active" id="page-home">
-    <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
-      <g id="i-flame"><path d="M12 3c1 3-2.5 4.5-2.5 8a4.5 4.5 0 0 0 9 0c0-1.6-.7-2.9-1.5-4-.3 1-.8 1.7-1.7 2.2C15.6 7 14.8 4.6 12 3z"/><path d="M9.5 11c-1.4 1-2.5 2.4-2.5 4.3A5 5 0 0 0 12 20"/></g>
-      <g id="i-gym"><path d="M7.5 9.5v5M16.5 9.5v5M7.5 12h9"/><rect x="4.6" y="8.2" width="2.9" height="7.6" rx="1.2"/><rect x="16.5" y="8.2" width="2.9" height="7.6" rx="1.2"/></g>
-      <g id="i-walk"><circle cx="13" cy="4.4" r="1.7"/><path d="M13 6.6l-1.6 4.4 2.4 2 1 6M11.4 11l-2.8 1.4M13.8 8.4l2.8 1.4-1 3"/></g>
-      <g id="i-run"><circle cx="14.5" cy="4.4" r="1.7"/><path d="M8 20l2.6-4.2 1.2-3.8 2.7 2 1.2 4M12 12l-1-3 3.4-1 1.8 2 2 .4M7.2 13.2l3-1"/></g>
-      <g id="i-swim"><circle cx="16" cy="6" r="1.7"/><path d="M4 13l6-3 3.5 2 3.5-1.5"/><path d="M3.5 17.4c1.7-1.5 3.3-1.5 5 0s3.3 1.5 5 0 3.3-1.5 5 0"/></g>
-      <g id="i-cycle"><circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16l3.5-6.5h4.5L18 16M9.5 9.5 8.5 7h-2M12 16l2.5-6.5"/></g>
-      <g id="i-cardio"><path d="M3 12h4l2-5 3 10 2-7 1.6 2H21"/></g>
-      <g id="i-racket"><circle cx="10" cy="9" r="5.4"/><path d="M13.8 12.8l4.4 4.6c.6.6.6 1.5 0 2.1s-1.5.6-2.1 0l-4.4-4.6"/><path d="M7 9h6M10 6v6" stroke-opacity=".5"/></g>
-      <g id="i-ball"><circle cx="12" cy="12" r="8.4"/><path d="M12 3.6v16.8M3.6 12h16.8M6.2 6.2c2 2 3 4 3 5.8s-1 3.8-3 5.8M17.8 6.2c-2 2-3 4-3 5.8s1 3.8 3 5.8" stroke-opacity=".5"/></g>
-      <g id="i-cricket"><path d="M6.5 8v10M11 8v10M15.5 8v10"/><path d="M4.5 18h13"/><path d="M5.2 5.8l3.6 1M13 4.6l3.8.4"/></g>
-      <g id="i-yoga"><circle cx="12" cy="4.6" r="1.9"/><path d="M12 8.2v4.4"/><path d="M8 9.6l4 1.4 4-1.4"/><path d="M12 12.6l-4.4 3.6c-.8.7-.3 2 .8 2h7.2c1.1 0 1.6-1.3.8-2L12 12.6z"/></g>
-      <g id="i-dance"><circle cx="12" cy="4.8" r="1.9"/><path d="M12 7.5v5l-2.5 6M12 12.5l3 5.5M12 8.5 8 11M12 8.5l4.5-1.5"/></g>
-      <g id="i-user"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/></g>
-      <g id="i-help"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1 .9-1 1.7"/><circle cx="12" cy="16.4" r=".7" fill="currentColor" stroke="none"/></g>
-      <g id="i-chevL"><path d="M15 6l-6 6 6 6"/></g>
-      <g id="i-chevR"><path d="M9 6l6 6-6 6"/></g>
-      <g id="i-plus"><path d="M12 5v14M5 12h14"/></g>
-      <g id="i-sparkle"><path d="M12 3l1.8 4.7L18.5 9.5 13.8 11.3 12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M18 15l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></g>
-      <g id="i-chartline"><path d="M4 5v14h16"/><path d="M4 15l4-4 3 2 5-6"/></g>
-      <g id="i-chartbar"><path d="M4 4v16h16"/><rect x="7" y="12" width="2.6" height="6" rx=".6"/><rect x="11.7" y="8" width="2.6" height="10" rx=".6"/><rect x="16.4" y="14" width="2.6" height="4" rx=".6"/></g>
-      <g id="i-share"><circle cx="6" cy="12" r="2.4"/><circle cx="17" cy="6" r="2.4"/><circle cx="17" cy="18" r="2.4"/><path d="M8.1 10.9l6.8-3.8M8.1 13.1l6.8 3.8"/></g>
-    </defs></svg>
-
     <div class="mir-hdr">
       <div class="mir-ava"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-user"/></svg></div>
       <div class="mir-id"><div class="mir-name" id="mirName"></div><div class="mir-ctx" id="mirCtx"></div></div>
@@ -195,60 +218,6 @@
         <span style="font-size:11px;color:var(--muted)">all time</span>
       </div>
       <div id="mirMix"></div>
-    </div>
-  </div>
-
-  <!-- LOG -->
-  <div class="page" id="page-log">
-    <div class="page-title">Log Workout</div>
-    <div id="ls1">
-      <div class="card-title" style="margin-bottom:10px">Which day?</div>
-      <div id="dayStrip"></div>
-      <div style="text-align:center;margin-top:2px">
-        <span onclick="showPicker()" style="font-size:12px;color:var(--accent);cursor:pointer;opacity:.8">Earlier date?</span>
-      </div>
-      <div id="pickerWrap" class="hidden" style="margin-top:10px">
-        <input type="date" id="dpick" onchange="pickDayFromInput()">
-      </div>
-    </div>
-    <div id="ls2" class="hidden">
-      <div class="row" style="margin-bottom:16px">
-        <div>
-          <div style="font-size:18px;font-weight:700" id="lDateLbl"></div>
-          <div class="tmuted" id="lExisting" style="font-size:12px;margin-top:2px"></div>
-        </div>
-        <button class="btn btn-surface btn-sm" onclick="backToS1()">Change</button>
-      </div>
-      <div class="card-title">What did you do? <span style="color:var(--muted);text-transform:none;font-weight:400;font-size:11px">tap multiple</span></div>
-      <div id="wChips"></div>
-      <input type="text" id="custInp" placeholder="Type something new..." onkeydown="if(event.key==='Enter')addCustom()">
-      <button class="btn btn-surface btn-sm" onclick="addCustom()" style="margin-bottom:16px">Add</button>
-      <div id="selPrev" class="hidden">
-        <div class="shdr" style="margin-top:0">Selected</div>
-        <div id="selList" style="font-size:14px;margin-bottom:16px;color:var(--text)"></div>
-      </div>
-      <button class="btn btn-green" id="subBtn" onclick="submitLog()" disabled>Log Workout</button>
-    </div>
-    <!-- Post-log reward (survey: personal progress is the hero, rivalry is not).
-         Hierarchy is deliberate: ONE hero number + pace, then quieter team
-         context, then rank movement ONLY when it actually moved. Auto-dismisses
-         after ~4s or on tap — never blocks logging a second workout. -->
-    <div id="ls3" class="hidden" onclick="dismissReward()">
-      <div class="succ">
-        <div class="succ-icon">🔥</div>
-        <div class="succ-title" id="succTitle">Forged!</div>
-        <div class="succ-sub" id="succSub"></div>
-        <div id="comebackMsg" class="comeback-msg hidden"></div>
-        <div id="rwWrap" style="margin:20px 0 6px">
-          <div id="rwHeroNum" style="font-size:58px;font-weight:900;color:var(--gold);line-height:1;font-variant-numeric:tabular-nums">0</div>
-          <div id="rwHeroLbl" style="font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text);margin-top:6px">workouts this month</div>
-          <div id="rwPace" style="font-size:13px;color:var(--muted);margin-top:4px"></div>
-          <div id="rwBest" class="hidden" style="margin-top:14px;font-size:13px;font-weight:800;color:var(--gold)"></div>
-          <div id="rwTeam" style="margin-top:16px;font-size:13px;color:var(--muted)"></div>
-          <div id="rwRank" class="hidden" style="margin-top:6px;font-size:13px;font-weight:800;color:var(--green)"></div>
-        </div>
-        <div style="font-size:11px;color:var(--muted);margin-top:16px">tap anywhere to continue</div>
-      </div>
     </div>
   </div>
 
@@ -1586,7 +1555,7 @@ function renderHome(){
 /* ══════════════════════════════════════════════════════════════════════════
    THE MIRROR — Home pass 1 engine. Everything below is Home-only. Reuses the
    scoring engine (score), the log write path (submitLog, mirror-mode branch),
-   the tombstone void (voidLogDoc), and the existing Log-tab full picker (goS2).
+   the tombstone void (voidLogDoc). The sheet is the only workout picker.
    ══════════════════════════════════════════════════════════════════════════ */
 // Category + icon maps (case-insensitive). "map EVERY workout in COMMON_WORKOUTS
 // plus custom": Rowing/Spinning/Hiking → cardio (confirmed decision); anything
@@ -1817,12 +1786,15 @@ function mirSyncCalHead(){
   document.getElementById('mirArrNext').classList.toggle('off', _mirIdx>=_mirMonths.length-1);
   // recap artifact on closed months
   const slot=document.getElementById('mirRecap');
-  if(M.readonly){
+  if(M.readonly && M.count===0){ slot.innerHTML=''; }   // empty closed month: no "minted" artifact to show
+  else if(M.readonly){
     slot.innerHTML=`<div class="mir-recap"><div style="flex:1"><div class="month">${M.label.toUpperCase()} ${M.year} · CLOSED</div><div class="big">${M.count}<span style="font-size:14px;color:var(--muted);font-weight:600"> days trained</span></div><div class="sub2">This month is minted — read-only.</div></div><div class="mir-qmark" style="width:40px;height:40px;color:var(--gold)">${mirIco('i-share')}</div></div>`;
   } else slot.innerHTML='';
-  // footer (current month only) — honest best-month logic
+  // footer — closed months state their own count (an empty month must read as
+  // deliberately empty, never as a blank/dead panel); current month gets the
+  // honest best-month line.
   const foot=document.getElementById('mirCalFoot');
-  if(M.readonly){ foot.innerHTML=''; return; }
+  if(M.readonly){ foot.innerHTML = M.count===0 ? `No logs in ${esc(M.label)}.` : `${M.count} day${M.count===1?'':'s'} trained in ${esc(M.label)}.`; return; }
   foot.innerHTML=mirFooter();
 }
 function mirFooter(){
@@ -1837,7 +1809,7 @@ function mirFooter(){
   const pLabel=MIR_MONTHNAMES[prev.month-1];
   if(ghost){   // a Set of the user's prev-month distinct days
     const now=new Date();
-    const todayD=(now.getMonth()+1===season.month&&now.getFullYear()===season.year)?now.getDate():season.days;
+    const todayD=(now.getMonth()+1===season.month&&now.getFullYear()===season.year)?now.getDate():new Date(season.year,season.month,0).getDate();
     const prevToDate=[...ghost].filter(d=>d<=todayD).length;
     const delta=sc.wo-prevToDate;
     const cmp=delta>=0?`<b>${delta} ahead</b> of ${pLabel}-you`:`${Math.abs(delta)} behind ${pLabel}-you`;
@@ -1880,11 +1852,25 @@ async function mirLoadOlder(){
   try{
     const oldest=_mirMonths[0];
     const {month,year}=_mirPrevMonth(oldest.month, oldest.year);
-    // history floor: the group's own createdAt month (else 12 months back), so
-    // we never query months that predate the group's existence.
-    let fY, fM; const ca=groupData && groupData.createdAt;
+    // PASS-2 FIX 1b — history floor. Previously the floor was the group's
+    // createdAt month, which for a group created THIS month left a zero-log
+    // member (e.g. Test1) with a dead swipe: no previous panel, ever. The
+    // floor is now the EARLIEST of (group createdAt, the user's own earliest
+    // logged month) but is ALWAYS relaxed to admit at least one month back
+    // from the current season, so every member can always reach last month —
+    // it just renders as an empty grid with a "No logs in {Month}" footer.
+    let fY, fM;
+    const ca=groupData && groupData.createdAt;
     if(ca && ca.seconds){ const d=new Date(ca.seconds*1000); fY=d.getFullYear(); fM=d.getMonth()+1; }
     else { const d=new Date(); d.setMonth(d.getMonth()-12); fY=d.getFullYear(); fM=d.getMonth()+1; }
+    // widen to the user's own earliest logged month if that predates createdAt
+    try{
+      const mine=(allLogs||[]).filter(l=>l.player===me.name && l.year && l.month);
+      mine.forEach(l=>{ if(l.year<fY || (l.year===fY && l.month<fM)){ fY=l.year; fM=l.month; } });
+    }catch(e){}
+    // ALWAYS allow at least one month back from the active season
+    const relax=_mirPrevMonth(season.month, season.year);
+    if((relax.year<fY)||(relax.year===fY&&relax.month<fM)){ fY=relax.year; fM=relax.month; }
     if((year<fY)||(year===fY&&month<fM)){ _mirNoMore=true; mirSyncCalHead(); return false; }
     const logs=await mirLoadMonthLogs(month,year);
     const w=track?track.clientWidth+28:0;
@@ -1958,18 +1944,70 @@ function mirLogQuick(w){
   window._mirrorLogMode=true;
   submitLog();
 }
+// PASS-2 FIX 7 — the full workout list now lives INSIDE the sheet (the Log tab
+// is gone, so this is the only picker). Order: (1) this player's own types,
+// most-recently-trained first · (2) types the rest of the active group uses,
+// most-recent first, deduped · (3) the remaining COMMON_WORKOUTS · then the
+// custom-entry field. All computed from already-loaded logs (+0 reads).
+function mirOrderedWorkouts(){
+  const myLast={}, grpLast={};
+  (allLogs||[]).forEach(l=>{
+    const d=l.day||0;
+    const ws=Array.isArray(l.workouts)?l.workouts:(l.workout?[l.workout]:[]);
+    ws.forEach(w=>{
+      const k=String(w||'').trim(); if(!k) return;
+      if(l.player===me.name){ if(d>(myLast[k]||0)) myLast[k]=d; }
+      else { if(d>(grpLast[k]||0)) grpLast[k]=d; }
+    });
+  });
+  const mine=Object.keys(myLast).sort((a,b)=>myLast[b]-myLast[a]);
+  const seen=new Set(mine.map(x=>x.toLowerCase()));
+  const others=Object.keys(grpLast).filter(k=>!seen.has(k.toLowerCase())).sort((a,b)=>grpLast[b]-grpLast[a]);
+  others.forEach(k=>seen.add(k.toLowerCase()));
+  const rest=(window.COMMON_WORKOUTS||[]).filter(k=>!seen.has(String(k).toLowerCase()));
+  return {mine, others, rest};
+}
 function mirOpenFull(){
-  mirCloseSheet();
-  selDay=_mirPendingDay;
-  showTab('log');
-  goS2();                          // existing full picker (chips + custom entry) for this day
+  const d=_mirPendingDay;
+  const {mine, others, rest}=mirOrderedWorkouts();
+  const row=(w,tag)=>`<div class="mir-frow" onclick="mirLogQuick('${escForInlineJsAttr(w)}')">
+      <span class="fr-ico" style="color:${mirColOf(w)}">${mirIco(mirIconOf(w))}</span>
+      <span class="fr-name">${esc(w)}</span>
+      ${tag?`<span class="fr-tag">${tag}</span>`:''}
+    </div>`;
+  const sec=(label,arr,tag)=>arr.length?`<div class="mir-fsec">${label}</div>`+arr.map(w=>row(w,tag)).join(''):'';
+  document.getElementById('mirSheetTitle').textContent=`Log for ${MIR_MONTHNAMES[season.month-1]} ${d}`;
+  document.getElementById('mirSheetSub').textContent=`Pick a workout · logging to ${groupData.name||groupCode}`;
+  document.getElementById('mirSheetBody').innerHTML=
+    `<div class="mir-full">`+
+      sec('YOUR WORKOUTS', mine, '')+
+      sec('USED IN THIS GROUP', others, '')+
+      sec('MORE', rest, '')+
+      `<div class="mir-fcustom">
+         <input type="text" id="mirCustomInp" maxlength="30" placeholder="Something else…" autocomplete="off"
+                onkeydown="if(event.key==='Enter')mirLogCustom()">
+         <button class="btn btn-surface" onclick="mirLogCustom()">Add</button>
+       </div>
+     </div>`;
+  mirOpenSheet();
+}
+function mirLogCustom(){
+  const inp=document.getElementById('mirCustomInp'); if(!inp) return;
+  const v=(inp.value||'').trim().slice(0,30);
+  if(!v) return;
+  if(/[<>"'\\]/.test(v)){ toast('Workout name can\'t contain these characters: < > " \' \\','error'); return; }
+  mirLogQuick(v);
 }
 
 // ── CHART: {Month} vs {PrevMonth}-you (cumulative distinct days) ──
 async function mirRenderChart(sc){
   const prev=_mirPrevMonth(season.month, season.year);
   document.getElementById('mirChartTitle').textContent=`${MIR_MONTHNAMES[season.month-1]} vs ${MIR_MONTHNAMES[prev.month-1]}-you`;
-  const daysInMonth=season.days||new Date(season.year,season.month,0).getDate();
+  // Use the REAL calendar length, not season.days: the chart plots calendar
+  // dates and must agree with the calendar grid beside it. Some groups carry a
+  // stale season.days (e.g. 30 for a 31-day July), which showed "Jul 30" on the
+  // axis while the calendar rendered 31 tiles.
+  const daysInMonth=new Date(season.year,season.month,0).getDate();
   const todayD=(new Date().getMonth()+1===season.month&&new Date().getFullYear()===season.year)?new Date().getDate():daysInMonth;
   const myDays=sc.days;                                   // Set of my logged days this month
   const prevDays=await mirGhostDays(prev.month, prev.year);
@@ -2034,6 +2072,23 @@ function mirRenderCaption(sc){
   const cap=mirCaption(sc);
   el.innerHTML=cap;
 }
+/* PASS-2 FIX 6 — caption ladder.
+   WHY EVERYONE SAW THE FALLBACK (diagnosis):
+     • rules 1-3 are gated on !loggedToday, so anyone who logged today skipped
+       straight past them — and engaged users log daily;
+     • rule 1 also required hour>=17 (evenings only);
+     • rule 4 required BOTH >=15% of mix AND >=10 days since — rarely both true
+       for a member with a normal spread of 10-14 logs;
+     • rule 6 required an ARCHIVED best month strictly greater than the current
+       one, which is false for anyone whose current month is already their best
+       (or who has no archive at all, where best = 0);
+     • rule 7 required EXACTLY one never-logged weekday — a knife-edge;
+     • rules 5 and 6 read async-loaded data (prev-month ghost, best month) that
+       is still null on first paint, so the first render always fell through.
+   Fixes: thresholds loosened, positive rules added for people who DID log
+   (so a daily logger gets variety instead of nagging), and the single fallback
+   replaced by a rotating, data-aware pool chosen deterministically per day.
+   Everything below is computed from already-loaded data (+0 reads). */
 function mirCaption(sc){
   const now=new Date();
   const todayD=(now.getMonth()+1===season.month&&now.getFullYear()===season.year)?now.getDate():-1;
@@ -2043,83 +2098,132 @@ function mirCaption(sc){
   const daysSorted=[...sc.days].sort((a,b)=>a-b);
   const lastDay=daysSorted.length?daysSorted[daysSorted.length-1]:0;
   const gapNow=todayD>0?todayD-lastDay:0;
-  const cands=[];  // {id, html}
+  const roster=(season.roster||[]);
+  const DOWn=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const cands=[];
   const B=t=>`<b>${esc(String(t))}</b>`;
-  // rules 1-3 skipped if today already logged
+  const cap=t=>String(t).charAt(0).toUpperCase()+String(t).slice(1);
+
+  // ── NUDGE TIER (only when today is still unlogged — never nags otherwise) ──
   if(!loggedToday){
-    if(sc.streak>0 && hour>=17) cands.push({id:1, html:`Log today to keep ${B(sc.streak)}-day streak alive.`});
-    // rule 2: team trailing in active group
+    if(sc.streak>0 && hour>=16) cands.push({id:1, html:`Log today to keep your ${B(sc.streak)}-day streak alive.`});
     try{
-      const myTeam=(season.roster||[]).find(p=>p.name===me.name)?.team;
+      const myTeam=roster.find(p=>p.name===me.name)?.team;
       if(myTeam){
-        const teams=[...new Set((season.roster||[]).map(p=>p.team))];
-        const avgs=teams.map(t=>({t, a:teamTotal(t)})).sort((a,b)=>b.a-a.a);
+        const teams=[...new Set(roster.map(p=>p.team))];
+        const avgs=teams.map(t=>({t,a:teamTotal(t)})).sort((a,b)=>b.a-a.a);
         const mine=avgs.find(x=>x.t===myTeam), lead=avgs[0];
-        if(mine && lead && mine.t!==lead.t){ const gap=lead.a-mine.a; cands.push({id:2, html:`Team ${esc(myTeam)} is ${B(gap)} behind — your log counts.`}); }
+        if(mine && lead && mine.t!==lead.t) cands.push({id:2, html:`Team ${esc(myTeam)} is ${B(lead.a-mine.a)} points behind — your log counts.`});
       }
     }catch(e){}
     if(gapNow>=3){
-      // longest gap this month
       let longest=0,prev=0; daysSorted.forEach(d=>{ if(prev) longest=Math.max(longest,d-prev); prev=d; });
-      longest=Math.max(longest, gapNow);
+      longest=Math.max(longest,gapNow);
       cands.push({id:3, html:`${B(gapNow)} days quiet — your longest gap this month is ${B(longest)}.`});
     }
   }
-  // rule 4: a workout >=15% of mix and unlogged >=10 days
+  // ── INSIGHT TIER (fires for everyone; thresholds loosened) ──
   try{
     const freq={}; myLogs.forEach(l=>(l.workouts||[]).forEach(w=>{ freq[w]=(freq[w]||0)+1; }));
     const total=Object.values(freq).reduce((a,b)=>a+b,0);
     if(total>0){
       const ranked=Object.keys(freq).sort((a,b)=>freq[b]-freq[a]);
       ranked.forEach((w,idx)=>{
-        if(freq[w]/total>=0.15){
+        if(freq[w]/total>=0.10){
           const lastW=Math.max(0,...myLogs.filter(l=>(l.workouts||[]).includes(w)).map(l=>l.day||0));
           const since=todayD>0?todayD-lastW:0;
-          if(since>=10) cands.push({id:4, html:`${B(since)} days since your last ${B(w)} — it's your #${idx+1}.`});
+          if(since>=7) cands.push({id:4, html:`${B(since)} days since your last ${B(w)} — it's your #${idx+1}.`});
         }
       });
     }
   }catch(e){}
-  // rule 5: within 2 of prev-month cumulative / just passed
   try{
     const prev=_mirPrevMonth(season.month,season.year);
     const prevSet=_mirLogCache['ghost_'+`${groupCode}_${prev.year}_${prev.month}`];
     if(prevSet && todayD>0){
       const prevCumToday=[...prevSet].filter(d=>d<=todayD).length;
       const diff=prevCumToday-sc.wo;
-      const pLabel=MIR_MONTHNAMES[prev.month-1];
-      if(diff>0 && diff<=2) cands.push({id:5, html:`One more and you pass ${B(pLabel+'-you')}.`});
-      else if(diff<0) cands.push({id:5, html:`You're ahead of ${B(pLabel+'-you')}.`});
+      const pL=MIR_MONTHNAMES[prev.month-1];
+      if(diff>0 && diff<=2) cands.push({id:5, html:`One more and you pass ${B(pL+'-you')}.`});
+      else if(diff<0) cands.push({id:5, html:`You're ${B(Math.abs(diff))} ahead of ${B(pL+'-you')}.`});
     }
   }catch(e){}
-  // rule 6: within 3 of best month
-  if(_mirBestMonth!==null && _mirBestMonth>sc.wo && _mirBestMonth-sc.wo<=3){
-    cands.push({id:6, html:`${B(_mirBestMonth-sc.wo)} away from your best month ever.`});
+  if(_mirBestMonth!==null && _mirBestMonth>0){
+    if(_mirBestMonth>sc.wo && _mirBestMonth-sc.wo<=3) cands.push({id:6, html:`${B(_mirBestMonth-sc.wo)} away from your best month ever.`});
+    else if(sc.wo>_mirBestMonth) cands.push({id:6, html:`This is your best month ever — ${B(sc.wo)} days and counting.`});
   }
-  // rule 7: never-logged weekday pattern
   try{
-    if(myLogs.length>=8){
-      const DOWn=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    if(myLogs.length>=6){
       const cnt=[0,0,0,0,0,0,0];
-      myLogs.forEach(l=>{ if(l.day){ cnt[new Date(season.year,season.month-1,l.day).getDay()]++; } });
+      myLogs.forEach(l=>{ if(l.day) cnt[new Date(season.year,season.month-1,l.day).getDay()]++; });
       const zero=cnt.map((c,i)=>({c,i})).filter(x=>x.c===0);
-      if(zero.length===1) cands.push({id:7, html:`You've never logged a ${B(DOWn[zero[0].i])} — this month's blank spot.`});
+      if(zero.length===1) cands.push({id:7, html:`You've never logged a ${B(DOWn[zero[0].i])} this month — the one blank spot.`});
+      else if(zero.length===2) cands.push({id:7, html:`${B(DOWn[zero[0].i]+'s')} and ${B(DOWn[zero[1].i]+'s')} are still blank this month.`});
     }
   }catch(e){}
-  // rule 8: fallback mix note
-  try{
+
+  // ── ROTATING FALLBACK POOL — deterministic per day, all +0 reads ──
+  const pool=[];
+  try{  // (a) category mix — counts LOGS, so it must not claim a "week"
     const recent=myLogs.slice().sort((a,b)=>(b.day||0)-(a.day||0)).slice(0,5);
-    const catCnt={}; recent.forEach(l=>(l.workouts||[]).forEach(w=>{ const c=mirCatOf(w); catCnt[c]=(catCnt[c]||0)+1; }));
-    const top=Object.keys(catCnt).sort((a,b)=>catCnt[b]-catCnt[a])[0];
-    if(top) cands.push({id:8, html:`${B(top.charAt(0).toUpperCase()+top.slice(1))}-heavy week — ${B(catCnt[top])} of your last 5.`});
+    const cc={}; recent.forEach(l=>(l.workouts||[]).forEach(w=>{ const c=mirCatOf(w); cc[c]=(cc[c]||0)+1; }));
+    const top=Object.keys(cc).sort((a,b)=>cc[b]-cc[a])[0];
+    if(top && recent.length) pool.push(`${B(cap(top))} in ${B(cc[top])} of your last ${recent.length} logs.`);
   }catch(e){}
-  cands.push({id:0, html:`Every day you log is a strike on the anvil. ${loggedToday?"Today's counted.":'Tap today to add one.'}`});
-  // deterministic pick: first match, but skip the one shown yesterday if a
-  // different candidate exists (no repeat two days running).
+  try{  // (b) days this month vs the group's median
+    const all=roster.map(p=>score(p.name).wo).sort((a,b)=>a-b);
+    if(all.length>=3){
+      const med=all[Math.floor(all.length/2)];
+      if(sc.wo>med) pool.push(`${B(sc.wo)} days marked — the group's middle is ${B(med)}.`);
+      else if(sc.wo===med) pool.push(`${B(sc.wo)} days marked — exactly the group's middle.`);
+      else pool.push(`${B(sc.wo)} days marked · the group's middle is ${B(med)}.`);
+    }
+  }catch(e){}
+  try{  // (c) busiest weekday
+    if(myLogs.length>=4){
+      const cnt=[0,0,0,0,0,0,0];
+      myLogs.forEach(l=>{ if(l.day) cnt[new Date(season.year,season.month-1,l.day).getDay()]++; });
+      const best=cnt.indexOf(Math.max(...cnt));
+      if(cnt[best]>=2) pool.push(`${B(DOWn[best]+'s')} are your strongest — ${B(cnt[best])} logs this month.`);
+    }
+  }catch(e){}
+  try{  // (d) longest gap survived
+    let longest=0,prev=0; daysSorted.forEach(d=>{ if(prev) longest=Math.max(longest,d-prev); prev=d; });
+    if(longest>=3) pool.push(`Your longest gap this month was ${B(longest)} days — you came back.`);
+  }catch(e){}
+  try{  // (e) breadth of types
+    const types=new Set(); myLogs.forEach(l=>(l.workouts||[]).forEach(w=>types.add(String(w).toLowerCase())));
+    if(types.size>=3) pool.push(`${B(types.size)} different workouts this month — no single-track training.`);
+  }catch(e){}
+  try{  // (f) first outing of a type this month
+    const firstOf={};
+    myLogs.slice().sort((a,b)=>(a.day||0)-(b.day||0)).forEach(l=>(l.workouts||[]).forEach(w=>{ if(!(w in firstOf)) firstOf[w]=l.day||0; }));
+    const fresh=Object.keys(firstOf).filter(w=>todayD>0 && todayD-firstOf[w]<=3 && firstOf[w]>1);
+    if(fresh.length) pool.push(`You added ${B(fresh[0])} to the mix this month.`);
+  }catch(e){}
+  try{  // (g) teammates who showed up today
+    const myTeam=roster.find(p=>p.name===me.name)?.team;
+    if(myTeam && todayD>0){
+      const mates=new Set((allLogs||[]).filter(l=>l.day===todayD && l.player!==me.name)
+        .filter(l=>roster.find(p=>p.name===l.player && p.team===myTeam)).map(l=>l.player));
+      if(mates.size>0) pool.push(`${B(mates.size)} of Team ${esc(myTeam)} logged today.`);
+    }
+  }catch(e){}
+  try{  // (h) pace
+    const dim=new Date(season.year,season.month,0).getDate();   // real calendar length (season.days can be stale)
+    if(todayD>2 && sc.wo>0) pool.push(`${B(sc.wo)} days in ${todayD} — on pace for ${B(Math.round(sc.wo/todayD*dim))}.`);
+  }catch(e){}
+  pool.push(`Every day you log is a strike on the anvil.${loggedToday?" Today's counted.":''}`);
+
+  // deterministic per-day rotation through the pool
   const dateKey=ymdToday();
+  const seed=dateKey.split('-').reduce((a,c)=>a+parseInt(c,10),0);
+  cands.push({id:8, html: pool[seed % pool.length]});
+
+  // first match wins; never repeat the SAME rule two days running
   let lastShown=null; try{ lastShown=JSON.parse(localStorage.getItem('mir_cap')||'null'); }catch(e){}
   let pick=cands[0];
-  if(lastShown && lastShown.date!==dateKey && lastShown.id===pick.id && cands.length>1){ pick=cands[1]; }
+  if(lastShown && lastShown.date!==dateKey && lastShown.id===pick.id && cands.length>1) pick=cands[1];
   try{ localStorage.setItem('mir_cap', JSON.stringify({date:dateKey, id:pick.id})); }catch(e){}
   return pick.html;
 }
@@ -2790,121 +2894,6 @@ function getNudgeHTML(playerName,sc){
   return `<div class="nudge"><div class="nudge-icon">⚡</div><div class="nudge-text">You're <strong>${gap} pts behind ${esc(ahead.name)}</strong>. ${needed} workout${needed>1?'s':''} and you overtake them.</div></div>`;
 }
 
-// ── LOG ───────────────────────────────────────────────────────────────────
-function pickDay(t){
-  if(t==='today'){
-    const now=new Date();
-    if(now.getMonth()+1!==season.month||now.getFullYear()!==season.year){ toast(`Today is not in the active month (${season.month}/${season.year})`,'error'); return; }
-    selDay=now.getDate();
-  }
-  goS2();
-}
-function showPicker(){
-  // Native picker range = the season's own month, capped at today — so the
-  // widget itself can't offer an out-of-season or future date. The JS check
-  // in pickDayFromInput stays the authoritative guard regardless.
-  const inp=document.getElementById('dpick');
-  const {month,year}=season;
-  const pad=n=>String(n).padStart(2,'0');
-  const today=new Date();
-  inp.min=`${year}-${pad(month)}-01`;
-  inp.max=`${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
-  document.getElementById('pickerWrap').classList.remove('hidden');
-}
-function pickDayFromInput(){
-  const v=document.getElementById('dpick').value;
-  if(!v) return;
-  const [Y,M,D]=v.split('-').map(Number); // manual split — avoids new Date(v) UTC-parse day-shift
-  const today=new Date();
-  const todayOnly=new Date(today.getFullYear(),today.getMonth(),today.getDate());
-  const pickedOnly=new Date(Y,M-1,D);
-  if(M!==season.month || Y!==season.year || pickedOnly>todayOnly){
-    toast('Pick a day within this month, not in the future','error');
-    return;
-  }
-  selDay=D;
-  goS2();
-}
-function pickDayFromStrip(day){ selDay=day; goS2(); }
-function buildDayStrip(){
-  const el=document.getElementById('dayStrip');
-  if(!el) return;
-  if(!season){ el.innerHTML=''; return; }
-  const today=new Date();
-  const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const rows=[];
-  for(let i=6;i>=0;i--){
-    const d=new Date(today); d.setDate(today.getDate()-i);
-    const dayNum=d.getDate();
-    const inSeason=d.getMonth()+1===season.month&&d.getFullYear()===season.year;
-    const isToday=i===0;
-    rows.push(`<div class="day-row${isToday?' today':''}${!inSeason?' disabled':''}" onclick="${inSeason?`pickDayFromStrip(${dayNum})`:''}">
-      <div class="day-row-dow">${DOW[d.getDay()]}</div>
-      <div class="day-row-num">${dayNum}</div>
-      ${isToday?'<div style="font-size:10px;font-weight:700;color:var(--accent);margin-left:auto;text-transform:uppercase;letter-spacing:.06em">Today</div>':''}
-    </div>`);
-  }
-  el.innerHTML=rows.join('');
-}
-function goS2(){
-  document.getElementById('ls1').classList.add('hidden');
-  document.getElementById('ls2').classList.remove('hidden');
-  const {month,year}=season;
-  const dt=new Date(year,month-1,selDay);
-  document.getElementById('lDateLbl').textContent=dt.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'});
-  const ex=allLogs.filter(l=>l.player===me.name&&l.day===selDay).flatMap(l=>l.workouts||[l.workout]).filter(Boolean);
-  document.getElementById('lExisting').textContent=ex.length?`Already logged: ${ex.join(', ')}`:'';
-  buildChips(); selW=[]; updateSel(); updBtn();
-}
-const _WO_ICONS={
-  'Gym':`<path d="M4 12h16M6 9v6M18 9v6" stroke-linecap="round"/><rect x="2" y="11" width="4" height="2" rx="1" fill="currentColor" stroke="none"/><rect x="18" y="11" width="4" height="2" rx="1" fill="currentColor" stroke="none"/>`,
-  'Weight training':`<path d="M4 12h16M6 9v6M18 9v6" stroke-linecap="round"/><rect x="2" y="11" width="4" height="2" rx="1" fill="currentColor" stroke="none"/><rect x="18" y="11" width="4" height="2" rx="1" fill="currentColor" stroke="none"/>`,
-  'Strength training':`<path d="M4 12h16M6 9v6M18 9v6" stroke-linecap="round"/><rect x="2" y="11" width="4" height="2" rx="1" fill="currentColor" stroke="none"/><rect x="18" y="11" width="4" height="2" rx="1" fill="currentColor" stroke="none"/>`,
-  'Run':`<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>`,
-  'Walk':`<circle cx="12" cy="5" r="2" fill="currentColor" stroke="none"/><path d="M9 22l2-7 1.5 3 1.5-3 2 7M8 13l4-6 4 6" stroke-linecap="round" stroke-linejoin="round"/>`,
-  'Padel':`<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>`,
-  'Tennis':`<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>`,
-  'Yoga':`<circle cx="12" cy="5" r="2" fill="currentColor" stroke="none"/><path d="M7 13h10M9 10l-2 3M15 10l2 3M9 10h6" stroke-linecap="round" stroke-linejoin="round"/>`,
-  'Cycling':`<circle cx="6" cy="15" r="4"/><circle cx="18" cy="15" r="4"/><path d="M7 9h5l3 6" stroke-linecap="round"/>`,
-  'Spinning':`<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3" stroke-linecap="round"/>`,
-  'Swimming':`<path d="M2 10c2-2 4-2 6 0 2 2 4 2 6 0 2-2 4-2 6 0M2 16c2-2 4-2 6 0 2 2 4 2 6 0 2-2 4-2 6 0" stroke-linecap="round"/>`,
-};
-function _woIcon(w){
-  const c=_WO_ICONS[w]; if(!c) return '';
-  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">${c}</svg>`;
-}
-function buildChips(){
-  const playerLogs=allLogs.filter(l=>l.player===me.name);
-  const freq={};
-  playerLogs.forEach(l=>{ (l.workouts||[l.workout]||[]).filter(Boolean).forEach(w=>{freq[w]=(freq[w]||0)+1;}); });
-  const mine=[...new Set(playerLogs.flatMap(l=>l.workouts||[l.workout]).filter(Boolean))];
-  const hasHistory=Object.keys(freq).length>0;
-  let all=[...new Set([...mine,...COMMON_WORKOUTS])];
-  let featured=[], regular=all;
-  if(hasHistory){
-    all.sort((a,b)=>(freq[b]||0)-(freq[a]||0));
-    const topN=Math.min(3,all.filter(w=>(freq[w]||0)>0).length);
-    featured=all.slice(0,topN);
-    regular=all.slice(topN);
-  }
-  const mkFeat=w=>{const s=escForInlineJsAttr(w);return `<div class="workout-feat-card${mine.includes(w)?' mine':''}" onclick="toggleChip(this,'${s}')">${_woIcon(w)}<span>${esc(w)}</span></div>`;};
-  const mkChip=w=>{const s=escForInlineJsAttr(w);return `<div class="chip${mine.includes(w)?' mine':''}" onclick="toggleChip(this,'${s}')" style="display:flex;align-items:center;gap:5px">${_woIcon(w)}<span>${esc(w)}</span></div>`;};
-  const featHTML=featured.length?`<div class="workout-feat-grid">${featured.map(mkFeat).join('')}</div>`:'';
-  const chipHTML=`<div class="chips" style="margin-bottom:0">${regular.map(mkChip).join('')}</div>`;
-  document.getElementById('wChips').innerHTML=featHTML+chipHTML;
-}
-function toggleChip(el,w){ el.classList.toggle('sel'); if(el.classList.contains('sel')){if(!selW.includes(w))selW.push(w);}else{selW=selW.filter(x=>x!==w);} updateSel(); updBtn(); }
-function addCustom(){
-  const inp=document.getElementById('custInp');
-  const v=inp.value.trim().slice(0,30);   // cap length at 30
-  if(!v) return;
-  if(/[<>"'\\]/.test(v)){ toast('Workout name can\'t contain these characters: < > " \' \\','error'); return; }
-  if(!selW.includes(v)) selW.push(v);
-  inp.value=''; updateSel(); updBtn();
-}
-function updateSel(){ const w=document.getElementById('selPrev'),l=document.getElementById('selList'); if(selW.length===0){w.classList.add('hidden');return;} w.classList.remove('hidden'); l.textContent=selW.join(' · '); }
-function updBtn(){ document.getElementById('subBtn').disabled=selW.length===0; }
-
 function ymdOf(year,month,day){ return `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`; }
 function ymdToday(){ const d=new Date(); return ymdOf(d.getFullYear(), d.getMonth()+1, d.getDate()); }
 
@@ -3047,13 +3036,13 @@ async function updateStreakAndStats(userId, year, month, day){
 }
 
 async function submitLog(){
-  // Mirror Home sets this flag before calling: log the write EXACTLY the same
-  // way (multi-group broadcast + self-heal watchdog + denorm, all untouched),
-  // but present the afterglow report instead of the Log-tab ls3 screen.
-  // Consumed once per call so the Log tab's own submits are never affected.
-  const _mir = window._mirrorLogMode === true; window._mirrorLogMode=false;
+  // PASS-2 FIX 8: the Log tab is gone, so the Mirror sheet is the only caller
+  // and the afterglow report is the only presentation. The write path itself
+  // (multi-group broadcast + self-heal watchdog + demo/rank/mix denorm) is
+  // unchanged. `subBtn` belonged to the deleted page — guarded, not assumed.
+  window._mirrorLogMode=false;
   const btn=document.getElementById('subBtn');
-  btn.disabled=true; btn.textContent='Saving...';
+  if(btn){ btn.disabled=true; btn.textContent='Saving...'; }
   try{
     // Log once, post to every group you're in on this device — but ONLY to groups
     // currently on the SAME season month as this workout. A June workout has no
@@ -3186,43 +3175,14 @@ async function submitLog(){
       try { rw = computeRewardData(newLogIds); }
       catch(e){ logErr('submitLog: reward computation failed', e); }
 
-      if(_mir){
-        // Mirror Home log path → the afterglow report (Log-tab ls3 is skipped).
-        try { mirShowReport(rw); }
-        catch(e){ logErr('submitLog: mirror afterglow failed', e); }
-      } else {
-      const myDays=[...allLogs.filter(l=>l.player===me.name).map(l=>l.day)].sort((a,b)=>a-b);
-      const lastDay=myDays.length>=2?myDays[myDays.length-2]:null;
-      const isComeback=lastDay&&(selDay-lastDay)>=3;
-      document.getElementById('ls2').classList.add('hidden');
-      document.getElementById('ls3').classList.remove('hidden');
-      const HYPE=['Forged! 🔨','Beast mode 🔥','Logged & loaded 💪','Another one in the books ✅','Showing up wins 🏆','Crushed it 💥'];
-      document.getElementById('succTitle').textContent = !commitSettled
-        ? 'Saved on this phone'
-        : (isComeback ? 'Welcome Back!' : HYPE[Math.floor(Math.random()*HYPE.length)]);
-      const multiNote = targets.length>1 ? ` · posted to ${targets.length} groups` : '';
-      document.getElementById('succSub').textContent = !commitSettled
-        ? "Will sync when you're back online"
-        : `${selW.join(', ')} · Day ${selDay}${multiNote}`;
-      const cbMsg=document.getElementById('comebackMsg');
-      if(isComeback && commitSettled){cbMsg.textContent=getRandomComeback();cbMsg.classList.remove('hidden');}else{cbMsg.classList.add('hidden');}
-      const si=document.querySelector('#ls3 .succ-icon'); if(si){si.classList.remove('strike-icon');void si.offsetWidth;si.classList.add('strike-icon');}
-
-      try {
-        fireSparks();
-        if(navigator.vibrate) navigator.vibrate(200);
-        celebrateReward(rw);
-      } catch(e){
-        logErr('submitLog: celebration failed', e);
-      }
-      }
+      // Only presentation left: the afterglow report.
+      try { mirShowReport(rw); }
+      catch(e){ logErr('submitLog: afterglow failed', e); }
     } catch(e){
       logErr('submitLog: post-commit presentation failed', e);
     }
-  } catch(e){ console.error('submitLog failed:',e); toast('Error saving. Check connection.','error'); btn.disabled=false; btn.textContent='Log Workout'; }
+  } catch(e){ console.error('submitLog failed:',e); toast('Error saving. Check connection.','error'); if(btn){ btn.disabled=false; btn.textContent='Log Workout'; } }
 }
-function resetLog(){ clearTimeout(_rwTimer); _rwTimer=null; selDay=null; selW=[]; ['ls1','ls2','ls3'].forEach((id,i)=>document.getElementById(id).classList[i===0?'remove':'add']('hidden')); document.getElementById('pickerWrap').classList.add('hidden'); showTab('home'); }
-function backToS1(){ document.getElementById('ls1').classList.remove('hidden'); document.getElementById('ls2').classList.add('hidden'); }
 
 function fireSparks(){
   const n=22;
@@ -3322,47 +3282,6 @@ function computeRewardData(newLogIds){
   return { myCount, pace, teamName:'Team '+(me.team||'—'), teamCount, movedTo, bestWeek };
 }
 
-let _rwTimer=null;
-function celebrateReward(rw){
-  const ic=document.querySelector('#ls3 .succ-icon');
-  if(ic){ ic.style.animation='none'; void ic.offsetWidth; ic.style.animation='succPop .7s cubic-bezier(.22,1,.36,1)'; }
-  const wrap=document.getElementById('rwWrap');
-  const hero=document.getElementById('rwHeroNum'), pace=document.getElementById('rwPace');
-  const team=document.getElementById('rwTeam'), rank=document.getElementById('rwRank'), best=document.getElementById('rwBest');
-  if(!wrap||!hero){ fireConfetti(); scheduleRewardDismiss(); return; }
-  if(!rw){ wrap.classList.add('hidden'); fireConfetti(); scheduleRewardDismiss(); return; }
-  wrap.classList.remove('hidden');
-  pace.textContent='on pace for '+rw.pace;
-  team.textContent=rw.teamName+': '+rw.teamCount+' this month';
-  if(rw.bestWeek){ best.textContent='Your biggest week this month'; best.classList.remove('hidden'); } else best.classList.add('hidden');
-  if(rw.movedTo){ rank.textContent='moved to #'+rw.movedTo; rank.classList.remove('hidden'); } else rank.classList.add('hidden');
-  const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if(reduced){
-    hero.textContent=rw.myCount;
-    team.style.transition=rank.style.transition='none';
-    team.style.opacity=rank.style.opacity='1';
-  } else {
-    // hero lands first (count-up ~500ms), secondary fades in after, tertiary last
-    hero.textContent='0';
-    team.style.transition=rank.style.transition='none';
-    team.style.opacity=rank.style.opacity='0';
-    countUp(hero, rw.myCount, 500);
-    setTimeout(()=>{ team.style.transition='opacity .4s ease-out'; team.style.opacity='1'; },350);
-    setTimeout(()=>{ rank.style.transition='opacity .4s ease-out'; rank.style.opacity='1'; },550);
-  }
-  fireConfetti();
-  scheduleRewardDismiss();
-}
-// Auto-dismiss after ~4s OR on tap (ls3's onclick), whichever first — logging
-// a second workout is never blocked behind this screen.
-function scheduleRewardDismiss(){ clearTimeout(_rwTimer); _rwTimer=setTimeout(dismissReward, 4200); }
-function dismissReward(){
-  clearTimeout(_rwTimer); _rwTimer=null;
-  const ls3=document.getElementById('ls3');
-  if(!ls3 || ls3.classList.contains('hidden')) return;   // idempotent: tap + timer can both fire
-  resetLog();
-}
-  
 // ── LEADERBOARD ───────────────────────────────────────────────────────────
 function renderLB(){
   if(!season) return;
@@ -3443,7 +3362,14 @@ function renderLB(){
 
 // ── FEED ──────────────────────────────────────────────────────────────────
 function renderFeed(){
-  const sorted=[...allLogs].sort((a,b)=>(b.timestamp?.seconds||0)-(a.timestamp?.seconds||0));
+  // PASS-2 FIX 1a — a just-written log's serverTimestamp() is NULL in the local
+  // offline echo until the server acks. The old `||0` sorted those brand-new
+  // rows to the BOTTOM, where slice(0,60) cut them off entirely in any group
+  // with 60+ logs — the "feed doesn't update until reload" bug. A pending
+  // timestamp means "written by this device just now", so it sorts NEWEST.
+  const PENDING=Number.MAX_SAFE_INTEGER;
+  const tsMs=l=>(l.timestamp&&l.timestamp.seconds)?l.timestamp.seconds*1000:PENDING;
+  const sorted=[...allLogs].sort((a,b)=>tsMs(b)-tsMs(a));
   const tcol=t=>t==='A'?'var(--A)':t==='B'?'var(--B)':'var(--C)';
   const tbg=t=>t==='A'?'var(--Al)':t==='B'?'var(--Bl)':'var(--Cl)';
   const now=new Date();
@@ -3493,29 +3419,40 @@ function renderFeed(){
   </div>`;
 
   if(sorted.length===0){ document.getElementById('feedList').innerHTML=statsHTML+'<div class="tmuted">No workouts logged yet. Be the first! 🔥</div>'; return; }
+  // PASS-2 FIX 5 — feed rows: full block tinted the player's TEAM colour, name
+  // prominent centre-left with their live streak beside it, and the workout's
+  // category glyph on the RIGHT as a solid FILLED icon. No emojis anywhere.
+  // Timestamps, reactions, void + flag affordances and day labels unchanged.
   document.getElementById('feedList').innerHTML=statsHTML+sorted.slice(0,60).map(l=>{
-    const w=Array.isArray(l.workouts)?l.workouts.join(', '):(l.workout||'');
+    const ws=Array.isArray(l.workouts)?l.workouts:(l.workout?[l.workout]:[]);
+    const w=ws.join(', ');
     const ts=l.timestamp?.seconds?new Date(l.timestamp.seconds*1000):null;
-    const tstr=ts?ts.toLocaleDateString('en-IN',{day:'numeric',month:'short'})+' · '+ts.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):`Day ${l.day}`;
+    // pending timestamp = this device wrote it moments ago
+    const tstr=ts?ts.toLocaleDateString('en-IN',{day:'numeric',month:'short'})+' · '+ts.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'Just now';
     const isMine=l.player===me.name;
     const ct=(season.roster||[]).find(x=>x.name===l.player)?.team||l.team;
     const flagCount=flags.filter(f=>f.logId===l.id).length;
     const alreadyFlagged=flags.some(f=>f.logId===l.id&&f.flaggedBy===me.name);
-    const isBacklog=l.day<todayDay&&ts&&ts.toDateString()===now.toDateString();
+    const submittedToday=ts?ts.toDateString()===now.toDateString():true;
+    const isBacklog=l.day<todayDay&&submittedToday;
     const rCount=reactionCounts.get(l.id)||0;
     const iReacted=myReactions.has(l.id);
-    return `<div class="fi">
-      <div class="fav" style="background:${tbg(ct)};color:${tcol(ct)};border:1.5px solid ${tcol(ct)}">${esc(l.player[0])}</div>
-      <div class="ftxt">
-        <div class="fn">${esc(l.player)} <span style="font-size:10px;color:${tcol(ct)};font-weight:600">Team ${ct}</span>${flagCount>=2?'<span class="pill" style="background:var(--red-l);color:var(--red);margin-left:6px">⚑ flagged</span>':''}</div>
-        <div class="fw">💪 ${esc(w)}</div>
-        <div class="ft">${tstr} · <span style="color:var(--muted)">Day ${l.day}</span>${isBacklog?' <span style="background:var(--orange-l);color:var(--orange);font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:4px">backlog</span>':''}</div>
+    const st=(()=>{ try{ return score(l.player).streak||0; }catch(e){ return 0; } })();
+    const primary=ws[0]||'';
+    const ccol=mirColOf(primary);
+    const fico='f-'+mirIconOf(primary).slice(2);
+    return `<div class="fi t${ct}">
+      <div class="fi-main">
+        <div class="fi-name" style="color:${tcol(ct)}">${esc(l.player)}${st>0?`<span class="fi-streak"><svg class="mir-fico" viewBox="0 0 24 24"><use href="#f-flame"/></svg>${st}</span>`:''}${flagCount>=2?'<span class="fi-flagged">flagged</span>':''}</div>
+        <div class="fi-w">${esc(w)}</div>
+        <div class="fi-t">${tstr} · Day ${l.day}${isBacklog?'<span class="fi-backlog">backlog</span>':''}</div>
       </div>
-      <div style="display:flex;gap:6px;flex-shrink:0;align-items:center">
-        ${isMine?`<button onclick="deleteLog('${l.id}')" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:4px">×</button>`:''}
-        ${!isMine&&window.FEATURE_REACTIONS_ENABLED?`<button onclick="toggleReaction('${l.id}')" style="background:none;border:none;color:${iReacted?'var(--orange)':'var(--muted)'};font-size:13px;cursor:pointer;padding:4px;display:flex;align-items:center;gap:2px">🔥${rCount>0?`<span style="font-size:11px;font-weight:700">${rCount}</span>`:''}</button>`:''}
-        ${!isMine&&!alreadyFlagged?`<button onclick="flagLog('${l.id}','${escForInlineJsAttr(l.player)}')" style="background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:4px">⚑</button>`:''}
+      <div class="fi-acts">
+        ${isMine?`<button class="fi-btn" title="Remove" onclick="deleteLog('${l.id}')"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-close"/></svg></button>`:''}
+        ${!isMine&&window.FEATURE_REACTIONS_ENABLED?`<button class="fi-btn${iReacted?' on':''}" title="React" onclick="toggleReaction('${l.id}')"><svg class="mir-fico" viewBox="0 0 24 24"><use href="#f-flame"/></svg>${rCount>0?`<span class="fi-rc">${rCount}</span>`:''}</button>`:''}
+        ${!isMine&&!alreadyFlagged?`<button class="fi-btn" title="Flag" onclick="flagLog('${l.id}','${escForInlineJsAttr(l.player)}')"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-flag"/></svg></button>`:''}
       </div>
+      <div class="fi-ico" style="color:${ccol}"><svg class="mir-fico" viewBox="0 0 24 24"><use href="#${fico}"/></svg></div>
     </div>`;
   }).join('');
 }
@@ -5688,7 +5625,10 @@ function initScrollCompression(){
 }
 
 // ── TABS ──────────────────────────────────────────────────────────────────
-const TABS=['home','log','lb','feed','global','admin','pledge'];
+// PASS-2 FIX 8 — the Log tab is gone; the Mirror's calendar + sheet is the only
+// logging surface. 'log' is kept OUT of TABS but still handled as a legacy
+// route in showTab (deep links / old redirects land on Home with today's sheet).
+const TABS=['home','lb','feed','global','admin','pledge'];
 function updateTabPill(t){
   const pill=document.getElementById('tabPill');
   const tabEls=document.querySelectorAll('.tabs .tab');
@@ -5702,6 +5642,18 @@ function updateTabPill(t){
   pill.style.width=tabRect.width+'px';
 }
 async function showTab(t){
+  // PASS-2 FIX 8 — legacy 'log' route: the Log tab no longer exists, so any
+  // surviving caller (deep link, post-onboarding redirect, old bookmark)
+  // lands on Home with today's log sheet already open.
+  if(t==='log'){
+    showTab('home');
+    setTimeout(()=>{ try{
+      const todayD=new Date().getDate();
+      const inSeason=new Date().getMonth()+1===season.month && new Date().getFullYear()===season.year;
+      if(inSeason){ _mirPendingDay=todayD; mirOpenLogSheet(todayD); }
+    }catch(e){ logErr('legacy log route', e); } }, 260);
+    return;
+  }
   if(t==='admin'&&!adminUnlocked){
     // S3 §4.1: a per-group admin gets straight in — no PIN needed for their
     // own group. ADMIN_PIN stays as the master super-override for anyone
@@ -5726,7 +5678,6 @@ async function showTab(t){
   if(navigator.vibrate) navigator.vibrate(8);
   if(t==='global') loadGlobal();
   if(t==='pledge') renderIronPledgePage();
-  if(t==='log') buildDayStrip();
   if(t==='profile') renderProfile();
   if(t==='admin') maybeShowRebalanceCard().catch(e=>logErr('maybeShowRebalanceCard',e));
   trackTabClick(t); // fire-and-forget — no await

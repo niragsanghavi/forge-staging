@@ -224,13 +224,41 @@ label{font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px;displa
 .chip.mine{border-color:rgba(212,168,67,.45)}
 
 /* ── FEED ── */
-.fi{display:flex;gap:11px;padding:12px 0;border-bottom:1px solid var(--hairline);align-items:flex-start}
-.fi:last-child{border-bottom:none}
-.fav{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0}
-.ftxt{flex:1;min-width:0}
-.fn{font-size:14px;font-weight:600;letter-spacing:-.01em}
-.fw{font-size:12.5px;color:var(--muted);margin-top:2px}
-.ft{font-size:10.5px;color:var(--muted);margin-top:3px;opacity:.85}
+/* ── FEED ROWS (pass 2) — full block tinted by the player's TEAM colour,
+   name + live streak centre-left, solid category glyph on the right.
+   No emojis: every affordance is an inline SVG from the icon library. ── */
+.fi{display:flex;gap:10px;padding:11px 13px;margin-bottom:8px;border-radius:14px;
+    align-items:center;min-height:56px;border:1px solid transparent;background:rgba(255,255,255,.04)}
+.fi.tA{background:var(--Al);border-color:color-mix(in srgb,var(--A) 22%,transparent)}
+.fi.tB{background:var(--Bl);border-color:color-mix(in srgb,var(--B) 22%,transparent)}
+.fi.tC{background:var(--Cl);border-color:color-mix(in srgb,var(--C) 22%,transparent)}
+.fi:last-child{margin-bottom:0}
+.fi-main{flex:1;min-width:0}
+.fi-name{font-size:14.5px;font-weight:800;letter-spacing:-.01em;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.fi-streak{display:inline-flex;align-items:center;gap:2px;font-size:12px;font-weight:800;color:var(--gold)}
+.fi-streak svg{width:13px;height:13px}
+.fi-flagged{font-size:11px;font-weight:700;color:var(--red);background:var(--red-l);border-radius:5px;padding:1px 6px}
+.fi-w{font-size:13px;color:var(--text);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fi-t{font-size:11px;color:var(--muted);margin-top:3px;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.fi-backlog{background:var(--orange-l);color:var(--orange);font-size:11px;font-weight:700;padding:1px 6px;border-radius:5px}
+.fi-acts{display:flex;gap:2px;flex-shrink:0;align-items:center}
+.fi-btn{background:none;border:none;color:var(--muted);cursor:pointer;padding:0;
+        width:46px;height:46px;display:flex;align-items:center;justify-content:center;gap:2px;border-radius:10px}
+.fi-btn svg{width:17px;height:17px}
+.fi-btn.on{color:var(--orange)}
+.fi-btn:active{background:rgba(255,255,255,.07)}
+.fi-rc{font-size:11px;font-weight:800}
+.fi-ico{flex-shrink:0;width:34px;height:34px;display:flex;align-items:center;justify-content:center}
+.fi-ico svg{width:28px;height:28px}
+/* filled-glyph variant: solid silhouette, no stroke */
+svg.mir-fico{fill:currentColor;stroke:none;display:block}
+/* Light theme: the untinted fallback must NOT out-specify the team tints —
+   the --Al/--Bl/--Cl tokens already carry their own light values. */
+:root[data-theme="light"] .fi{background:rgba(0,0,0,.03)}
+:root[data-theme="light"] .fi.tA{background:var(--Al)}
+:root[data-theme="light"] .fi.tB{background:var(--Bl)}
+:root[data-theme="light"] .fi.tC{background:var(--Cl)}
+:root[data-theme="light"] .fi-btn:active{background:rgba(0,0,0,.06)}
 
 /* ── BADGES ── */
 .rbadge{display:inline-block;padding:2.5px 9px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em}
@@ -497,8 +525,27 @@ svg.mir-ico{fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:roun
 /* scrim + sheet */
 .mir-scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:opacity .25s;z-index:200}
 .mir-scrim.on{opacity:1;pointer-events:auto}
-.mir-sheet{position:fixed;left:0;right:0;bottom:0;transform:translateY(105%);background:var(--bg-card-2);border:1px solid var(--border);border-bottom:none;border-radius:24px 24px 0 0;padding:14px 18px calc(30px + env(safe-area-inset-bottom));z-index:201;transition:transform .3s cubic-bezier(.2,.8,.3,1);max-width:500px;margin:0 auto}
+/* Sheet is a flex column with a hard max-height so a long list SCROLLS inside
+   its own body instead of running under the tab bar / off-screen (pass-2 FIX 7:
+   the old Log tab hid trailing items like Dance behind its fixed submit bar). */
+.mir-sheet{position:fixed;left:0;right:0;bottom:0;transform:translateY(105%);background:var(--bg-card-2);border:1px solid var(--border);border-bottom:none;border-radius:24px 24px 0 0;padding:14px 18px 0;z-index:201;transition:transform .3s cubic-bezier(.2,.8,.3,1);max-width:500px;margin:0 auto;
+  max-height:86vh;display:flex;flex-direction:column}
 .mir-sheet.on{transform:translateY(0)}
+#mirSheetBody{overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1 1 auto;min-height:0;
+  /* trailing space so the LAST row always clears the home indicator/safe area */
+  padding-bottom:calc(28px + env(safe-area-inset-bottom));scrollbar-width:none}
+#mirSheetBody::-webkit-scrollbar{display:none}
+.mir-fsec{font-size:11px;font-weight:800;letter-spacing:.1em;color:var(--muted);margin:14px 2px 6px;text-transform:uppercase}
+.mir-fsec:first-child{margin-top:2px}
+.mir-frow{display:flex;align-items:center;gap:11px;min-height:48px;padding:6px 8px;border-radius:12px;cursor:pointer}
+.mir-frow:active{background:rgba(255,255,255,.07)}
+:root[data-theme="light"] .mir-frow:active{background:rgba(0,0,0,.06)}
+.mir-frow .fr-ico{flex:none;display:flex;align-items:center;justify-content:center;width:24px;height:24px}
+.mir-frow .fr-ico svg{width:20px;height:20px}
+.mir-frow .fr-name{flex:1;font-size:14.5px;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mir-fcustom{display:flex;gap:8px;align-items:center;margin-top:16px}
+.mir-fcustom input{margin-bottom:0;flex:1}
+.mir-fcustom .btn{width:auto;margin:0;padding:12px 18px;flex:none;min-height:44px}
 .mir-grab{width:38px;height:4px;border-radius:2px;background:rgba(255,255,255,.18);margin:0 auto 14px}
 .mir-sheet h3{font-size:17px;font-weight:800}
 .mir-sheet .ssub{font-size:12px;color:var(--muted);margin-top:3px;margin-bottom:16px}
