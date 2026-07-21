@@ -311,6 +311,20 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Vanity code → canonical group code pointers. Join-flow reads one doc
+    // per attempt; created at group-create (custom code) or by owner tooling.
+    // Immutable once written (update/delete: false) — a changed alias would
+    // silently re-point future joins.
+    match /codeAliases/{alias} {
+      allow read:   if isAuthed();
+      allow create: if isAuthed()
+        && alias.matches('^[A-Z0-9]{4,10}$')
+        && request.resource.data.size() == 1
+        && request.resource.data.code is string;
+      allow update: if false;
+      allow delete: if false;
+    }
+
     // ── DEFAULT DENY ──────────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;

@@ -22,8 +22,8 @@
   <div class="ob-card">
     <div class="ob-step active" id="ob-s1">
       <div class="ob-title">Enter your group code</div>
-      <div class="ob-sub">Your organiser will have shared a 6-character code</div>
-      <input class="code-input" id="codeInput" maxlength="6" placeholder="······" autocomplete="off" oninput="this.value=this.value.toUpperCase()">
+      <div class="ob-sub">Your organiser will have shared a short code</div>
+      <input class="code-input" id="codeInput" maxlength="10" placeholder="······" autocomplete="off" oninput="this.value=this.value.toUpperCase()">
       <div id="codeError" class="warn-box warn-red hidden">Group not found. Check your code.</div>
       <button class="btn btn-gold" onclick="verifyCode()">Continue</button>
       <div id="joinCancel" class="hidden" style="margin-top:12px;text-align:center"><span onclick="cancelJoin()" style="font-size:12px;color:var(--gold);cursor:pointer">← Back to my group</span></div>
@@ -76,7 +76,9 @@
       <div class="ob-title">Create Your Group</div>
       <div class="ob-sub">Defaults: roles off, 2 teams, 8-workout minimum. You can adjust these later in Admin.</div>
       <input type="text" id="ssGroupName" placeholder="Group name" maxlength="40" style="margin-bottom:10px">
-      <input type="text" id="ssCreatorName" placeholder="Your name" maxlength="24">
+      <input type="text" id="ssCreatorName" placeholder="Your name" maxlength="24" style="margin-bottom:10px">
+      <input type="text" id="ssCustomCode" placeholder="Custom code (optional — 6 letters/numbers)" maxlength="6" autocomplete="off" oninput="this.value=this.value.toUpperCase()">
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">Leave blank and we'll forge one for you.</div>
       <div id="ssError" class="warn-box warn-red hidden" style="margin-top:10px"></div>
       <button class="btn btn-gold" style="margin-top:10px" onclick="selfServeCreateGroup()">Create Group</button>
       <div id="ssResult" class="warn-box warn-green hidden" style="margin-top:14px"></div>
@@ -502,6 +504,8 @@
           <input type="checkbox" id="newGroupRoles" checked style="width:auto;margin:0">
           <span>Enable Captains / Vice Captains</span>
         </label>
+        <label>Custom code (optional — 6 chars A-Z/0-9; blank = random)</label>
+        <input id="newGroupCustomCode" maxlength="6" autocomplete="off" oninput="this.value=this.value.toUpperCase()" placeholder="e.g. FORGE1">
         <button class="btn btn-gold" style="margin-top:10px" onclick="createGroup()">Create Group + Generate Code</button>
         <div id="newGroupResult" class="hidden"></div>
       </div>
@@ -919,12 +923,47 @@ function showObStep(n){
   document.getElementById(`ob-s${n}`).classList.add('active');
 }
 
+// ── CUSTOM CODES + ALIASES ────────────────────────────────────────────────
+// codeAliases/{ALIAS} = { code: <canonical> }. Aliases are a join-time
+// convenience ONLY — the canonical code stays the internal ID everywhere
+// (sessions, logs, groupRanks, analytics untouched).
+const RESERVED_CODES=['FORGE1','ADMIN','STAGING','GULLYG','GHADIY','VANDRA','SQUAD1'];
+const CODE_BLOCKLIST=['FUCK','SHIT','CUNT','DICK','COCK','PISS','PORN','SEXY','NAZI','RAPE','ANAL','TITS','SLUT','WHORE','BOOB'];
+// Validate an OPTIONAL custom group code. Empty → {ok:true, code:null} (random
+// path). Checks format (exactly 6 A-Z/0-9), reserved + profanity, and
+// uniqueness against BOTH groups/{code} and codeAliases/{code}.
+async function validateCustomCode(raw){
+  const code=String(raw||'').trim().toUpperCase();
+  if(!code) return {ok:true, code:null};
+  if(!/^[A-Z0-9]{6}$/.test(code)) return {ok:false, msg:'Custom code must be exactly 6 characters — letters and numbers only.'};
+  if(RESERVED_CODES.includes(code) || CODE_BLOCKLIST.some(w=>code.includes(w))) return {ok:false, msg:'That code isn’t available — pick another.'};
+  const [g,a]=await Promise.all([
+    db.collection('groups').doc(code).get(),
+    db.collection('codeAliases').doc(code).get()
+  ]);
+  if(g.exists || a.exists) return {ok:false, msg:'That code is taken — pick another.'};
+  return {ok:true, code};
+}
+// Resolve a user-entered code through the alias layer. Returns the canonical
+// group code (alias hit) or the input unchanged (raw code — current behavior).
+// Cost: exactly +1 read per join attempt.
+async function resolveCodeAlias(input){
+  try{
+    const aSnap=await db.collection('codeAliases').doc(input).get();
+    if(aSnap.exists && typeof aSnap.data().code==='string') return aSnap.data().code.toUpperCase();
+  }catch(e){ logErr('resolveCodeAlias', e); /* fall through to raw */ }
+  return input;
+}
+
 async function verifyCode(){
-  const code = document.getElementById('codeInput').value.trim().toUpperCase();
-  if(code.length < 4) return;
+  const entered = document.getElementById('codeInput').value.trim().toUpperCase();
+  if(entered.length < 4) return;
   const err = document.getElementById('codeError');
   err.classList.add('hidden');
   try {
+    // Alias layer first, so everything downstream (session, logs, analytics)
+    // only ever sees the canonical code.
+    const code = await resolveCodeAlias(entered);
     if(window._joinMode && getSessions().some(s=>s.code===code)){ toast('You\'re already in this group — switching to it.'); switchGroup(code); return; }
     const snap = await db.collection('groups').doc(code).get();
     if(!snap.exists){ err.classList.remove('hidden'); return; }
@@ -2924,6 +2963,9 @@ function writeGlobalStats(){
 function writeMonthlyRollup(){
   try{
     if(!window.season || !window.groupCode || !season.month || !season.year) return;
+    // DEMO isolation: a demo group never writes its slice into the shared
+    // monthly rollup (SuperDash participation metrics stay clean).
+    if(window.groupData && groupData.demo===true) return;
     const roster = season.roster || [];
     const logs = Array.isArray(window.allLogs) ? window.allLogs : [];
     const rosterUid={};
@@ -3019,10 +3061,12 @@ async function submitLog(){
     const sessions = getSessions();
     const targets = [];
     await Promise.all(sessions.map(async sess => {
-      if(sess.code === groupCode){ targets.push(sess); return; }
+      // DEMO isolation: capture each target group's demo flag (per-target,
+      // not per-active-group — a broadcast can mix demo and real groups).
+      if(sess.code === groupCode){ targets.push({...sess, _demo: !!(groupData && groupData.demo===true)}); return; }
       try {
         const gSnap = await db.collection('groups').doc(sess.code).get();
-        if(gSnap.exists && gSnap.data().currentSeasonId === seasonId) targets.push(sess);
+        if(gSnap.exists && gSnap.data().currentSeasonId === seasonId) targets.push({...sess, _demo: gSnap.data().demo===true});
       } catch(e){ logErr('submitLog: skipped unreadable group '+sess.code, e); /* never block the log */ }
     }));
 
@@ -3045,7 +3089,11 @@ async function submitLog(){
         // logs are never backfilled. uid = this device's auth session;
         // userId = the S1 app-level identity (null until migrated/self-healed).
         uid: window.currentUid || null,
-        userId: sess.player.userId || null
+        userId: sess.player.userId || null,
+        // DEMO isolation: a log written into a demo group is stamped demo:true
+        // so every aggregate/read path can exclude it. Real groups' logs carry
+        // NO demo field (undefined-safe filters everywhere).
+        ...(sess._demo ? {demo:true} : {})
       });
     });
 
@@ -3074,10 +3122,13 @@ async function submitLog(){
     // group broadcast writes `targets.length` docs). Chained on commitPromise
     // so it fires whenever the write truly lands — even after the 4s grace
     // window — and never on failure. bumpGlobalStat itself swallows errors.
-    commitPromise.then(()=>{ if(!commitFailed) bumpGlobalStat('totalLogs', targets.length); });
+    // DEMO isolation: demo-group log docs never touch the shared aggregates —
+    // count/bump ONLY the non-demo targets (skips entirely when all are demo).
+    const realTargets = targets.filter(t=>t._demo!==true);
+    commitPromise.then(()=>{ if(!commitFailed && realTargets.length) bumpGlobalStat('totalLogs', realTargets.length); });
     // R3: bump the "active today" daily rollup, one per target group (fire-and-
     // forget, chained on a genuine commit — never on failure, never blocks).
-    commitPromise.then(()=>{ if(commitFailed) return; const cc={}; targets.forEach(s=>{ cc[s.code]=(cc[s.code]||0)+1; }); bumpDailyRollup(ymdToday(), cc); });
+    commitPromise.then(()=>{ if(commitFailed) return; const cc={}; realTargets.forEach(s=>{ cc[s.code]=(cc[s.code]||0)+1; }); bumpDailyRollup(ymdToday(), cc); });
     // MIRROR denorm (a) groupRanks + (b) workoutCounts — USER-scoped, one write
     // per submit (never per broadcast target). Fire-and-forget on a genuine
     // commit; the pills read groupRanks so we never query another group's logs.
@@ -3492,17 +3543,24 @@ function voidLogDoc(id, actorName){
     voidedBy: actorName,
     voidedAt: firebase.firestore.FieldValue.serverTimestamp()
   }).then(res=>{
-    bumpGlobalStat('totalLogs', -1);
-    // R3: decrement the daily rollup for the day this log was SUBMITTED (its
-    // timestamp), so the "active today" board drops it. Best-effort: only if
-    // the log is in memory with a timestamp + groupCode.
-    try{
-      const l=(window.allLogs||[]).find(x=>x.id===id);
-      if(l && l.timestamp && l.timestamp.seconds && l.groupCode){
-        const d=new Date(l.timestamp.seconds*1000);
-        bumpDailyRollup(ymdOf(d.getFullYear(), d.getMonth()+1, d.getDate()), { [l.groupCode]: -1 });
-      }
-    }catch(e){}
+    // DEMO isolation: demo logs never incremented the shared aggregates, so
+    // voiding one must not DECREMENT them either (counter corruption). The
+    // in-memory copy carries the stamped demo flag; also honor the active
+    // group's flag as a fallback when the log isn't in memory.
+    const l=(window.allLogs||[]).find(x=>x.id===id);
+    const isDemo=(l && l.demo===true) || (!l && window.groupData && groupData.demo===true);
+    if(!isDemo){
+      bumpGlobalStat('totalLogs', -1);
+      // R3: decrement the daily rollup for the day this log was SUBMITTED (its
+      // timestamp), so the "active today" board drops it. Best-effort: only if
+      // the log is in memory with a timestamp + groupCode.
+      try{
+        if(l && l.timestamp && l.timestamp.seconds && l.groupCode){
+          const d=new Date(l.timestamp.seconds*1000);
+          bumpDailyRollup(ymdOf(d.getFullYear(), d.getMonth()+1, d.getDate()), { [l.groupCode]: -1 });
+        }
+      }catch(e){}
+    }
     return res;
   });
 }
@@ -4059,7 +4117,10 @@ async function loadSuperAdmin(){
   // Superseded the old Overview strip + Chart.js baseline trend (which read a
   // hardcoded analytics/baseline-2026-04 doc — the "April data" bug). Everything
   // now derives from the live date; see the SuperDash module.
-  if(window.SuperDash) window.SuperDash.render(groups);
+  // DEMO isolation: demo groups are excluded from every cockpit/participation
+  // metric at this single choke point (they still appear in the management
+  // list below, badged DEMO). Undefined-safe — real groups have no demo field.
+  if(window.SuperDash) window.SuperDash.render(groups.filter(g=>g.demo!==true));
 
   // ── Rollover nudge: if any active season's month has ended/is last day ──
   checkRolloverNudges(groups);
@@ -4070,10 +4131,13 @@ async function loadSuperAdmin(){
       <div class="admin-group-card">
         <div class="row" onclick="superViewGroup('${g.code}')" style="cursor:pointer">
           <div>
-            <div style="font-size:15px;font-weight:700">${esc(g.name)}</div>
+            <div style="font-size:15px;font-weight:700">${esc(g.name)}${g.demo===true?' <span style="font-size:10px;font-weight:800;letter-spacing:.08em;color:var(--purple);border:1px solid var(--purple);border-radius:6px;padding:1px 6px;vertical-align:2px">DEMO</span>':''}</div>
             <div style="font-size:12px;color:var(--muted);margin-top:3px">${g.players?.length||0} players · current season ${g.currentSeasonId||'—'}</div>
           </div>
-          <div style="font-size:20px;font-weight:800;letter-spacing:3px;color:var(--gold)">${g.code}</div>
+          <div style="text-align:right">
+            <div style="font-size:20px;font-weight:800;letter-spacing:3px;color:var(--gold)">${esc(g.alias||g.code)}</div>
+            ${g.alias?`<div style="font-size:10px;color:var(--muted);letter-spacing:1px">${esc(g.code)}</div>`:''}
+          </div>
         </div>
         <div style="display:flex;gap:8px;margin-top:10px">
           <button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="event.stopPropagation();openEditGroup('${g.code}')">⚙ Manage</button>
@@ -4904,15 +4968,18 @@ async function selfServeCreateGroup(){
   if(formattedName.length < 2 || formattedName.length > 24){ err.textContent='Name must be 2–24 characters.'; err.classList.remove('hidden'); return; }
   if(/[^\p{L}\p{N} .\-]/u.test(formattedName)){ err.textContent='Name can only contain letters, numbers, spaces, hyphens and periods.'; err.classList.remove('hidden'); return; }
 
-  // Collision-checked code — same pattern as the super-admin createGroup fix
-  // (Batch 1): a random 6-char code can collide, and a plain write would
-  // silently replace an existing group's doc.
-  let code=null;
-  for(let i=0;i<5;i++){
-    const cand=Math.random().toString(36).substring(2,8).toUpperCase();
-    if(cand.length!==6) continue;
-    const existing=await db.collection('groups').doc(cand).get();
-    if(!existing.exists){ code=cand; break; }
+  // Optional custom code (A-Z/0-9 ×6, unique vs groups AND aliases, not
+  // reserved/blocked). Empty field → existing collision-checked random path.
+  const custom = await validateCustomCode(document.getElementById('ssCustomCode')?.value);
+  if(!custom.ok){ err.textContent=custom.msg; err.classList.remove('hidden'); return; }
+  let code=custom.code;
+  if(!code){
+    for(let i=0;i<5;i++){
+      const cand=Math.random().toString(36).substring(2,8).toUpperCase();
+      if(cand.length!==6) continue;
+      const existing=await db.collection('groups').doc(cand).get();
+      if(!existing.exists){ code=cand; break; }
+    }
   }
   if(!code){ err.textContent='Could not generate a unique group code — try again.'; err.classList.remove('hidden'); return; }
 
@@ -4978,14 +5045,18 @@ async function createGroup(){
   const numTeams=Math.min(3, Math.max(2, parseInt(document.getElementById('newGroupNumTeams').value)||3));
   const thresholdPct=Math.min(100, Math.max(30, parseInt(document.getElementById('newGroupThreshold').value)||60));
   const rolesEnabled=document.getElementById('newGroupRoles').checked;
-  // Random 6-char codes can collide, and batch.set() would silently REPLACE
-  // the existing group's doc. Check for a free code before writing.
-  let code=null;
-  for(let i=0;i<5;i++){
-    const cand=Math.random().toString(36).substring(2,8).toUpperCase();
-    if(cand.length!==6) continue;
-    const existing=await db.collection('groups').doc(cand).get();
-    if(!existing.exists){ code=cand; break; }
+  // Optional custom code first; else random 6-char (collision-checked —
+  // batch.set() would silently REPLACE an existing group's doc).
+  const custom=await validateCustomCode(document.getElementById('newGroupCustomCode')?.value);
+  if(!custom.ok){ toast(custom.msg,'error'); return; }
+  let code=custom.code;
+  if(!code){
+    for(let i=0;i<5;i++){
+      const cand=Math.random().toString(36).substring(2,8).toUpperCase();
+      if(cand.length!==6) continue;
+      const existing=await db.collection('groups').doc(cand).get();
+      if(!existing.exists){ code=cand; break; }
+    }
   }
   if(!code){ toast('Could not generate a unique group code — try again.','error'); return; }
   const sid=seasonIdOf(month, year);
@@ -5145,9 +5216,13 @@ function renderGlobalFromCache({groups,todayByGroup}){
   const grpEl=document.getElementById('globalGroups');
   const ptsEl=document.getElementById('globalPoints');
   if(!actEl||!grpEl||!ptsEl) return;
+  // DEMO isolation: demo groups never appear on any Global board. (Their logs
+  // also never bump the rollups — this is the read-side belt to that brace.
+  // Real groups have no demo field, so the guard is undefined-safe.)
+  const isDemoCode=code=>{ const g=groups.find(x=>x.code===code); return !!(g && g.demo===true); };
   // Board "active today": from the daily rollup doc's per-group counts.
   const activeRanked=Object.entries(todayByGroup||{})
-    .filter(([,count])=>count>0)
+    .filter(([code,count])=>count>0 && !isDemoCode(code))
     .map(([code,count])=>({name:groups.find(g=>g.code===code)?.name||code,count}))
     .sort((a,b)=>b.count-a.count).slice(0,5);
   actEl.innerHTML=activeRanked.length===0
@@ -5159,6 +5234,7 @@ function renderGlobalFromCache({groups,todayByGroup}){
   const groupAgg=[];
   const playerEntries=[];
   for(const g of groups){
+    if(g.demo===true) continue;   // demo groups: never on the Global boards
     const gs=g.globalStats; if(!gs || gs.seasonId!==g.currentSeasonId || !gs.count) continue;
     groupAgg.push({name:g.name,total:gs.total,count:gs.count,avg:gs.avg});
     (gs.players||[]).forEach(p=>{ if(p&&p.name!=null) playerEntries.push({name:p.name,group:g.name,points:p.points}); });
