@@ -14,29 +14,37 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 </head>
 <body>
-<!-- ══ ICON LIBRARY ══ Document-level so every surface (Home, Feed, sheet,
-     report) can <use> it regardless of which page is display:none.
-     STROKE set `i-*`  : outline glyphs, stroke-width 1.7, currentColor.
-     FILLED set `f-*`  : solid silhouettes for the Feed's category glyph.
-     Pass-2: i-flame redesigned (candidate A — see scratchpad/icon-sheet.html)
-     and i-yoga redesigned from the "chess piece" to a seated-lotus figure. -->
+<!-- ══ ICON LIBRARY ══ Document-level so every surface can <use> it.
+     TWELVE canonical workout glyphs (g-*), each ONE skeleton rendered in two
+     weights by inherited stroke-width — .mir-ico = FINE 1.6 (calendar, sheet,
+     mix bars) and .mir-bico = BOLD 2.5 (feed). No duplicated geometry.
+     Chrome glyphs (i-*) are UI furniture and unchanged. -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
-  <!-- flame — candidate A (CHOSEN): single elegant outer flame + inner tongue -->
-  <g id="i-flame"><path d="M12 2.6c0 3.1-4.7 4.6-4.7 9a4.7 4.7 0 0 0 9.4 0c0-2.2-1.2-3.9-2.3-5.1-.4 1-.9 1.6-1.7 2 .2-2.2-.2-4.1-.7-5.9z"/><path d="M12 13.5c1.2 1.2 1.9 2 1.9 3a1.9 1.9 0 1 1-3.8 0c0-1 .7-1.8 1.9-3z"/></g>
-  <g id="i-flameB"><path d="M13.1 2.5c.5 2.6-1.5 3.9-2.7 5.4-1.3 1.7-2.3 3.2-2.3 5.1a4.9 4.9 0 0 0 9.8 0c0-3.2-2.5-5.3-3.3-8-.6 1.2-1.3 1.8-2.1 2.2.3-1.6.4-3.1.6-4.7z"/></g>
-  <g id="i-flameC"><path d="M12 2.6c2.7 2.6 4.5 5.1 4.5 8.4 0 3.2-2 5.3-4.5 5.3s-4.5-2.1-4.5-5.3c0-1.7.6-3 1.6-4.3.2 1 .7 1.6 1.3 2 .1-2.2.7-4.1 1.6-6.1z"/><path d="M12 16.3v3"/></g>
-  <g id="i-gym"><path d="M7.5 9.5v5M16.5 9.5v5M7.5 12h9"/><rect x="4.6" y="8.2" width="2.9" height="7.6" rx="1.2"/><rect x="16.5" y="8.2" width="2.9" height="7.6" rx="1.2"/></g>
-  <g id="i-walk"><circle cx="13" cy="4.4" r="1.7"/><path d="M13 6.6l-1.6 4.4 2.4 2 1 6M11.4 11l-2.8 1.4M13.8 8.4l2.8 1.4-1 3"/></g>
-  <g id="i-run"><circle cx="14.5" cy="4.4" r="1.7"/><path d="M8 20l2.6-4.2 1.2-3.8 2.7 2 1.2 4M12 12l-1-3 3.4-1 1.8 2 2 .4M7.2 13.2l3-1"/></g>
-  <g id="i-swim"><circle cx="16" cy="6" r="1.7"/><path d="M4 13l6-3 3.5 2 3.5-1.5"/><path d="M3.5 17.4c1.7-1.5 3.3-1.5 5 0s3.3 1.5 5 0 3.3-1.5 5 0"/></g>
-  <g id="i-cycle"><circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16l3.5-6.5h4.5L18 16M9.5 9.5 8.5 7h-2M12 16l2.5-6.5"/></g>
-  <g id="i-cardio"><path d="M3 12h4l2-5 3 10 2-7 1.6 2H21"/></g>
-  <g id="i-racket"><circle cx="10" cy="9" r="5.4"/><path d="M13.8 12.8l4.4 4.6c.6.6.6 1.5 0 2.1s-1.5.6-2.1 0l-4.4-4.6"/><path d="M7 9h6M10 6v6" stroke-opacity=".5"/></g>
-  <g id="i-ball"><circle cx="12" cy="12" r="8.4"/><path d="M12 3.6v16.8M3.6 12h16.8M6.2 6.2c2 2 3 4 3 5.8s-1 3.8-3 5.8M17.8 6.2c-2 2-3 4-3 5.8s1 3.8 3 5.8" stroke-opacity=".5"/></g>
-  <g id="i-cricket"><path d="M6.5 8v10M11 8v10M15.5 8v10"/><path d="M4.5 18h13"/><path d="M5.2 5.8l3.6 1M13 4.6l3.8.4"/></g>
-  <!-- yoga — seated lotus: head, spine, arms to knees, crossed-leg base -->
-  <g id="i-yoga"><circle cx="12" cy="4.5" r="2"/><path d="M12 7.5v3.3"/><path d="M12 10.8c-2.6 0-4.6 1.2-5.7 2.7M12 10.8c2.6 0 4.6 1.2 5.7 2.7"/><path d="M6.3 17.3c1.4-1.6 3.4-2.5 5.7-2.5s4.3.9 5.7 2.5c-1.4 1.1-3.5 1.6-5.7 1.6s-4.3-.5-5.7-1.6z"/></g>
-  <g id="i-dance"><circle cx="12" cy="4.8" r="1.9"/><path d="M12 7.5v5l-2.5 6M12 12.5l3 5.5M12 8.5 8 11M12 8.5l4.5-1.5"/></g>
+  <!-- 1 WALK — shoe profile, side view: upper, sole, laces -->
+  <g id="g-walk"><path d="M4 16.8h13.4a3 3 0 0 0 .1-6l-3.7-.5-3.3-3.9a1.5 1.5 0 0 0-1.1-.5H8.1a.9.9 0 0 0-.9.9v3.5"/><path d="M4 16.8v1.5a.9.9 0 0 0 .9.9h14.4a2.1 2.1 0 0 0 2.1-2.1"/><path d="M9.5 9.1l2.2 1.5M11.2 11l2 1.4"/></g>
+  <!-- 2 RUN — sprint figure, deep lean, opposing arms + speed lines -->
+  <g id="g-run"><circle cx="15.4" cy="4.6" r="1.9"/><path d="M16.5 8.2l-3.4 1.7-1.3 3.4 2.9 2.1.9 4.5"/><path d="M11.8 13.3l-2.7 2.2-.5 4"/><path d="M13.1 9.9 9.7 8.5"/><path d="M16.5 8.2l3 2.4-.7 2.6"/><path d="M2.6 8.2h4M2.1 12.1h3.3" opacity=".45"/></g>
+  <!-- 3 CYCLING — bike side view, spoked wheels + frame -->
+  <g id="g-cycle"><circle cx="5.6" cy="16.3" r="3.8"/><circle cx="18.4" cy="16.3" r="3.8"/><path d="M5.6 16.3 9.7 9.6h4.9l3.8 6.7"/><path d="M9.7 9.6 8.5 7.3H6.2"/><path d="M12.1 16.3 14.6 9.6"/><path d="M5.6 12.5v3.8M2.9 16.3h2.7M18.4 12.5v3.8M15.7 16.3h2.7" opacity=".4"/></g>
+  <!-- 4 SWIMMING — freestyle: head, stroke arm, waves -->
+  <g id="g-swim"><circle cx="14.3" cy="7.3" r="1.9"/><path d="M4.4 12.7l6.3-2.7 3.4 2.1 3.5-1.7"/><path d="M17.6 10.4 20.4 7.8"/><path d="M2.5 17.5c1.9-1.7 3.9-1.7 5.8 0s3.9 1.7 5.8 0 3.9-1.7 5.8 0" opacity=".55"/></g>
+  <!-- 5 CARDIO / HIIT — heart with an ECG pulse through it -->
+  <g id="g-cardio"><path d="M12 20.4S3.6 15 3.6 9.3A4.6 4.6 0 0 1 12 6.5a4.6 4.6 0 0 1 8.4 2.8c0 5.7-8.4 11.1-8.4 11.1z"/><path d="M4.7 11.9h3l1.5-2.6 2.2 5 1.6-3.2 1.2 1.8h4.1"/></g>
+  <!-- 6 GYM — dumbbell, rotated -35° -->
+  <g id="g-gym"><g transform="rotate(-35 12 12)"><rect x="2.7" y="9.3" width="2.6" height="5.4" rx="1.1"/><rect x="18.7" y="9.3" width="2.6" height="5.4" rx="1.1"/><rect x="5.7" y="10.5" width="2.2" height="3" rx=".9"/><rect x="16.1" y="10.5" width="2.2" height="3" rx=".9"/><path d="M7.9 12h8.2"/></g></g>
+  <!-- 7 COMBAT — boxing glove, side profile -->
+  <g id="g-combat"><path d="M15.6 4.6h-4.3a5.6 5.6 0 0 0-5.6 5.6v1.3a5.6 5.6 0 0 0 5.6 5.6h4.3"/><path d="M5.8 12.7H4.7a1.95 1.95 0 1 1 0-3.9h1.1"/><rect x="15.6" y="3.4" width="3.9" height="17.2" rx="1.8"/><path d="M6.3 12.2h9.3" opacity=".5"/></g>
+  <!-- 8 RACKET — crossed rackets -->
+  <g id="g-racket"><g transform="rotate(-26 12 15)"><ellipse cx="8.6" cy="7.8" rx="4.2" ry="5.1"/><path d="M8.6 12.9v6.4"/><path d="M4.9 7.8h7.4M8.6 3.4v8.8" opacity=".42"/></g><g transform="rotate(26 12 15)"><ellipse cx="15.4" cy="7.8" rx="4.2" ry="5.1"/><path d="M15.4 12.9v6.4"/><path d="M11.7 7.8h7.4M15.4 3.4v8.8" opacity=".42"/></g></g>
+  <!-- 9 BALL — ball with double-arc seam -->
+  <g id="g-ball"><circle cx="12" cy="12" r="8.5"/><path d="M6.3 5.7c2.4 1.9 3.7 4 3.7 6.3s-1.3 4.4-3.7 6.3"/><path d="M17.7 5.7c-2.4 1.9-3.7 4-3.7 6.3s1.3 4.4 3.7 6.3"/></g>
+  <!-- 10 MIND-BODY — tree pose, one foot tucked, arms overhead -->
+  <g id="g-mind"><circle cx="12" cy="4" r="1.9"/><path d="M12 6.7v6.1"/><path d="M12 12.8v7.4"/><path d="M12 12.9c-2.2 0-3.6-1.4-3.6-3"/><path d="M12 7.5 9 4.1M12 7.5l3-3.4"/></g>
+  <!-- 11 DANCE — bhangra figure, arms up, one raised high -->
+  <g id="g-dance"><circle cx="11.5" cy="4.3" r="1.9"/><path d="M11.5 7.1v5.5l-2.4 7.5M11.5 12.6l3 7.5"/><path d="M11.5 8.5 7.7 10.9"/><path d="M11.5 8.5l3.7-1.7 1.5-3.4"/></g>
+  <!-- 12 FLAME — double-tongue (streak + unmapped fallback) -->
+  <g id="g-flame"><path d="M12 2.6c.3 3.2-2.2 4.3-3.4 6.2-1 1.7-1.4 3-1.4 4.5a4.8 4.8 0 0 0 9.6 0c0-2.6-1.4-4.4-2.6-6-.4 1.1-1.1 1.8-2 2.2.3-2.4.1-4.6-.2-6.9z"/><path d="M12 13.6c1.2 1.2 1.9 2 1.9 3a1.9 1.9 0 1 1-3.8 0c0-1 .7-1.8 1.9-3z"/></g>
+  <!-- ── CHROME (UI furniture, unchanged) ── -->
   <g id="i-user"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/></g>
   <g id="i-help"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1 .9-1 1.7"/><circle cx="12" cy="16.4" r=".7" fill="currentColor" stroke="none"/></g>
   <g id="i-chevL"><path d="M15 6l-6 6 6 6"/></g>
@@ -48,19 +56,6 @@
   <g id="i-share"><circle cx="6" cy="12" r="2.4"/><circle cx="17" cy="6" r="2.4"/><circle cx="17" cy="18" r="2.4"/><path d="M8.1 10.9l6.8-3.8M8.1 13.1l6.8 3.8"/></g>
   <g id="i-flag"><path d="M5 21V4M5 4.5h11l-1.8 3.2L16 11H5"/></g>
   <g id="i-close"><path d="M6 6l12 12M18 6L6 18"/></g>
-  <!-- ── FILLED set (feed category glyph). fill:currentColor, no stroke. ── -->
-  <g id="f-flame"><path d="M12 2.2c.4 3.4-4.9 4.9-4.9 9.5a4.9 4.9 0 0 0 9.8 0c0-2.3-1.3-4.1-2.4-5.4-.4 1-1 1.7-1.8 2.1.3-2.3-.2-4.3-.7-6.2zm0 11.6c1.3 1.3 2 2.1 2 3.2a2 2 0 1 1-4 0c0-1.1.7-1.9 2-3.2z"/></g>
-  <g id="f-gym"><rect x="3.2" y="8" width="3.4" height="8" rx="1.4"/><rect x="17.4" y="8" width="3.4" height="8" rx="1.4"/><rect x="6.9" y="9.6" width="2.4" height="4.8" rx="1"/><rect x="14.7" y="9.6" width="2.4" height="4.8" rx="1"/><rect x="9" y="10.8" width="6" height="2.4" rx="1.1"/></g>
-  <g id="f-walk"><circle cx="13.4" cy="4.2" r="2.1"/><path d="M12.6 7.1c-1 .2-1.7.9-2 1.9l-1 3.4 2.2 1.5-1.5 5.5a1.2 1.2 0 0 0 2.3.6l1.7-5.6c.2-.7-.1-1.4-.7-1.8l-1.3-.9.9-2.8 1.9 1.2-.6 2.3a1 1 0 0 0 2 .5l.8-3a1.3 1.3 0 0 0-.6-1.4l-3-1.9c-.3-.2-.7-.3-1.1-.2z"/><path d="M10.8 9.7l-2.6 1.3a1 1 0 0 0 .9 1.8l2.2-1.1z"/></g>
-  <g id="f-run"><circle cx="14.8" cy="4.2" r="2.1"/><path d="M13.6 7.2 10 8.4a1.3 1.3 0 0 0-.8.8l-1 2.9a1.1 1.1 0 0 0 2 .7l.8-2.2 1.6-.5-1 3.3c-.2.6 0 1.2.5 1.6l2.3 1.7 1 3.3a1.2 1.2 0 0 0 2.3-.7l-1.1-3.7c-.1-.4-.3-.7-.6-.9l-1.9-1.4 1.2-3.7 1.3 1.4c.2.3.6.4.9.5l2 .2a1 1 0 0 0 .2-2l-1.6-.2-1.9-2.1a2 2 0 0 0-2-.6z"/><path d="M9.6 19.9a1.2 1.2 0 0 1-1-1.8l2-3.3 1.9 1.4-1.9 3.1c-.2.4-.6.6-1 .6z"/></g>
-  <g id="f-swim"><circle cx="16.2" cy="5.8" r="2"/><path d="M4.4 12.1a1 1 0 0 0 .9 1.8l4.9-2.4 3 1.7c.3.2.7.2 1 .1l3.5-1.5a1 1 0 0 0-.8-1.9l-3 1.3-3.1-1.8a1.2 1.2 0 0 0-1.1 0z"/><path d="M3.1 16.8c1.9-1.7 3.9-1.7 5.8 0 1.5 1.3 3 1.3 4.4 0 1.9-1.7 3.9-1.7 5.8 0a1 1 0 0 0 1.4-1.5c-2.6-2.3-5.5-2.3-8.1 0-.7.6-1.4.6-2.1 0-2.6-2.3-5.5-2.3-8.1 0a1 1 0 0 0 1.3 1.5z"/></g>
-  <g id="f-cycle"><path d="M6 11.4a4.6 4.6 0 1 0 0 9.2 4.6 4.6 0 0 0 0-9.2zm0 2a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2zM18 11.4a4.6 4.6 0 1 0 0 9.2 4.6 4.6 0 0 0 0-9.2zm0 2a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2z"/><path d="M14.2 5.6a1.1 1.1 0 0 0 0 2.2h1.3l1.1 2.3-3.3 4.4-2.7-4.6h2.6a1.1 1.1 0 0 0 0-2.2H9.3c-.4 0-.8.2-1 .6l-2.6 5a1.1 1.1 0 0 0 2 1l1.1-2.2 2.5 4.3c.4.7 1.5.7 1.9 0l4.2-5.6c.3-.3.3-.8.1-1.2l-1.7-3.4c-.2-.4-.6-.6-1-.6z"/></g>
-  <g id="f-cardio"><path d="M3 11.1a1.1 1.1 0 0 0 0 2.2h4.3c.5 0 .9-.3 1-.7l1.1-2.8 2.1 7c.3 1 1.7 1 2-.1l1.3-4.5.5.7c.2.3.6.5.9.5H21a1.1 1.1 0 0 0 0-2.2h-4.2l-1.5-2c-.5-.7-1.7-.5-1.9.4l-1 3.4-2.1-6.9c-.3-1-1.7-1-2.1 0l-1.9 4.9z"/></g>
-  <g id="f-racket"><path d="M10 2.8a6.4 6.4 0 1 0 0 12.8 6.4 6.4 0 0 0 0-12.8zm0 2a4.4 4.4 0 1 1 0 8.8 4.4 4.4 0 0 1 0-8.8z"/><path d="M13.4 13.6a1.3 1.3 0 0 0-1.9 1.8l4.6 4.8a1.6 1.6 0 0 0 2.3-2.2z"/><circle cx="10" cy="9.2" r="1.5"/></g>
-  <g id="f-ball"><path d="M12 2.6a9.4 9.4 0 1 0 0 18.8 9.4 9.4 0 0 0 0-18.8zm-1 2.1v5.3H5.9c.2-1.3.7-2.5 1.5-3.5.9.4 2 .1 2.4-.9zm2 0c.7.2 1.4.5 2 .9.5.9 1.5 1.2 2.4.9.8 1 1.4 2.2 1.6 3.5H13zm-7.1 7.3H11v5.3c-1-.4-2 0-2.5.9a7.4 7.4 0 0 1-2.6-6.2zm7.1 0h5.1a7.4 7.4 0 0 1-2 5c-.5-.8-1.5-1.1-2.4-.8-.2.1-.5.2-.7.2z"/></g>
-  <g id="f-cricket"><rect x="5.4" y="7.4" width="1.9" height="10.6" rx=".9"/><rect x="11.1" y="7.4" width="1.9" height="10.6" rx=".9"/><rect x="16.8" y="7.4" width="1.9" height="10.6" rx=".9"/><rect x="4" y="18.4" width="16" height="1.8" rx=".9"/><rect x="4.6" y="5.2" width="4.4" height="1.6" rx=".8" transform="rotate(14 4.6 5.2)"/><rect x="14.4" y="4.2" width="4.4" height="1.6" rx=".8" transform="rotate(6 14.4 4.2)"/></g>
-  <g id="f-yoga"><circle cx="12" cy="4.4" r="2.3"/><path d="M12 7.3c-.8 0-1.4.6-1.4 1.4v2.2c-2.4.3-4.2 1.5-5.2 2.9a1 1 0 0 0 1.6 1.2c.9-1.2 2.5-2.2 5-2.2s4.1 1 5 2.2a1 1 0 0 0 1.6-1.2c-1-1.4-2.8-2.6-5.2-2.9V8.7c0-.8-.6-1.4-1.4-1.4z"/><path d="M12 14.2c-2.4 0-4.5 1-5.9 2.6-.4.4-.3 1 .2 1.3 1.6 1 3.6 1.5 5.7 1.5s4.1-.5 5.7-1.5c.5-.3.6-.9.2-1.3-1.4-1.6-3.5-2.6-5.9-2.6z"/></g>
-  <g id="f-dance"><circle cx="12.2" cy="4.5" r="2.1"/><path d="M11.4 7.3c-.5.1-.9.4-1.1.9l-1.6 3.3a1.1 1.1 0 0 0 2 1l1-2 .5 3.3-2.6 5.4a1.2 1.2 0 0 0 2.2 1.1l2.4-5 2.1 4.6a1.2 1.2 0 0 0 2.2-1l-2.7-5.8-.7-4.6 2.9-1a1.1 1.1 0 0 0-.7-2.1l-3.4 1.2z"/><path d="M9.9 8.9 7.4 10.6a1.1 1.1 0 0 0 1.2 1.8l2.2-1.5z"/></g>
 </defs></svg>
 
 <!-- ══ ONBOARDING ══ -->
@@ -170,7 +165,7 @@
       <div class="mir-ava"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-user"/></svg></div>
       <div class="mir-id"><div class="mir-name" id="mirName"></div><div class="mir-ctx" id="mirCtx"></div></div>
       <div class="mir-right">
-        <div class="mir-flame" id="mirFlame"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-flame"/></svg><span id="mirStreak">0</span></div>
+        <div class="mir-flame" id="mirFlame"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#g-flame"/></svg><span id="mirStreak">0</span></div>
         <div class="mir-pills" id="mirPills"></div>
         <div class="gplus" onclick="openLinkGroup()" title="Link another group"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-plus"/></svg></div>
       </div>
@@ -1560,32 +1555,95 @@ function renderHome(){
 // Category + icon maps (case-insensitive). "map EVERY workout in COMMON_WORKOUTS
 // plus custom": Rowing/Spinning/Hiking → cardio (confirmed decision); anything
 // unmapped → strength colour + flame icon (the spec fallback).
-const MIR_CATLIST = {
-  cardio:  ['walk','run','swimming','cycling','hiit','cardio','skipping','stairs','rowing','spinning','hiking'],
-  strength:['gym','weight training','strength training','crossfit','boxing','calisthenics'],
-  sport:   ['padel','cricket','tennis','badminton','pickleball','football','basketball','volleyball','squash','golf'],
-  mind:    ['yoga','pilates','stretching','meditation','physiotherapy'],
-  dance:   ['zumba','dance']
+/* ── CANONICAL 12-GLYPH ICON SYSTEM + NORMALIZED TYPE MAPPING ──────────────
+   One table maps every logged workout type to [glyph, category]. Matching is
+   case-insensitive, whitespace/punctuation-normalised, and typo-tolerant
+   (bounded Levenshtein) so real-world entries like "Physuitherapy" or
+   "Core  Training" land on the right glyph. Anything still unmatched falls
+   back to the flame glyph in the strength colour. */
+const MIR_TYPES = {
+  // ── CARDIO ──
+  'walk':['g-walk','cardio'], 'hiking':['g-walk','cardio'],
+  'run':['g-run','cardio'], 'running':['g-run','cardio'], 'hyrox sim':['g-run','cardio'],
+  'cycling':['g-cycle','cardio'], 'spinning':['g-cycle','cardio'],
+  'swimming':['g-swim','cardio'],
+  'cardio':['g-cardio','cardio'], 'hiit':['g-cardio','cardio'], 'skipping':['g-cardio','cardio'],
+  'rowing':['g-cardio','cardio'], 'stairs':['g-cardio','cardio'],
+  // ── STRENGTH ──
+  'gym':['g-gym','strength'], 'weight training':['g-gym','strength'],
+  'strength training':['g-gym','strength'], 'crossfit':['g-gym','strength'],
+  'leg day':['g-gym','strength'], 'legs':['g-gym','strength'],
+  'upper body':['g-gym','strength'], 'core':['g-gym','strength'],
+  'core training':['g-gym','strength'], 'full body workout':['g-gym','strength'],
+  'bicep shoulder tricep':['g-gym','strength'], 'chest shoulder tricep':['g-gym','strength'],
+  'calisthenics':['g-gym','strength'],
+  // ── COMBAT (strength colour, own glyph) ──
+  'muay thai':['g-combat','strength'], 'boxing':['g-combat','strength'],
+  // ── SPORT · racket ──
+  'padel':['g-racket','sport'], 'pickleball':['g-racket','sport'], 'badminton':['g-racket','sport'],
+  'squash':['g-racket','sport'], 'tennis':['g-racket','sport'],
+  // ── SPORT · ball ──
+  'cricket':['g-ball','sport'], 'volleyball':['g-ball','sport'], 'football':['g-ball','sport'],
+  'spikeball':['g-ball','sport'], 'frisbee':['g-ball','sport'], 'basketball':['g-ball','sport'],
+  'golf':['g-ball','sport'],
+  // ── MIND-BODY ──
+  'yoga':['g-mind','mind'], 'pilates':['g-mind','mind'], 'stretching':['g-mind','mind'],
+  'physio':['g-mind','mind'], 'physiotherapy':['g-mind','mind'], 'meditation':['g-mind','mind'],
+  // ── DANCE ──
+  'zumba':['g-dance','dance'], 'dance':['g-dance','dance']
 };
-const MIR_ICONLIST = {
-  'i-walk':['walk','hiking'], 'i-run':['run'], 'i-swim':['swimming'], 'i-cycle':['cycling','spinning'],
-  'i-cardio':['hiit','cardio','skipping','stairs','rowing'],
-  'i-gym':['gym','weight training','strength training','crossfit','boxing','calisthenics'],
-  'i-racket':['padel','tennis','badminton','pickleball','squash'], 'i-cricket':['cricket'],
-  'i-ball':['football','basketball','volleyball'],
-  'i-yoga':['yoga','pilates','stretching','meditation','physiotherapy'], 'i-dance':['zumba','dance']
-};
-const MIR_CAT={}, MIR_ICON={};
-Object.keys(MIR_CATLIST).forEach(c=>MIR_CATLIST[c].forEach(w=>MIR_CAT[w]=c));
-Object.keys(MIR_ICONLIST).forEach(ic=>MIR_ICONLIST[ic].forEach(w=>MIR_ICON[w]=ic));
+const MIR_FALLBACK=['g-flame','strength'];
 const MIR_COL={cardio:'var(--c-cardio)',strength:'var(--c-strength)',sport:'var(--c-sport)',mind:'var(--c-mind)',dance:'var(--c-dance)'};
 const MIR_SOFT={cardio:'var(--c-cardio-s)',strength:'var(--c-strength-s)',sport:'var(--c-sport-s)',mind:'var(--c-mind-s)',dance:'var(--c-dance-s)'};
-const _mk=w=>String(w||'').toLowerCase().trim();
-function mirCatOf(w){ return MIR_CAT[_mk(w)] || 'strength'; }
-function mirIconOf(w){ return MIR_ICON[_mk(w)] || 'i-flame'; }
+// lowercase · trim · collapse inner whitespace · drop punctuation
+const _mk=w=>String(w||'').toLowerCase().replace(/[._\-/&]+/g,' ').replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim();
+const _MIR_KEYS=Object.keys(MIR_TYPES);
+// bounded edit distance — bails out as soon as it exceeds `max`
+function _lev(a,b,max){
+  if(Math.abs(a.length-b.length)>max) return max+1;
+  let prev=Array.from({length:b.length+1},(_,i)=>i);
+  for(let i=1;i<=a.length;i++){
+    const cur=[i]; let best=i;
+    for(let j=1;j<=b.length;j++){
+      cur[j]=Math.min(prev[j]+1, cur[j-1]+1, prev[j-1]+(a[i-1]===b[j-1]?0:1));
+      if(cur[j]<best) best=cur[j];
+    }
+    if(best>max) return max+1;
+    prev=cur;
+  }
+  return prev[b.length];
+}
+const _mirResolveCache={};
+// → [glyphId, category]. Exact hit, else a typo-tolerant match, else fallback.
+function mirResolve(w){
+  const k=_mk(w);
+  if(!k) return MIR_FALLBACK;
+  if(_mirResolveCache[k]) return _mirResolveCache[k];
+  let hit=MIR_TYPES[k];
+  if(!hit){
+    // tolerance scales with word length: 1 edit for short words, 2 for long
+    const tol=k.length>=8?2:(k.length>=5?1:0);
+    if(tol){
+      let bestKey=null,bestD=tol+1;
+      for(const key of _MIR_KEYS){
+        const d=_lev(k,key,tol);
+        if(d<bestD){ bestD=d; bestKey=key; if(d===0) break; }
+      }
+      if(bestKey) hit=MIR_TYPES[bestKey];
+    }
+  }
+  const out=hit||MIR_FALLBACK;
+  _mirResolveCache[k]=out;
+  return out;
+}
+function mirIconOf(w){ return mirResolve(w)[0]; }
+function mirCatOf(w){ return mirResolve(w)[1]; }
 function mirColOf(w){ return MIR_COL[mirCatOf(w)]; }
 function mirSoftOf(w){ return MIR_SOFT[mirCatOf(w)]; }
+// FINE (1.6) — calendar tiles, sheet picks, mix bars, chrome
 function mirIco(id,style){ return `<svg class="mir-ico" viewBox="0 0 24 24"${style?` style="${style}"`:''}><use href="#${id}"/></svg>`; }
+// BOLD (2.5) — feed rows. Same skeleton, heavier stroke.
+function mirBico(id,style){ return `<svg class="mir-bico" viewBox="0 0 24 24"${style?` style="${style}"`:''}><use href="#${id}"/></svg>`; }
 const MIR_MONTHNAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 // per-session state
@@ -1721,6 +1779,7 @@ function mirTapPill(code){
   toast(`Board set to ${s.name||code}`);
 }
 async function mirLoadRanks(){
+  if(!me || !me.userId) return;          // retry on a later render once identity lands
   _mirRanks={};
   try{ if(me.userId){ const d=await db.collection('users').doc(me.userId).get(); window._mirReadCount=(window._mirReadCount||0)+1; const gr=d.exists&&d.data().groupRanks; if(gr) _mirRanks=Object.assign({},gr); } }
   catch(e){ logErr('mirLoadRanks', e); }
@@ -1735,9 +1794,14 @@ function mirLoadBestMonth(){
   return p.finally(()=>{ delete _mirInflight['bm']; });
 }
 async function _mirLoadBestMonthInner(){
+  // Identity may not be resolved on the FIRST renderMirrorHome() of a session.
+  // Returning (and latching) 0 here used to permanently hide the best-month
+  // line, because the `_mirBestMonth===null` guard never re-ran. Leave it null
+  // so the next render retries once me.userId exists.
+  if(!me || !me.userId) return null;
   let best=0;   // max distinct-day count across ARCHIVED seasons only — the
                 // current month is compared against this LIVE in the footer, so
-                // a partial-load snapshot can never bake in a wrong "best".
+                // a partial-load snapshot can never bake in a wrong "best"
   try{
     if(me.userId){
       const snap=await db.collection('users').doc(me.userId).collection('seasons').get();
@@ -1763,7 +1827,7 @@ function mirRenderPanels(){
       const logged=M.byDay[d];
       const woCount=logged?logged.reduce((n,l)=>n+(l.workouts.length||1),0):0;
       if(logged){
-        const ic=M.iconByDay[d]||'i-flame';
+        const ic=M.iconByDay[d]||'g-flame';
         const col=mirColOf((logged[0].workouts||[])[0]||'');
         cells+=`<div class="mir-day hit${(!inWin&&isCurrent)?' capped':''}" data-day="${d}" style="background:${mirSoftOf((logged[0].workouts||[])[0]||'')}" onclick="mirTapDay(${ix},${d})"><span class="n" style="color:${col}">${d}</span><svg class="mir-ico" viewBox="0 0 24 24" style="color:${col}"><use href="#${ic}"/></svg>${woCount>1?`<span class="multi">${woCount}</span>`:''}</div>`;
       } else if(isCurrent && d===todayD){
@@ -2037,7 +2101,9 @@ async function _mirGhostDaysInner(month, year, key){
     const logs=await mirLoadMonthLogs(month,year);
     set=logs.length?_mirDaySet(logs):null;
   }
-  _mirLogCache['ghost_'+key]=set;
+  // Never LATCH an empty result that was produced before identity resolved —
+  // it would permanently strand the chart on "No {prev}-you yet".
+  if(set!==null || (me && me.userId)) _mirLogCache['ghost_'+key]=set;
   return set;
 }
 function mirPaintChart(myDays, prevDays, daysInMonth, todayD, prevLabel){
@@ -2285,7 +2351,7 @@ function mirShowReport(rw){
   } else rr.style.display='none';
   // streak line (NO rest-day copy)
   const streakNow=score(me.name).streak;
-  document.getElementById('mirRStreak').innerHTML=`<div class="mir-rline">${mirIco('i-flame','color:var(--gold)')}<span>Streak now <b>${streakNow}</b> — see you tomorrow</span></div>`;
+  document.getElementById('mirRStreak').innerHTML=`<div class="mir-rline">${mirIco('g-flame','color:var(--gold)')}<span>Streak now <b>${streakNow}</b> — see you tomorrow</span></div>`;
   // witnesses from already-loaded feed data
   const witness=[...new Set(allLogs.filter(l=>l.day===todayD && l.player!==me.name).map(l=>l.player))].slice(0,3);
   const wc=document.getElementById('mirRWitness');
@@ -3440,19 +3506,19 @@ function renderFeed(){
     const st=(()=>{ try{ return score(l.player).streak||0; }catch(e){ return 0; } })();
     const primary=ws[0]||'';
     const ccol=mirColOf(primary);
-    const fico='f-'+mirIconOf(primary).slice(2);
+    const fico=mirIconOf(primary);
     return `<div class="fi t${ct}">
       <div class="fi-main">
-        <div class="fi-name" style="color:${tcol(ct)}">${esc(l.player)}${st>0?`<span class="fi-streak"><svg class="mir-fico" viewBox="0 0 24 24"><use href="#f-flame"/></svg>${st}</span>`:''}${flagCount>=2?'<span class="fi-flagged">flagged</span>':''}</div>
+        <div class="fi-name" style="color:${tcol(ct)}">${esc(l.player)}${st>0?`<span class="fi-streak">${mirBico('g-flame')}${st}</span>`:''}${flagCount>=2?'<span class="fi-flagged">flagged</span>':''}</div>
         <div class="fi-w">${esc(w)}</div>
         <div class="fi-t">${tstr} · Day ${l.day}${isBacklog?'<span class="fi-backlog">backlog</span>':''}</div>
       </div>
       <div class="fi-acts">
         ${isMine?`<button class="fi-btn" title="Remove" onclick="deleteLog('${l.id}')"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-close"/></svg></button>`:''}
-        ${!isMine&&window.FEATURE_REACTIONS_ENABLED?`<button class="fi-btn${iReacted?' on':''}" title="React" onclick="toggleReaction('${l.id}')"><svg class="mir-fico" viewBox="0 0 24 24"><use href="#f-flame"/></svg>${rCount>0?`<span class="fi-rc">${rCount}</span>`:''}</button>`:''}
+        ${!isMine&&window.FEATURE_REACTIONS_ENABLED?`<button class="fi-btn${iReacted?' on':''}" title="React" onclick="toggleReaction('${l.id}')">${mirBico('g-flame')}${rCount>0?`<span class="fi-rc">${rCount}</span>`:''}</button>`:''}
         ${!isMine&&!alreadyFlagged?`<button class="fi-btn" title="Flag" onclick="flagLog('${l.id}','${escForInlineJsAttr(l.player)}')"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-flag"/></svg></button>`:''}
       </div>
-      <div class="fi-ico" style="color:${ccol}"><svg class="mir-fico" viewBox="0 0 24 24"><use href="#${fico}"/></svg></div>
+      <div class="fi-ico" style="color:${ccol}">${mirBico(fico)}</div>
     </div>`;
   }).join('');
 }

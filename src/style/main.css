@@ -251,7 +251,8 @@ label{font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px;displa
 .fi-ico{flex-shrink:0;width:34px;height:34px;display:flex;align-items:center;justify-content:center}
 .fi-ico svg{width:28px;height:28px}
 /* filled-glyph variant: solid silhouette, no stroke */
-svg.mir-fico{fill:currentColor;stroke:none;display:block}
+/* FINE / BOLD twins — same skeleton, weight set by inherited stroke-width */
+svg.mir-bico{fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;display:block}
 /* Light theme: the untinted fallback must NOT out-specify the team tints —
    the --Al/--Bl/--Cl tokens already carry their own light values. */
 :root[data-theme="light"] .fi{background:rgba(0,0,0,.03)}
@@ -429,7 +430,7 @@ svg.mir-fico{fill:currentColor;stroke:none;display:block}
   --c-mind-s:rgba(122,79,208,.12); --c-dance-s:rgba(201,60,134,.12);
   --up:#248a3d; --up-soft:rgba(36,138,61,.12); --dn:#d1453b; --ink:#241c07;
 }
-svg.mir-ico{fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;display:block;stroke:currentColor}
+svg.mir-ico{fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;display:block;stroke:currentColor}
 
 /* header */
 .mir-hdr{display:flex;align-items:center;gap:11px;margin-bottom:14px;padding-top:4px}
