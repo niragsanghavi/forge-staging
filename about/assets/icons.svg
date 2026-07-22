@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  FORGE ICON MASTER - v2.0 FINAL
+  Foundry v2 picks, confirmed 22 Jul 2026.
+  WALK:B filled walker | RUN:B filled sprinter | CYCLING:B cyclist on bike
+  SWIM:B waves | CARDIO:B heart+pulse | GYM:A flat dumbbell
+  COMBAT:G filled glove | RACKET:A strung racket | BALL:C double-arc seam
+  MIND:A lotus sit | DANCE:F disco point | FLAME:C double tongue tall
+
+  SURFACES
+    Feed / bold surfaces  -> primary ids (g-walk, g-run, g-combat are FILLED)
+    Calendar / fine       -> use -line twin for walk/run/combat, primary for rest
+    stroke-width: 1.6 fine | 2.5 bold (set via CSS class on the <svg>)
+
+  CATEGORY COLOURS (currentColor)
+    cardio #4cc3ff  walk run cycle swim cardio
+    strength #d4a843  gym combat flame
+    sport #4ade80  racket ball
+    mind #b48cff | dance #ff7ab8
+
+  MAPPING (48 strings -> 12 glyphs)
+    g-walk: walk, hiking | g-run: run, running, hyrox sim, sprint
+    g-cycle: cycling, spinning | g-swim: swimming
+    g-cardio: cardio, hiit, skipping, rowing, stairs
+    g-gym: gym, weight/strength training, crossfit, calisthenics, leg day,
+      legs, upper body, core, core training, full body workout,
+      bicep shoulder tricep, chest shoulder tricep
+    g-combat: muay thai, boxing, mma
+    g-racket: padel, pickleball, badminton, squash, tennis
+    g-ball: cricket, volleyball, football, basketball, spikeball, frisbee, golf
+    g-mind: yoga, pilates, stretching, physio(therapy), meditation
+    g-dance: zumba, dance | g-flame: fallback + streak
+    Normalise: lowercase, strip punctuation, collapse spaces, then
+    Levenshtein (2 edits >=8 chars, 1 edit 5-7 chars).
+
+  USAGE (relative path works on staging and goforge.in)
+    <svg class="fx-fine" width="16" height="16" style="color:#4cc3ff">
+      <use href="assets/icons.svg#g-walk-line"/>
+    </svg>
+    CSS: .fx-fine{stroke-width:1.6} .fx-bold{stroke-width:2.5}
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" aria-hidden="true">
+
+  <!-- WALK B : filled walker (feed) -->
+  <symbol id="g-walk" viewBox="0 0 24 24">
+    <g fill="currentColor" stroke="none">
+      <circle cx="13" cy="4.5" r="1.9"/>
+      <path d="M12 6.8 L14 6.8 L14.6 13 L16 19 L14 19 L12.6 14 L10.8 19 L8.8 19 L11.2 12.5 Z"/>
+      <path d="M13.6 8 L16 10.5 L15 11.6 L12.8 9.6 Z"/>
+    </g>
+  </symbol>
+  <!-- WALK stroke twin (calendar) -->
+  <symbol id="g-walk-line" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="13" cy="4.5" r="1.6"/>
+    <path d="M13 6.5 L12.6 13 M12.6 13 L15 19 M12.6 13 L10 19 M13.2 8.5 L15.8 11 M13.2 8.5 L10.5 10.5"/>
+  </symbol>
+
+  <!-- RUN B : filled sprinter (feed) -->
+  <symbol id="g-run" viewBox="0 0 24 24">
+    <g fill="currentColor" stroke="none">
+      <circle cx="15.5" cy="4.3" r="1.9"/>
+      <path d="M14 6.2 L16 6.8 L14.8 11.5 L17.5 14 L16.5 18.5 L14.5 18 L15.3 14.5 L12.5 12 L9 17.5 L7.2 16.3 L11.5 10.5 L12.8 6.8 Z"/>
+      <path d="M14.5 7.5 L18.5 9.5 L17.8 11 L14 9.2 Z"/>
+      <path d="M13 8 L9.5 8.8 L9.8 10.4 L13.2 9.6 Z"/>
+    </g>
+  </symbol>
+  <!-- RUN stroke twin (calendar) -->
+  <symbol id="g-run-line" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="15.5" cy="4.5" r="1.6"/>
+    <path d="M14.5 6.5 L12 11.5 M12 11.5 L8.5 17 M12 11.5 L16 14 L15.5 18 M14 8 L17.5 10 M14 8 L10.5 8.8"/>
+  </symbol>
+
+  <!-- CYCLING B : cyclist on bike -->
+  <symbol id="g-cycle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="5.5" cy="17" r="3.2"/>
+    <circle cx="18.5" cy="17" r="3.2"/>
+    <path d="M5.5 17 L10 11 L18.5 17 M10 11 L12.5 8.5"/>
+    <circle cx="13.5" cy="5.5" r="1.5"/>
+    <path d="M12.8 7 L11 11 M12.5 8.5 L15.5 10"/>
+  </symbol>
+
+  <!-- SWIMMING B : waves -->
+  <symbol id="g-swim" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 8 Q6 6 9 8 T15 8 T21 8"/>
+    <path d="M3 13 Q6 11 9 13 T15 13 T21 13"/>
+    <path d="M3 18 Q6 16 9 18 T15 18 T21 18"/>
+  </symbol>
+
+  <!-- CARDIO B : heart + pulse -->
+  <symbol id="g-cardio" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 20 C4.5 15 4.5 9 8.5 7 C10.5 6 12 8 12 10 C12 8 13.5 6 15.5 7 C19.5 9 19.5 15 12 20 Z"/>
+    <path d="M3.5 13 L7.5 13 L9 11 L10.5 15 L12 10 L13.5 13 L20.5 13"/>
+  </symbol>
+
+  <!-- GYM A : flat dumbbell -->
+  <symbol id="g-gym" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 12 L19 12"/>
+    <path d="M5 8.5 L5 15.5 M2.5 10 L2.5 14 M19 8.5 L19 15.5 M21.5 10 L21.5 14"/>
+  </symbol>
+
+  <!-- COMBAT G : filled glove (feed) -->
+  <symbol id="g-combat" viewBox="0 0 24 24">
+    <g fill="currentColor" stroke="none">
+      <path d="M6 8 Q6 5 10 5 L15 5 Q20 5 20 10 L20 14 Q20 18 16 18 L10 18 Q6 18 6 14 Z"/>
+      <path d="M6 10.5 Q2.8 10.5 2.8 13 Q2.8 15.2 6 15.2 Z"/>
+    </g>
+  </symbol>
+  <!-- COMBAT stroke twin (calendar) -->
+  <symbol id="g-combat-line" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 8 Q6 5 10 5 L15 5 Q20 5 20 10 L20 14 Q20 18 16 18 L10 18 Q6 18 6 14 Z"/>
+    <path d="M6 10.5 Q3 10.5 3 13 Q3 15 6 15"/>
+  </symbol>
+
+  <!-- RACKET A : strung racket -->
+  <symbol id="g-racket" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="12" cy="8" rx="4.5" ry="5.5"/>
+    <path d="M9 6 L15 6 M9 8 L15 8 M9 10 L15 10 M10.5 4 L10.5 11.5 M13.5 4 L13.5 11.5" opacity="0.45"/>
+    <path d="M12 13.5 L12 21"/>
+  </symbol>
+
+  <!-- BALL C : double-arc seam -->
+  <symbol id="g-ball" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="8"/>
+    <path d="M4.5 10 Q12 6 19.5 10 M4.5 14 Q12 18 19.5 14" opacity="0.7"/>
+  </symbol>
+
+  <!-- MIND A : lotus sit -->
+  <symbol id="g-mind" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="6" r="1.7"/>
+    <path d="M12 8 L12 13"/>
+    <path d="M12 10 L7 12 L4.5 10.5 M12 10 L17 12 L19.5 10.5"/>
+    <path d="M12 13 L8 15.5 L10 17 M12 13 L16 15.5 L14 17"/>
+    <path d="M7 18.5 L17 18.5" opacity="0.6"/>
+  </symbol>
+
+  <!-- DANCE F : disco point -->
+  <symbol id="g-dance" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="4.5" r="1.6"/>
+    <path d="M12 6.5 L12 13 M12 13 L8.5 19 M12 13 L15 19 M12 8 L17 6 M12 8 L7 10.5"/>
+    <path d="M18.5 4.5 L19.5 5.5 M19.8 8 L21 8 M17.5 2.5 L17.5 1.3" opacity="0.6"/>
+  </symbol>
+
+  <!-- FLAME C : double tongue tall (streak + fallback) -->
+  <symbol id="g-flame" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 21 C4.8 18 4.8 11.5 9 7.5 C10 10 11.2 9 11.2 5.5 C13.5 8 17.5 10 17.5 15 C17.5 18.5 15.2 21 12 21 Z"/>
+    <path d="M12 21 C8.5 19.3 9 15.5 11.2 13.2 C12 14.5 13 13.5 13 11.3 C14.8 13.5 15.4 15.3 15.4 17 C15.4 19.3 14 21 12 21 Z" opacity="0.65"/>
+  </symbol>
+
+</svg>
