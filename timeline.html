@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Forge · Road to Both Stores</title>
+<!-- Self-contained on purpose: zero Firebase, zero external assets. Checkbox
+     state persists in THIS browser's localStorage only — it is a personal
+     tracker, not shared state. Lives at /timeline on GitHub Pages
+     (extensionless URLs resolve to timeline.html). -->
+<style>
+:root{--bg:#0c0c11;--card:#13131b;--card2:#181822;--line:#23232f;--gold:#d4a843;--orange:#ff5a1f;--amber:#f59e0b;--green:#4ade80;--red:#ef4444;--text:#e7e7ee;--muted:#8b8b9a;--dim:#5b5b6a}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--text);font:15px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:22px 16px 80px;max-width:860px;margin:0 auto}
+h1{font-size:24px;letter-spacing:.02em}
+h1 span{color:var(--gold)}
+.sub{color:var(--muted);font-size:13px;margin:6px 0 2px}
+.goal{background:linear-gradient(135deg,#1c1410,#13131b);border:1px solid #3a2c18;border-radius:12px;padding:14px 16px;margin:16px 0;font-size:14px}
+.goal b{color:var(--amber)}
+.prog{margin:14px 0 26px}
+.prog .bar{height:10px;background:var(--card2);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.prog .fill{height:100%;background:linear-gradient(90deg,var(--gold),var(--orange));width:0%;transition:width .4s}
+.prog .lbl{display:flex;justify-content:space-between;font:11px ui-monospace,Menlo,monospace;color:var(--muted);margin-top:5px}
+.note{font-size:11.5px;color:var(--dim);margin:4px 0 20px}
+h2{font-size:13px;letter-spacing:.14em;color:var(--muted);margin:30px 0 12px;text-transform:uppercase}
+.ph{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:10px;overflow:hidden}
+.ph.now{border-color:var(--amber);box-shadow:0 0 0 1px var(--amber)}
+.ph.past{opacity:.75}
+.ph-h{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;user-select:none}
+.ph-h:hover{background:var(--card2)}
+.ph-h .when{font:11px ui-monospace,Menlo,monospace;color:var(--gold);width:118px;flex:none}
+.ph-h .t{font-weight:700;font-size:14.5px;flex:1}
+.ph-h .tag{font-size:10px;letter-spacing:.08em;padding:2px 8px;border-radius:20px;flex:none}
+.tag.now{background:#f59e0b22;color:var(--amber);border:1px solid #f59e0b55}
+.tag.gate{background:#ef444422;color:#f87171;border:1px solid #ef444455}
+.ph-h .chev{color:var(--dim);transition:transform .2s;flex:none}
+.ph.open .chev{transform:rotate(90deg)}
+.ph-b{display:none;padding:2px 16px 16px;border-top:1px solid var(--line)}
+.ph.open .ph-b{display:block}
+.who{font:10px ui-monospace,Menlo,monospace;letter-spacing:.06em;padding:1px 6px;border-radius:4px;margin-right:7px;flex:none}
+.who.you{background:#4ade8022;color:var(--green)}
+.who.cl{background:#4cc3ff22;color:#4cc3ff}
+.who.ext{background:#8b8b9a22;color:var(--muted)}
+.it{display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:1px dashed #1e1e28;font-size:13.5px}
+.it:last-child{border-bottom:none}
+.it input{margin-top:3px;accent-color:var(--gold);width:15px;height:15px;flex:none}
+.it label{cursor:pointer}
+.it.done label{color:var(--dim);text-decoration:line-through}
+.exit{margin-top:12px;background:#0e1512;border:1px solid #1d3226;border-radius:8px;padding:10px 12px;font-size:12.5px}
+.exit b{color:var(--green);font-size:11px;letter-spacing:.1em}
+.slip{margin-top:8px;background:#170f0f;border:1px solid #3a1d1d;border-radius:8px;padding:10px 12px;font-size:12.5px}
+.slip b{color:#f87171;font-size:11px;letter-spacing:.1em}
+.gatebox{background:#170f0f;border:1px solid #3a1d1d;border-radius:12px;padding:14px 16px;margin:16px 0;font-size:13px}
+.gatebox b{color:#f87171}
+.cl-sec{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+.cl-sec h3{font-size:14px;margin-bottom:4px}
+.cl-sec h3 i{font:11px ui-monospace,Menlo,monospace;color:var(--muted);font-style:normal;margin-left:8px}
+.cl-sec .hint{font-size:11.5px;color:var(--dim);margin-bottom:8px}
+footer{margin-top:40px;font-size:11px;color:var(--dim);text-align:center}
+</style>
+</head>
+<body>
+<h1>FORGE <span>· Road to Both Stores</span></h1>
+<p class="sub" id="today"></p>
+<div class="goal"><b>THE GOAL:</b> a live Android app and a live iOS app before 2026 closes. Android submits ~Sep 1, iOS submits in October — everything after that is review-cycle buffer. This schedule is rigid on purpose: every slipped week in August eats the December buffer directly.</div>
+
+<div class="prog"><div class="bar"><div class="fill" id="pfill"></div></div><div class="lbl"><span id="pcount">0 / 0 done</span><span id="psec"></span></div></div>
+<p class="note">Tick boxes as you complete them — ticks save in this browser only (each device keeps its own copy).</p>
+
+<div class="gatebox"><b>THE THREE IMMOVABLE GATES</b><br>
+1. <b>The 14-day clock</b> — Google requires a personal dev account's app to run closed testing with 12+ testers for 14 straight days before production access can even be requested. Start by Aug 16 or Sep 1 slips day-for-day.<br>
+2. <b>Apple review</b> — plan for at least one rejection (thin-wrapper "minimum functionality" pushback is common for web-wrapped apps). October submission exists so November can absorb resubmissions.<br>
+3. <b>Sign in with Apple</b> — the moment Google Sign-In exists in the iOS app, Apple mandates their sign-in too. It is scaffolded in September, not discovered in October.</div>
+
+<h2>The plan · Jul → Dec 2026</h2>
+<div id="phases"></div>
+
+<h2 id="checklist">Master requirements checklist</h2>
+<p class="note">Every requirement for both stores, in one place. These do not expire — they are the exhaustive gate list. Phases above tell you <i>when</i>; this list tells you <i>what</i>.</p>
+<div id="cl"></div>
+
+<footer>Forge · internal tracker · updated 23 Jul 2026 · ticks live in this browser's localStorage (key prefix <code>tl_</code>)</footer>
+
+<script>
+// ── data ──────────────────────────────────────────────────────────────────
+const PHASES = [
+{id:'julw4', when:'JUL 23–31', title:'Lock the base', start:'2026-07-23', end:'2026-07-31', items:[
+ ['you','Push the pending staging commits (Claude prints the exact command each time)'],
+ ['you','Phone QA of Mirror on the staging site — install "Forge STG" from Safari/Chrome, log, swipe, check the feed'],
+ ['cl','Identity merges on prod (Rishil, Riya, laptop-uid strip) — Claude preps backup + manifest, YOU say go, Claude writes'],
+ ['cl','Mirror PROD PROMOTION prep: byte-diff staging vs live prod, stage the copy + rules deploy commands'],
+ ['you','Run the promotion push + rules deploy yourself (commands provided); verify goforge.in live'],
+ ['you','Create Google Play Console account ($25 one-time) with niragsanghavi@gmail; set public contact team@goforge.in'],
+ ['you','Start Apple Developer Program enrollment ($99/yr) NOW — identity verification can take days'],
+ ['cl','Reconcile the two auth designs (AUTH_UPGRADE.md custom-token plan vs Google-Sign-In-first roadmap) into ONE decided doc'],
+], exit:'Mirror is live on goforge.in, identity data is clean, both store accounts exist, auth design is decided.', slip:'If promotion is not live by Jul 31, it takes Aug W1 priority and auth build compresses into W1-W2.'},
+
+{id:'augw1', when:'AUG 1–9', title:'Auth phase 1 (staging) + Android wrapper', start:'2026-08-01', end:'2026-08-09', items:[
+ ['cl','Firebase Auth + Google Sign-In on STAGING, coexisting with anon+PIN (nobody forced, nothing breaks)'],
+ ['you','Enable Blaze billing on both Firebase projects if the decided design needs Cloud Functions (expected cost ≈ ₹0 at current volume)'],
+ ['cl','Build the TWA Android package (Bubblewrap or PWABuilder) pointed at goforge.in'],
+ ['you','Create the signing keystore and BACK IT UP twice (cloud + offline). Losing it = losing the app listing forever'],
+ ['cl','Prepare assetlinks.json for goforge.in/.well-known/ — a PROD file; you push it (manual ceremony)'],
+ ['you','Upload the .aab to the Play Console INTERNAL testing track; confirm it installs from the Play link'],
+], exit:'You can sign into staging with Google. An installable Android build exists on the internal track.', slip:'TWA is mechanical — if auth slips, ship the TWA anyway; the wrapper does not depend on auth.'},
+
+{id:'augw2', when:'AUG 10–16', title:'Claim flow + CLOSED TESTING STARTS', gate:true, start:'2026-08-10', end:'2026-08-16', items:[
+ ['cl','Identity-claim flow: Google sign-in → claim your existing account via NAME + PIN. knownDeviceUids is NEVER an auto-link signal (six-account takeover surface from the 22 Jul audit)'],
+ ['cl','Account deletion path: in-app button + public web URL (hard requirement on BOTH stores)'],
+ ['you','Fill the Data safety form + content rating questionnaire in Play Console'],
+ ['cl','Draft store listing: title ≤30 chars, short description ≤80, full description ≤4000'],
+ ['you','Recruit 12+ testers (the live groups ARE the tester pool) and get every one opted in to closed testing'],
+ ['you','START CLOSED TESTING — the immovable 14-day clock begins the day the 12th tester is active'],
+], exit:'Closed testing running with 12+ opted-in testers no later than Aug 16.', slip:'Every day this starts late pushes the Sep 1 submission a full day. Nothing else in August has this property — protect this date above all.'},
+
+{id:'augw3', when:'AUG 17–23', title:'Warm-user auth QA', start:'2026-08-17', end:'2026-08-23', items:[
+ ['cl','QA the ugly paths with real users: reinstall, switch device, sign in on a friend\'s phone, delete account, re-claim'],
+ ['you','Produce screenshots (min 2 phone) + 1024×500 feature graphic; Claude drafts, you approve'],
+ ['cl','Finalise listing copy in the dry-witty Forge voice'],
+ ['you','Watch the internal track for crashes/ANRs in Play Console daily'],
+], exit:'Zero known auth-flow bugs; all store assets final.', slip:'QA findings beat new features — nothing new builds until the claim flow is boring.'},
+
+{id:'augw4', when:'AUG 24–31', title:'Prod opt-in auth + production access', start:'2026-08-24', end:'2026-08-31', items:[
+ ['cl','Ship auth to PROD as OPT-IN alongside PIN (prepared by Claude; you push + deploy rules)'],
+ ['ext','14-day clock completes (~Aug 30 if started Aug 16)'],
+ ['you','Apply for PRODUCTION ACCESS in Play Console (questionnaire about testing learnings) the day the clock completes'],
+], exit:'Production access application submitted by Aug 31.', slip:'If Google asks follow-up questions, answer same-day — the application review is days, not hours.'},
+
+{id:'sep', when:'SEP 1–30', title:'Android submission + iOS foundations', start:'2026-09-01', end:'2026-09-30', items:[
+ ['you','Sep 1 (or day production access lands): SUBMIT Android to production'],
+ ['cl','Google Sign-In becomes the DEFAULT path; PIN demoted but no existing user stranded'],
+ ['cl','Scaffold Sign in with Apple (mandatory because Google Sign-In exists)'],
+ ['cl','Capacitor iOS wrapper: Xcode project, bundle id, certificates (Xcode-managed)'],
+ ['you','Verify Apple Developer enrollment is fully active; add Claude-prepared app record in App Store Connect'],
+ ['ext','Android review + release; fix-and-resubmit if rejected'],
+ ['cl','TestFlight internal build running on your iPhone'],
+], exit:'Android LIVE on Play Store. An iOS build runs on your phone via TestFlight.', slip:'Android rejection = fix within 48h and resubmit; the listing does not wait for polish.'},
+
+{id:'oct', when:'OCT 1–31', title:'iOS submission', start:'2026-10-01', end:'2026-10-31', items:[
+ ['cl','App Store Connect listing: privacy nutrition labels, age rating, export compliance (standard HTTPS exemption)'],
+ ['you','Screenshots for required iPhone sizes (Claude stages the frames, you capture on-device)'],
+ ['cl','Demo account + App Review notes: explain the group/PIN model so the reviewer can actually get in'],
+ ['cl','Guideline 4.2 (minimum functionality) mitigation documented: offline persistence, installed-app behaviours, native touches'],
+ ['you','SUBMIT iOS to App Review'],
+ ['ext','Expect at least one rejection cycle; respond within 24h'],
+], exit:'iOS submitted with a full review packet. Rejections are answered inside 24h.', slip:'If review stalls past Oct, November exists exactly for this — but nothing NEW builds until iOS is approved.'},
+
+{id:'nov', when:'NOV 1–30', title:'Review cycles + hardening (buffer)', start:'2026-11-01', end:'2026-11-30', items:[
+ ['ext','iOS resubmission cycles until approved'],
+ ['cl','Post-launch hardening only: crash fixes, store-review feedback, no new surface area'],
+ ['you','Soft-launch both apps to the four live groups; watch installs + reviews'],
+], exit:'Both apps approved and installable from both stores.', slip:'This month is buffer. If it is not needed — December marketing starts early. If it is — this is why it exists.'},
+
+{id:'dec', when:'DEC 1–31', title:'Both stores live · wedding season', start:'2026-12-01', end:'2026-12-31', items:[
+ ['you','Public availability confirmed in both stores before Dec 31'],
+ ['you','Wedding-season push: new groups onboard via store installs, not browser tabs'],
+ ['cl','Store-listing iteration from real reviews'],
+], exit:'THE GOAL, met: Android + iOS live before 2026 closes.', slip:'—'},
+];
+
+const CHECK = [
+{sec:'Shared — both stores need these', hint:'Do once, satisfies both reviews.', items:[
+ 'goforge.in served over HTTPS with valid certificate (already true — verify before each submission)',
+ 'Privacy policy live at a public URL (goforge.in/privacy) and linked from both listings',
+ 'Terms of service page live and linked',
+ 'ACCOUNT DELETION: in-app path + public web URL (hard requirement, both stores)',
+ 'Real sign-in (Google) live — anonymous+PIN alone will not pass either review',
+ 'Support email team@goforge.in receiving and answered',
+ 'Master icon artwork at 1024px, no transparency (Apple) + 512px (Google)',
+ 'App name + branding identical across web, Play, App Store',
+ 'Crash reporting decision made (Play Console vitals / Xcode organizer at minimum)',
+]},
+{sec:'Android · Google Play', hint:'Personal account = the 14-day closed-testing gate applies.', items:[
+ 'Google Play Console developer account created ($25 one-time) + identity verified',
+ 'Public developer contact set (team@goforge.in)',
+ 'TWA package built (Bubblewrap / PWABuilder) against goforge.in',
+ 'Signing keystore created AND backed up in two places (loss is unrecoverable)',
+ 'assetlinks.json live at goforge.in/.well-known/assetlinks.json (removes browser bar from TWA)',
+ '.aab uploaded to internal track and installs cleanly',
+ 'Target API level meets Google\'s current requirement (Bubblewrap default is current)',
+ 'Store listing: title ≤30 · short description ≤80 · full description ≤4000',
+ 'Screenshots: minimum 2 phone screenshots',
+ 'Feature graphic 1024×500',
+ 'Hi-res icon 512×512',
+ 'Content rating questionnaire completed',
+ 'Data safety form completed (what is collected, why, is it shared)',
+ 'Ads declaration (Forge has none)',
+ 'App category, tags, contact details set',
+ 'Countries selected + free pricing confirmed',
+ 'Closed testing: 12+ testers opted in',
+ 'Closed testing: 14 consecutive days completed',
+ 'Production access application submitted and approved',
+ 'Production release submitted',
+ 'ANDROID LIVE ON PLAY STORE',
+]},
+{sec:'iOS · App Store', hint:'Wrapper apps get extra scrutiny — the 4.2 packet is not optional.', items:[
+ 'Apple Developer Program enrollment active ($99/yr)',
+ 'Xcode current version on the Mac',
+ 'Capacitor project wrapping the PWA; bundle id registered',
+ 'Certificates + provisioning profiles (let Xcode manage)',
+ 'Sign in with Apple implemented (mandatory alongside Google Sign-In)',
+ 'Account deletion reachable in-app (Apple checks this specifically)',
+ 'App icon set complete from 1024px master (no alpha channel)',
+ 'Launch screen configured',
+ 'Screenshots for each required iPhone size class in App Store Connect',
+ 'App Privacy nutrition labels completed',
+ 'Age rating questionnaire completed',
+ 'Export compliance answered (standard HTTPS exemption)',
+ 'Demo account credentials + App Review notes written (explain group codes + PIN)',
+ 'Guideline 4.2 mitigation documented (offline persistence, installed behaviours, why this is not "just a website")',
+ 'TestFlight build tested on a real device',
+ 'Listing: name ≤30 · subtitle ≤30 · description · keywords',
+ 'Pricing (free) + availability set',
+ 'Submitted to App Review',
+ 'iOS LIVE ON APP STORE',
+]},
+];
+
+// ── render ────────────────────────────────────────────────────────────────
+const $ = s => document.querySelector(s);
+const todayD = new Date();
+$('#today').textContent = 'Today: ' + todayD.toLocaleDateString('en-IN',{weekday:'long', day:'numeric', month:'long', year:'numeric'});
+const WHO = {you:'YOU', cl:'CLAUDE', ext:'WAIT'};
+
+let phaseHtml = '';
+for (const p of PHASES) {
+  const s = new Date(p.start), e = new Date(p.end); e.setHours(23,59,59);
+  const state = todayD > e ? 'past' : (todayD >= s ? 'now' : '');
+  phaseHtml += `<div class="ph ${state}" id="ph-${p.id}">
+  <div class="ph-h" onclick="this.parentElement.classList.toggle('open')">
+    <span class="when">${p.when}</span><span class="t">${p.title}</span>
+    ${state==='now' ? '<span class="tag now">YOU ARE HERE</span>' : ''}${p.gate ? '<span class="tag gate">HARD GATE</span>' : ''}
+    <span class="chev">›</span>
+  </div>
+  <div class="ph-b">
+    ${p.items.map((it,i)=>row('p_'+p.id+'_'+i, it[1], it[0])).join('')}
+    <div class="exit"><b>EXIT CRITERIA</b> — ${p.exit}</div>
+    ${p.slip!=='—' ? `<div class="slip"><b>SLIP RULE</b> — ${p.slip}</div>` : ''}
+  </div></div>`;
+}
+$('#phases').innerHTML = phaseHtml;
+const cur = document.querySelector('.ph.now'); if (cur) cur.classList.add('open');
+
+let clHtml = '';
+CHECK.forEach((s,si)=>{
+  clHtml += `<div class="cl-sec"><h3>${s.sec}<i id="cnt-${si}"></i></h3><div class="hint">${s.hint}</div>
+  ${s.items.map((t,i)=>row('c_'+si+'_'+i, t)).join('')}</div>`;
+});
+$('#cl').innerHTML = clHtml;
+
+function row(key, text, who){
+  const on = localStorage.getItem('tl_'+key)==='1';
+  return `<div class="it ${on?'done':''}"><input type="checkbox" id="${key}" ${on?'checked':''} onchange="tick('${key}',this)">
+  <label for="${key}">${who?`<span class="who ${who}">${WHO[who]}</span>`:''}${text}</label></div>`;
+}
+function tick(key, el){
+  localStorage.setItem('tl_'+key, el.checked?'1':'0');
+  el.closest('.it').classList.toggle('done', el.checked);
+  prog();
+}
+function prog(){
+  const boxes=[...document.querySelectorAll('input[type=checkbox]')];
+  const done=boxes.filter(b=>b.checked).length;
+  $('#pfill').style.width = boxes.length? (100*done/boxes.length)+'%' : '0%';
+  $('#pcount').textContent = done+' / '+boxes.length+' done';
+  CHECK.forEach((s,si)=>{
+    const ids=s.items.map((_,i)=>'c_'+si+'_'+i);
+    const d=ids.filter(k=>localStorage.getItem('tl_'+k)==='1').length;
+    const el=document.getElementById('cnt-'+si); if(el) el.textContent = d+'/'+ids.length;
+  });
+  const goal = localStorage.getItem('tl_c_1_20')==='1' && localStorage.getItem('tl_c_2_18')==='1';
+  $('#psec').textContent = goal ? '🔥 BOTH STORES LIVE' : '';
+}
+prog();
+</script>
+</body>
+</html>
