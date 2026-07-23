@@ -313,11 +313,13 @@
     </div>
 
     <div class="card">
-      <div class="row" style="margin-bottom:12px">
+      <div class="row" style="margin-bottom:10px">
         <div class="card-title" style="margin:0;display:flex;align-items:center;gap:6px"><svg class="mir-ico" viewBox="0 0 24 24" style="width:15px;height:15px"><use href="#i-chartbar"/></svg>Your mix</div>
-        <span style="font-size:11px;color:var(--muted)">all time</span>
+        <div class="mix-tgl"><button type="button" id="mixTglM" class="on" onclick="mirSetMixMode('month')">This month</button><button type="button" id="mixTglA" onclick="mirSetMixMode('all')">All-time</button></div>
       </div>
+      <div class="mix-stat" id="mirMixStat"></div>
       <div id="mirMix"></div>
+      <div class="mix-rec" id="mirMixRec"></div>
     </div>
   </div>
 
@@ -1757,6 +1759,9 @@ function mirFineId(id){ return MIR_LINE_TWIN[id]||id; }
 function mirIco(id,style){ return `<svg class="mir-ico" viewBox="0 0 24 24"${style?` style="${style}"`:''}><use href="#${mirFineId(id)}"/></svg>`; }
 // BOLD (2.5) — feed rows. Stroke glyphs thicken; the three filled glyphs are
 // used as-drawn (stroke-width does not apply to them) — intended.
+// Tiny animated flame (3-frame flicker via CSS steps) — replaces the 🔥
+// emoji on player-facing surfaces so the streak mark matches the icon set.
+function flameIco(cls){ return `<span class="flk ${cls||''}"><svg viewBox="0 0 24 24"><use href="#g-flame"/></svg></span>`; }
 function mirBico(id,style){ return `<svg class="mir-bico" viewBox="0 0 24 24"${style?` style="${style}"`:''}><use href="#${id}"/></svg>`; }
 const MIR_MONTHNAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -1966,7 +1971,7 @@ function mirSyncCalHead(){
   const slot=document.getElementById('mirRecap');
   if(M.readonly && M.count===0){ slot.innerHTML=''; }   // empty closed month: no "minted" artifact to show
   else if(M.readonly){
-    slot.innerHTML=`<div class="mir-recap"><div style="flex:1"><div class="month">${M.label.toUpperCase()} ${M.year} · CLOSED</div><div class="big">${M.count}<span style="font-size:14px;color:var(--muted);font-weight:600"> days trained</span></div><div class="sub2">This month is minted — read-only.</div></div><div class="mir-qmark" style="width:40px;height:40px;color:var(--gold)">${mirIco('i-share')}</div></div>`;
+    slot.innerHTML=`<div class="mir-recap" onclick="mirOpenMonthRecap('${M.year}-${String(M.month).padStart(2,'0')}')"><div style="flex:1"><div class="month">${M.label.toUpperCase()} ${M.year} · CLOSED</div><div class="big">${M.count}<span style="font-size:14px;color:var(--muted);font-weight:600"> days trained</span></div><div class="sub2">This month is minted — tap for the recap.</div></div><div class="mir-qmark" style="width:40px;height:40px;color:var(--gold)">${mirIco('i-share')}</div></div>`;
   } else slot.innerHTML='';
   // footer — closed months state their own count (an empty month must read as
   // deliberately empty, never as a blank/dead panel); current month gets the
@@ -2408,48 +2413,133 @@ function mirCaption(sc){
   return pick.html;
 }
 
-// ── MIX BARS (top-5 all-time, from users.workoutCounts; self-heal if missing) ──
+// ── MIX (live from logs). The old card read the users.workoutCounts denorm,
+// which drifts — the Wes fixture proved it (seeded "Padel 3" vs 1 real log).
+// Two views, one source of truth: MONTH from allLogs already in memory
+// (+0 reads) · ALL-TIME from one userId-scoped query, cached per session.
+// Counting unit = individual workouts (a 2-workout day counts 2), matching
+// the calendar tile's ×2 badge. The submit-path denorm write is untouched;
+// nothing reads it anymore.
+let _mirMixMode='month';
+let _mirMineAll=null;          // all-time own logs cache (per session)
+function mirSetMixMode(m){
+  _mirMixMode=m;
+  const b1=document.getElementById('mixTglM'), b2=document.getElementById('mixTglA');
+  if(b1) b1.classList.toggle('on', m==='month');
+  if(b2) b2.classList.toggle('on', m==='all');
+  mirRenderMix();
+}
+function _mixCount(logs){
+  const wc={}; let workouts=0; const days=new Set();
+  logs.forEach(l=>{
+    const ws=Array.isArray(l.workouts)?l.workouts:(l.workout?[l.workout]:[]);
+    if(l.year&&l.month&&l.day) days.add(l.year+'-'+l.month+'-'+l.day);
+    ws.forEach(w=>{ const lab=String(w||'').trim(); if(!lab) return; const k=lab.toLowerCase(); (wc[k]||(wc[k]={label:lab,n:0})).n++; workouts++; });
+  });
+  return {wc, workouts, days:days.size};
+}
 function mirRenderMix(){
   const el=document.getElementById('mirMix'); if(!el) return;
-  let counts=window._mirWorkoutCounts;
-  if(!counts){ mirLoadWorkoutCounts().then(()=>mirRenderMix()); el.innerHTML='<div class="tmuted" style="font-size:12px">Loading your mix…</div>'; return; }
-  const entries=Object.keys(counts).map(k=>({name:counts[k].label||k, n:counts[k].n||counts[k]||0}))
-    .filter(e=>e.n>0).sort((a,b)=>b.n-a.n).slice(0,5);
-  if(!entries.length){ el.innerHTML='<div class="tmuted" style="font-size:12px">Log a few workouts and your all-time mix builds here.</div>'; return; }
-  const max=entries[0].n;
-  el.innerHTML=entries.map(e=>{
-    const col=mirColOf(e.name);
-    return `<div class="mir-bar"><div class="lbl" style="color:${col}">${mirIco(mirIconOf(e.name))}<span>${esc(e.name)}</span></div><div class="track"><div class="fill" style="width:${Math.max(6,Math.round(e.n/max*100))}%;background:${col}"></div></div><div class="bv">${e.n}</div></div>`;
-  }).join('');
+  const statEl=document.getElementById('mirMixStat');
+  let logs;
+  if(_mirMixMode==='month'){
+    logs=(allLogs||[]).filter(l=>l.player===me.name && !l.voided);
+  } else {
+    if(!_mirMineAll){ mirLoadMineAll().then(()=>mirRenderMix()); el.innerHTML='<div class="tmuted" style="font-size:12px">Adding it all up…</div>'; if(statEl) statEl.textContent=''; return; }
+    logs=_mirMineAll;
+  }
+  const r=_mixCount(logs);
+  const entries=Object.values(r.wc).sort((a,b)=>b.n-a.n);
+  if(statEl) statEl.innerHTML = r.workouts
+    ? `<b>${r.workouts}</b> workout${r.workouts===1?'':'s'} · <b>${r.days}</b> day${r.days===1?'':'s'}${_mirMixMode==='month'?' this month':' all-time'}${_mirMixMode==='all'?' <span class="mixnote">(logs linked to your account)</span>':''}`
+    : '';
+  if(!entries.length){
+    el.innerHTML=`<div class="tmuted" style="font-size:12px">${_mirMixMode==='month'?'Log a workout and this month’s mix builds here.':'Nothing linked to your account yet.'}</div>`;
+    mirRenderMixRec(); return;
+  }
+  const top=entries.slice(0,5), more=entries.length-top.length, max=top[0].n;
+  el.innerHTML=top.map(e=>{
+    const col=mirColOf(e.label);
+    return `<div class="mir-bar"><div class="lbl" style="color:${col}">${mirIco(mirIconOf(e.label))}<span>${esc(e.label)}</span></div><div class="track"><div class="fill" style="width:${Math.max(6,Math.round(e.n/max*100))}%;background:${col}"></div></div><div class="bv">${e.n}</div></div>`;
+  }).join('') + (more>0?`<div class="tmuted" style="font-size:11px;margin-top:4px">+ ${more} more type${more===1?'':'s'}</div>`:'');
+  mirRenderMixRec();
 }
-// Reads users.workoutCounts; self-heals ONCE from the user's own logs if absent.
-function mirLoadWorkoutCounts(){
-  if(_mirInflight['wc']) return _mirInflight['wc'];
-  const p=_mirLoadWorkoutCountsInner();
-  _mirInflight['wc']=p;
-  return p.finally(()=>{ delete _mirInflight['wc']; });
+function mirLoadMineAll(){
+  if(_mirInflight['mine']) return _mirInflight['mine'];
+  const p=(async()=>{
+    try{
+      if(!me || !me.userId) return;   // pre-identity: retry next render, never latch
+      const snap=await db.collection('logs').where('userId','==',me.userId).get();
+      window._mirReadCount=(window._mirReadCount||0)+snap.size;
+      _mirMineAll=snap.docs.map(d=>d.data()).filter(l=>!l.voided);
+    }catch(e){ logErr('mirLoadMineAll', e); _mirMineAll=_mirMineAll||[]; }
+  })();
+  _mirInflight['mine']=p;
+  return p.finally(()=>{ delete _mirInflight['mine']; });
 }
-async function _mirLoadWorkoutCountsInner(){
-  try{
-    if(!me.userId){ window._mirWorkoutCounts={}; return; }
-    const d=await db.collection('users').doc(me.userId).get();
-    window._mirReadCount=(window._mirReadCount||0)+1;
-    let wc=d.exists && d.data().workoutCounts;
-    if(wc && Object.keys(wc).length){ window._mirWorkoutCounts=wc; return; }
-    // self-heal backfill from own logs (single query), write once
-    const snap=await db.collection('logs').where('userId','==',me.userId).get();
-    window._mirReadCount=(window._mirReadCount||0)+snap.size;
-    const built={};
-    snap.docs.map(x=>x.data()).filter(l=>!l.voided).forEach(l=>{
-      (l.workouts||(l.workout?[l.workout]:[])).forEach(w=>{ const lab=String(w||'').trim(); if(!lab) return; const k=lab.toLowerCase(); (built[k]||(built[k]={label:lab,n:0})).n++; });
-    });
-    window._mirWorkoutCounts=built;
-    if(Object.keys(built).length){ db.collection('users').doc(me.userId).set({workoutCounts:built},{merge:true}).catch(()=>{}); }
-  }catch(e){ logErr('mirLoadWorkoutCounts', e); window._mirWorkoutCounts=window._mirWorkoutCounts||{}; }
+
+// ── COACH'S NOTE (mix recommendation). Crown the dominant category, poke the
+// most-neglected one. Dry wit, never insulting — Nirag reviews the bank.
+// Always computed from THIS MONTH regardless of the toggle; silent under 5
+// workouts (no opinions on tiny samples). Deterministic daily rotation. ──
+const MIR_REC={
+  strength:{
+    cardio:["Iron: plenty. Lungs: barely consulted. One run this week — the dumbbells will still respect you.","The weights room knows your name. Your running shoes just filed a missing-person report."],
+    mind:["You can deadlift the mat — now try sitting on it. Twenty minutes of stretching won't undo the gains. Probably.","Muscles: forged. Hamstrings: two steel cables begging for one yoga class."],
+    sport:["All that strength and nothing to chase with it. Borrow someone's padel racket.","You train like a machine. Machines don't win games — go play one."],
+    dance:["Strong enough to carry the party, yet never dancing at one. Zumba counts as cardio. Legally.","All that power, zero rhythm logged. One dance class. Nobody has to know."]},
+  cardio:{
+    strength:["All engine, no chassis. The dumbbells miss you — they told us.","Cardio: elite. Bolts: loose. Lift something heavy before the wheels come off."],
+    mind:["You run from everything — including stillness. One yoga session. As a treat.","Heart rate: impressive. Ability to touch your toes: under investigation."],
+    sport:["You could outrun this entire group. Now try it with a ball involved.","All those kilometres and not one scoreboard. Go win at something."],
+    dance:["You already have the stamina — dance is just cardio with better music.","Endless cardio, zero choreography. Your playlist deserves better from you."]},
+  sport:{
+    strength:["Great hands, suspicious legs. The squat rack is not your enemy.","You play hard. Imagine playing hard AND being strong. Terrifying. Do it."],
+    cardio:["Match fitness is not fitness-fitness. A humble jog between games won't hurt your ranking.","You sprint when there's a ball. There isn't always a ball. Run anyway."],
+    mind:["Your shoulders survive the smashes; your back is drafting a complaint. Stretch day.","Competitive at everything except flexibility. Try yoga — it's not a contest, and you'd lose."],
+    dance:["Footwork on court: elite. Footwork otherwise: unlogged. One dance session fixes the record."]},
+  mind:{
+    strength:["Inner peace: achieved. Outer strength: pending. Pick up something heavy — calmly.","So flexible, so serene, so unable to open a pickle jar. Weights exist."],
+    cardio:["Stillness: mastered. Motion is the sequel — try a brisk one this week.","Zen is great until the airport sprint. A little cardio, namaste intact."],
+    sport:["All that balance and focus wasted on a mat. Take it to a court once.","You breathe beautifully. Now try breathing at match point."],
+    dance:["From savasana to salsa is a much smaller step than you think."]},
+  dance:{
+    strength:["The moves are there. Add some muscle so the moves have consequences.","Dance cardio: elite. Dance deadlift: not a thing. Lift something anyway."],
+    cardio:["You'll dance till 2am but a 20-minute jog is 'too much'? Fascinating.","Great on the floor. Try the road once a week — same legs."],
+    mind:["All rhythm, no recovery. Your calves would like a word: stretch.","Even dancers need savasana. Especially dancers."],
+    sport:["That coordination is wasted without a scoreboard. A racket awaits."]},
+};
+const MIR_REC_SOLO={
+  strength:"A one-track month: lift, repeat. Respect — but even anvils get moved around occasionally.",
+  cardio:"This month is 100% engine. Pit stops are how the car survives, champ.",
+  sport:"Every single log is a game. At this point the racket should be paying rent.",
+  mind:"A full month of zen. Officially the most aggressively calm person in this group.",
+  dance:"All dance, all month. The group's cardio is jealous of your playlist."
+};
+function mirRenderMixRec(){
+  const el=document.getElementById('mirMixRec'); if(!el) return;
+  const logs=(allLogs||[]).filter(l=>l.player===me.name && !l.voided);
+  const cats={cardio:0,strength:0,sport:0,mind:0,dance:0}; let n=0;
+  logs.forEach(l=>{ (Array.isArray(l.workouts)?l.workouts:[]).forEach(w=>{ const c=mirCatOf(w); if(c in cats){ cats[c]++; n++; } }); });
+  if(n<5){ el.innerHTML=''; return; }
+  let top=null;
+  for(const c of Object.keys(cats)){ if(top===null || cats[c]>cats[top]) top=c; }
+  // least-trained ≠ top; ties resolved in a fixed order so the note is stable
+  const order=['mind','cardio','strength','sport','dance'];
+  let low=null;
+  for(const c of order){ if(c===top) continue; if(low===null || cats[c]<cats[low]) low=c; }
+  const seed=ymdToday().split('-').reduce((a,c)=>a+parseInt(c,10),0);
+  const bank=(MIR_REC[top]||{})[low]||[];
+  let line=bank.length?bank[seed%bank.length]:null;
+  if(!line && cats[top]/n>=0.8) line=MIR_REC_SOLO[top]||null;
+  el.innerHTML=line?`<span class="rec-k">COACH'S NOTE</span> ${esc(line)}`:'';
 }
 
 // ── AFTERGLOW REPORT (Home log path) ──
 function mirShowReport(rw){
+  // QA 23 Jul: logging worked but the celebration never fired on the Mirror
+  // path — the old Log-tab flow owned the confetti and died with the tab.
+  try{ fireConfetti(); fireSparks(); }catch(e){}
   const now=new Date();
   const todayD=now.getDate();
   const isToday = _mirPendingDay===todayD && now.getMonth()+1===season.month && now.getFullYear()===season.year;
@@ -2722,6 +2812,24 @@ async function renderProfile(){
   }
 }
 
+let _mirRecapCache={};
+async function mirOpenMonthRecap(sid){
+  // Closed calendar months open their minted recap. Source = the viewer's own
+  // users/{uid}/seasons/{code}_{sid} archive doc (1 read, cached per session).
+  // Months that predate the archive writer degrade to an honest toast.
+  try{
+    if(!me || !me.userId){ toast('Recaps unlock once your profile finishes setting up.'); return; }
+    let d=_mirRecapCache[sid];
+    if(d===undefined){
+      const snap=await db.collection('users').doc(me.userId).collection('seasons').doc(groupCode+'_'+sid).get();
+      window._mirReadCount=(window._mirReadCount||0)+1;
+      d=snap.exists?snap.data():null; _mirRecapCache[sid]=d;
+    }
+    if(!d){ toast('No minted recap for '+sid+' — it predates the archive.','error'); return; }
+    const rec=buildRecapDataFromArchive({ id: groupCode+'_'+sid, ...d });
+    if(window.__recapShowFromData) window.__recapShowFromData(rec);
+  }catch(e){ logErr('mirOpenMonthRecap', e); toast('Could not open that recap.','error'); }
+}
 function openArchivedRecap(i){
   const s=_profileSeasonsCache[i]; if(!s) return;
   const d=buildRecapDataFromArchive(s);
@@ -3506,7 +3614,7 @@ function renderLB(){
       <div style="width:34px;height:34px;border-radius:50%;background:${p.team==='A'?'var(--Al)':p.team==='B'?'var(--Bl)':'var(--Cl)'};border:1.5px solid ${tcol(p.team)};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:${tcol(p.team)};flex-shrink:0">${esc(p.name[0])}</div>
       <div class="lbinfo">
         <div class="lbname" style="color:var(--text)">${esc(p.name)}${p.name===myName?' <span style="font-size:10px;color:var(--green);font-weight:700">· you</span>':''} <span class="rbadge ${p.role==='Captain'?'rCaptain':p.role==='Vice Captain'?'rVC':'rPlayer'}">${esc(p.role)}</span></div>
-        <div class="lbmeta" style="color:var(--muted)">${p.sc.wo} workouts · ${p.sc.streak}🔥</div>
+        <div class="lbmeta" style="color:var(--muted)">${p.sc.wo} workouts · ${p.sc.streak}${flameIco('flk-s')}</div>
       </div>
       <div style="text-align:right">
         <div style="font-size:18px;font-weight:800;color:var(--gold)">${p.sc.total}</div>
@@ -3593,12 +3701,12 @@ function renderFeed(){
       <div style="font-size:10px;font-weight:700;color:${topTeam?tcol(topTeam):'var(--muted)'};text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Leading today</div>
     </div>
     ${topStreakers.length>0?`<div style="background:var(--gold-l);border-radius:10px;padding:12px;text-align:center;grid-column:1/-1">
-      <div style="font-size:16px;font-weight:800;color:var(--orange)">${topStreakers.length<=3?topStreakers.map(p=>p.name).join(' · ')+' · '+topStreak+' days 🔥':'Multiple players · '+topStreak+' days 🔥'}</div>
+      <div style="font-size:16px;font-weight:800;color:var(--orange)">${topStreakers.length<=3?topStreakers.map(p=>p.name).join(' · ')+' · '+topStreak+' days '+flameIco('flk-m'):'Multiple players · '+topStreak+' days '+flameIco('flk-m')}</div>
       <div style="font-size:10px;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">${topStreakers.length<=3?'Longest active streak':topStreakers.length+' players tied — check the board'}</div>
     </div>`:''}
   </div>`;
 
-  if(sorted.length===0){ document.getElementById('feedList').innerHTML=statsHTML+'<div class="tmuted">No workouts logged yet. Be the first! 🔥</div>'; return; }
+  if(sorted.length===0){ document.getElementById('feedList').innerHTML=statsHTML+'<div class="tmuted">No workouts logged yet. Be the first! '+flameIco('flk-s')+'</div>'; return; }
   // PASS-2 FIX 5 — feed rows: full block tinted the player's TEAM colour, name
   // prominent centre-left with their live streak beside it, and the workout's
   // category glyph on the RIGHT as a solid FILLED icon. No emojis anywhere.
@@ -4626,6 +4734,12 @@ function checkRolloverEligibility(seasonData){
 // not-due/skip reason — that's the expected outcome on the overwhelming
 // majority of boots.
 async function checkAutoRollover(code){
+  // Rollover holds until 6:00 on the 1st — the midnight-to-dawn window still
+  // belongs to the OLD month (night-owl loggers finishing the 31st). From
+  // 6am, or any later day, roll as before. Client-local time by design
+  // (the user base is IST); the manual repair path is deliberately ungated.
+  const now=new Date();
+  if(now.getDate()===1 && now.getHours()<6) return;
   const result = await performRollover(code);
   if(result.ok) console.log(`[Forge] Auto-rollover: ${code} ${result.prevSid} -> ${result.newSid}`);
 }
@@ -5584,7 +5698,7 @@ function renderPledgeStatusCard(){
           :`<div style="font-size:12px;color:${daysInWeek>=pledge?'var(--green)':'var(--muted)'}">${daysInWeek>=pledge?'✅ On track':'Still time to hit it'}</div>`
         }
       </div>
-      <div style="font-size:28px">${calc?(calc.type==='double'?'🔥':'💀'):(daysInWeek>=pledge?'✅':'⏳')}</div>
+      <div style="font-size:28px">${calc?(calc.type==='double'?flameIco('flk-l'):'💀'):(daysInWeek>=pledge?'✅':'⏳')}</div>
     </div>
   </div>`;
 }

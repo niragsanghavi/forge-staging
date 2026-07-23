@@ -589,3 +589,34 @@ svg.mir-ico{fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:roun
 .mir-rline svg{width:17px;height:17px;flex:none}
 .mir-closebtn{margin-top:20px;width:100%;height:52px;border-radius:16px;background:linear-gradient(180deg,#e7bf58,#c69d35);border:none;color:var(--ink);font-family:var(--font);font-weight:800;font-size:15px;cursor:pointer}
 .mir-staynote{margin-top:9px;font-size:11px;color:var(--muted);opacity:.7}
+
+/* ── v45: calendar overflow fix · mix toggle + coach note · flame flicker ──
+   Sunday-column clip: 1fr grid tracks floor at min-content, so a tile whose
+   icon+padding exceeded its share pushed column 7 off the card on narrow
+   phones. minmax(0,1fr) lets tracks shrink; min-width:0 lets tiles comply. */
+/* min-height:46px + aspect-ratio:1 imposed an effective 46px min-WIDTH per
+   tile — 7×46 + gaps > a 375px phone, so the Sunday column clipped off the
+   card. Fix: tracks may shrink (minmax(0,1fr)), tiles stop stretching
+   (align-items:start) so aspect-ratio:1 makes height follow track width —
+   square tiles at every viewport, no minimum to overflow. */
+.mir-cal{grid-template-columns:repeat(7,minmax(0,1fr));align-items:start}
+.mir-day{min-width:0;min-height:0;width:100%}
+.mix-tgl{display:flex;gap:4px;background:var(--bg);border:1px solid var(--hairline);border-radius:20px;padding:2px;flex:none}
+.mix-tgl button{border:0;background:transparent;color:var(--muted);font-family:inherit;font-weight:700;font-size:11px;padding:4px 10px;border-radius:16px;cursor:pointer;transition:background .15s,color .15s}
+.mix-tgl button.on{background:var(--gold);color:#141414}
+.mix-stat{font-size:12px;color:var(--muted);margin:-2px 0 10px}
+.mix-stat b{color:var(--text)}
+.mixnote{font-size:10px;opacity:.7}
+.mix-rec{margin-top:12px;font-size:12.5px;color:var(--text);background:rgba(212,168,67,.07);border:1px solid rgba(212,168,67,.25);border-radius:10px;padding:9px 12px;line-height:1.45}
+.mix-rec:empty{display:none}
+.mix-rec .rec-k{font-size:9.5px;letter-spacing:.12em;color:var(--gold);font-weight:800;margin-right:6px}
+.mir-recap{cursor:pointer}
+/* 3-frame flame flicker — steps() keeps it chunky, like a tiny gif */
+@keyframes flkA{0%{transform:scale(1) rotate(-2deg)}33%{transform:scale(1.06,.93) rotate(2deg)}66%{transform:scale(.95,1.06) rotate(-1deg)}100%{transform:scale(1) rotate(-2deg)}}
+.flk{display:inline-flex;vertical-align:-2px;width:1em;height:1em}
+.flk svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;animation:flkA .55s steps(3,end) infinite;transform-origin:50% 82%;color:var(--orange)}
+.flk-s{width:.95em;height:.95em}
+.flk-m{width:1.05em;height:1.05em}
+.flk-l{width:28px;height:28px}
+#mirFlame svg,.fi-streak svg{animation:flkA .55s steps(3,end) infinite;transform-origin:50% 82%}
+@media (prefers-reduced-motion: reduce){.flk svg,#mirFlame svg,.fi-streak svg{animation:none}}
