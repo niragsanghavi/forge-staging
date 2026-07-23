@@ -12,6 +12,22 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Forge">
 <link rel="apple-touch-icon" href="icon-180.png">
+<script>
+// Environment-aware PWA identity. Same detection rule as src/config/firebase.js
+// (which loads too late for these tags — the browser reads the manifest link
+// and apple-touch-icon at install/add-to-homescreen time, so this must run
+// inline in <head>). On staging (or localhost) the app installs as "Forge STG"
+// with the amber STG icon, so a phone can hold prod + staging side by side.
+// Both repos ship BOTH icon sets + both manifests; only the hostname decides —
+// promotion can copy any file without clobbering either identity.
+(function(){
+  var staging = location.hostname==='localhost' || location.hostname==='127.0.0.1' || location.pathname.includes('forge-staging');
+  if(!staging) return;
+  document.querySelector('link[rel="manifest"]').setAttribute('href','manifest-staging.json');
+  document.querySelector('link[rel="apple-touch-icon"]').setAttribute('href','icon-staging-180.png');
+  document.querySelector('meta[name="apple-mobile-web-app-title"]').setAttribute('content','Forge STG');
+})();
+</script>
 </head>
 <body>
 <!-- ══ ICON LIBRARY ══ Document-level so every surface can <use> it.
