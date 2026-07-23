@@ -170,6 +170,14 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
 .congrats.show{display:block}
 .congrats.in{opacity:1;transform:none}
 
+/* the skip — sarcastic exit for the impatient and the returning */
+.gate-skip{position:absolute;bottom:24px;left:50%;transform:translate(-50%,8px);
+  width:max-content;max-width:86vw;font-size:12px;line-height:1.55;letter-spacing:.02em;
+  color:var(--muted);text-decoration:underline dotted rgba(143,141,152,.55);text-underline-offset:4px;
+  opacity:0;pointer-events:none;transition:opacity .5s var(--ease),transform .5s var(--ease),color .3s}
+.gate-skip.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.gate-skip:hover{color:var(--text);text-decoration-style:solid}
+
 /* scroll cue — appears with the congrats moment, dies on first scroll */
 .cue{position:absolute;left:0;right:0;bottom:16px;
   display:flex;flex-direction:column;align-items:center;gap:7px;
@@ -431,6 +439,8 @@ html.locked .rail{display:none}
     <svg viewBox="0 0 24 24"><path d="M5 9l7 7 7-7"/></svg>
     <span>Scroll</span>
   </div>
+
+  <button class="gate-skip" id="gateSkip" type="button">Oh, not interested? Sure &mdash; skip all my hard work. I promise I won&rsquo;t <b class="gk">cry</b>.</button>
 </section>
 
 <!-- ════════════════ C · MAIN PAGE ════════════════ -->
@@ -659,6 +669,7 @@ cards.forEach(function(card, n){
 
 var cue = document.getElementById('cue');
 function releasePage(){
+  var sk=document.getElementById('gateSkip'); if(sk) sk.classList.remove('show');
   docEl.classList.remove('locked');
   content.removeAttribute('inert');
   content.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' });
@@ -666,6 +677,7 @@ function releasePage(){
 logBtn.addEventListener('click', function(){
   if(logBtn.classList.contains('logged') || logBtn.dataset.done) return;
   logBtn.dataset.done = '1';
+  try{ localStorage.setItem('forge_gate_done','1'); }catch(e){}
   track('log_workout_click');
   cue.classList.add('show');
   if(window.matchMedia('(min-width:768px)').matches){
@@ -694,6 +706,21 @@ logBtn.addEventListener('click', function(){
     setTimeout(releasePage, reduced ? 300 : 1150);
   }
 });
+/* ── the skip. First-timers get guilt-tripped after 4s; returning visitors
+   (gate already beaten once on this device) get waved through immediately.
+   Same releasePage() as the honest path — no second unlock code. ── */
+var skipBtn = document.getElementById('gateSkip');
+var gateDone = false;
+try{ gateDone = localStorage.getItem('forge_gate_done') === '1'; }catch(e){}
+if(gateDone){ skipBtn.innerHTML = 'Back again? Fine, you\u2019ve earned the skip. Straight through \u2192'; }
+setTimeout(function(){ skipBtn.classList.add('show'); }, gateDone ? 900 : 4000);
+skipBtn.addEventListener('click', function(){
+  track('gate_skip', { returning: gateDone });
+  try{ localStorage.setItem('forge_gate_done','1'); }catch(e){}
+  skipBtn.classList.remove('show');
+  releasePage();
+});
+
 /* the cue dies permanently on the first scroll event */
 window.addEventListener('scroll', function once(){
   cue.classList.add('gone');
