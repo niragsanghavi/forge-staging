@@ -20,3 +20,11 @@ FORGE_AUDIT_1K.md
 claude.md
 SECURITY_REDTEAM.md
 scratchpad/
+
+# — AI context + doc archive (added 23 Jul 2026, doc-migration pass) —
+CLAUDE.md
+docs-archive/
+ARCHITECTURE.md
+FORGE_TIMELINE.md
+FORGE_HOME_REDESIGN_REFERENCE.md
+*.dc.html
