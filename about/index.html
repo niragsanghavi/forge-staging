@@ -46,7 +46,7 @@
   --ease:cubic-bezier(.22,.61,.36,1); /* ease-out */
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html{scroll-behavior:smooth;scroll-snap-type:y proximity} /* proximity, NOT mandatory — fights iOS momentum otherwise */
+html{scroll-behavior:smooth} /* v3 reorg: page snap removed — sections flow tight, no dead voids */
 html.locked, html.locked body{overflow:hidden;height:100%}
 body{
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
@@ -191,7 +191,7 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
 
 /* ════════════════ C · MAIN PAGE ════════════════ */
 .sec{
-  max-width:720px;margin:0 auto;padding:96px 24px;
+  max-width:720px;margin:0 auto;padding:64px 24px;
   text-align:center;
 }
 .sec .display{margin-top:26px}
@@ -218,9 +218,8 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
 /* ── FULL-SCREEN SCROLL JOURNEY (What is Forge → Points → Streaks → Board) ──
    85svh sections snapping on the root proximity container; the next section's
    label peeks in the remaining ~15svh so the continuation is obvious. */
-.jsec{min-height:85vh;min-height:85svh;scroll-snap-align:start;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:24px;padding:44px 24px 30px;text-align:center}
+.jsec{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:22px;padding:58px 24px 46px;text-align:center}
 .j-img{height:55vh;height:55svh;width:100%;max-width:960px;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
 .j-img figure{position:relative;background:var(--ph-bg);border:1px solid var(--ph-line);
@@ -231,7 +230,7 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
 .j-sub{color:var(--muted);font-size:15px;max-width:42ch;line-height:1.55}
 
 /* events — one line, nothing more */
-.events{padding-top:110px;padding-bottom:36px}
+.events{padding-top:72px;padding-bottom:8px}
 
 /* ── HAMMER & ANVIL SCROLL RAIL — whisper-thin, right edge ── */
 .rail{position:fixed;right:10px;top:50%;transform:translateY(-50%);
@@ -251,7 +250,7 @@ html.locked .rail{display:none}
 @media(max-width:369px),(prefers-reduced-motion:reduce){.rail{display:none}}
 
 /* live counter strip */
-.stats{display:flex;justify-content:center;gap:52px;padding-top:110px;padding-bottom:0}
+.stats{display:flex;justify-content:center;gap:52px;padding-top:56px;padding-bottom:0}
 .stat{text-align:center}
 .stat-n{font-weight:900;letter-spacing:-.02em;color:var(--gold-hot);
   font-size:clamp(2.1rem,8vw,3.2rem);line-height:1.1;font-variant-numeric:tabular-nums}
@@ -259,7 +258,7 @@ html.locked .rail{display:none}
   text-transform:uppercase;color:var(--muted)}
 
 /* group-chat carousel — native scroll-snap, one centered slide, neighbors peek */
-.chats{padding-top:56px}
+.chats{padding-top:48px}
 .caro{margin:36px -24px 0}
 .caro-track{position:relative;/* offsetParent for slides — keeps offsetLeft
   track-internal at every width; without this, slides measure against BODY and
@@ -282,7 +281,7 @@ html.locked .rail{display:none}
 .caro-dots button:focus-visible,.caro-track:focus-visible{outline:2px solid var(--gold-hot);outline-offset:3px}
 
 /* CTA */
-.cta{padding-top:110px;padding-bottom:110px}
+.cta{padding-top:72px;padding-bottom:56px}
 .cta .btn{margin-top:38px}
 /* secondary CTA — outlined pill: one clear step below the gold primary,
    one step above muted text */
@@ -299,13 +298,22 @@ html.locked .rail{display:none}
 .btn-ig:focus-visible{outline:2px solid var(--gold-hot);outline-offset:3px}
 
 /* ════════════════ D · WHATSAPP CTA ════════════════ */
-.wa{max-width:720px;margin:0 auto;padding:0 24px 96px;text-align:center}
+.wa{max-width:720px;margin:0 auto;padding:0 24px 64px;text-align:center}
 .wa-sub{color:var(--muted);font-size:15px}
 .wa a{display:inline-block;margin-top:26px;transition:opacity .3s var(--ease)}
 .wa a:hover{opacity:.88}
 .wa img{height:56px;width:auto;display:inline-block}
 .wa-fallback{display:inline-block}
 .wa-fallback svg{display:block;height:56px;width:auto}
+
+/* ── the showroom — live sandbox card ── */
+.showroom{max-width:720px;margin:0 auto;padding:64px 24px;text-align:center}
+.showroom .show-card{margin-top:26px;border:1px solid var(--gold-line);border-radius:16px;padding:28px 22px;background:rgba(212,168,67,.05)}
+.showroom .show-kv{display:flex;justify-content:center;gap:34px;margin:18px 0 6px;flex-wrap:wrap}
+.showroom .show-kv .k{font-size:10.5px;letter-spacing:.2em;color:var(--muted)}
+.showroom .show-kv .v{font-size:26px;font-weight:900;color:var(--gold-hot);letter-spacing:.08em;font-variant-numeric:tabular-nums}
+.showroom .show-note{font-size:12px;color:var(--muted);margin-top:14px;line-height:1.65}
+.showroom .btn{margin-top:20px}
 
 /* ════════════════ E · FOOTER STRIP ════════════════ */
 .foot{border-top:1px solid var(--line);padding:56px 24px 64px;text-align:center}
@@ -524,6 +532,20 @@ html.locked .rail{display:none}
         <p class="caro-cap" id="capB"></p>
       </div>
       <div class="caro-dots" id="caroDots"></div>
+    </div>
+  </section>
+
+  <section class="showroom rv" aria-label="Try a live demo league">
+    <div class="label">The showroom</div>
+    <h2 class="display" style="margin-top:22px">Don&rsquo;t take our word for it. <b class="gk">Walk in.</b></h2>
+    <div class="show-card">
+      <p style="font-size:15px;color:var(--text)">A fully live demo league &mdash; nine fictional athletes, one very real leaderboard. Go in, pick anyone, log a workout, break nothing.</p>
+      <div class="show-kv">
+        <div><div class="k">GROUP CODE</div><div class="v">FORGE1</div></div>
+        <div><div class="k">PIN &mdash; EVERYONE&rsquo;S</div><div class="v">0000</div></div>
+      </div>
+      <a class="btn" href="https://goforge.in/" target="_blank" rel="noopener">Enter the showroom</a>
+      <p class="show-note">It&rsquo;s a sandbox: nothing you do here counts anywhere, and the <b class="gk">fictional nine</b> have no feelings to hurt. Probably.</p>
     </div>
   </section>
 
