@@ -584,6 +584,42 @@ svg.mir-ico{fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:roun
 .mir-rankrow .arrow{color:var(--muted);font-size:18px}
 .mir-rankrow .to{font-family:var(--font);font-weight:800;font-size:42px;color:var(--gold)}
 .mir-rcard .rcap{text-align:center;font-size:12px;color:var(--muted);padding-bottom:2px}
+.mir-rcard .rcap b{color:var(--text)}
+/* 3-row mini leaderboard in the afterglow — rows animate on transform only,
+   so a swap never reflows the sheet. Row box = 38px + 8px gap = 46px, which is
+   the step the pass animation uses. */
+.mir-mb{display:flex;flex-direction:column;gap:8px;padding:2px 0 10px}
+.mir-mb-row{display:flex;align-items:center;gap:10px;height:38px;padding:0 12px;border-radius:11px;
+  background:var(--surface);border:1px solid var(--border);
+  transition:transform .6s cubic-bezier(.22,.9,.28,1),opacity .45s ease}
+.mir-mb-row .r{width:28px;flex:none;font-weight:800;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.mir-mb-row .n{flex:1;min-width:0;font-weight:700;font-size:14px;color:var(--text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mir-mb-row .p{flex:none;font-weight:800;font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums}
+.mir-mb-row.meRow{background:var(--gold-l);border-color:rgba(212,168,67,.5)}
+.mir-mb-row.meRow .r,.mir-mb-row.meRow .n,.mir-mb-row.meRow .p{color:var(--gold)}
+.mir-mb-row.passed{opacity:.5}
+.mir-mb-jump{text-align:center;font-size:10px;font-weight:800;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--orange);padding-bottom:8px}
+
+/* ── WEEKLY MOVER band (Board, above Team Standings) ── */
+.wm-band{background:linear-gradient(135deg,rgba(255,106,60,.13),rgba(212,168,67,.05));
+  border:1px solid rgba(255,106,60,.38);border-radius:14px;padding:12px 14px;margin:0 0 16px}
+.wm-band.me{background:linear-gradient(135deg,rgba(212,168,67,.18),rgba(255,106,60,.06));
+  border-color:rgba(212,168,67,.55)}
+.wm-hd{display:flex;align-items:baseline;gap:8px;font-size:10px;font-weight:800;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--orange);margin-bottom:7px}
+.wm-band.me .wm-hd{color:var(--gold)}
+.wm-hd span{font-size:9px;font-weight:600;letter-spacing:.06em;color:var(--muted);text-transform:none}
+.wm-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.wm-name{font-size:15px;font-weight:800;color:var(--text);min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wm-up{flex:none;font-size:13px;font-weight:800;color:var(--orange);white-space:nowrap}
+.wm-band.me .wm-up{color:var(--gold)}
+.wm-you{margin-top:7px;padding-top:7px;border-top:1px solid var(--hairline);
+  font-size:12px;color:var(--muted)}
+.wm-you b{color:var(--text)}
+@media(prefers-reduced-motion:reduce){ .mir-mb-row{transition:none} }
 .mir-rline{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted)}
 .mir-rline b{color:var(--text)}
 .mir-rline svg{width:17px;height:17px;flex:none}
@@ -620,3 +656,48 @@ svg.mir-ico{fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:roun
 .flk-l{width:28px;height:28px}
 #mirFlame svg,.fi-streak svg{animation:flkA .55s steps(3,end) infinite;transform-origin:50% 82%}
 @media (prefers-reduced-motion: reduce){.flk svg,#mirFlame svg,.fi-streak svg{animation:none}}
+
+/* ═══ TEAM DISTANCE GOAL ("The Long Way") — added 30 Jul 2026 ═══
+   Only ever visible when season.kmTarget is set; no styles here affect the
+   default layout. Bars animate width only (compositor-friendly). */
+.km-card{padding:14px 14px 6px}
+.km-intro{font-size:12px;line-height:1.55;color:var(--muted);margin-bottom:14px}
+.km-intro b{color:var(--gold)}
+.km-row{padding:11px 0;border-top:1px solid var(--hairline)}
+.km-row:first-of-type{border-top:0}
+.km-rhead{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.km-tname{font-size:13px;font-weight:800;letter-spacing:.02em;color:var(--text)}
+.km-mine .km-tname{color:var(--gold)}
+.km-tval{font-size:15px;font-weight:900;color:var(--text);font-variant-numeric:tabular-nums}
+.km-of{font-size:11px;font-weight:700;color:var(--muted)}
+.km-track{height:8px;border-radius:99px;background:rgba(255,255,255,.07);
+  overflow:hidden;margin-top:8px}
+.km-fill{height:100%;border-radius:99px;
+  background:linear-gradient(90deg,#8a5a2a,var(--gold));
+  transition:width .5s cubic-bezier(.22,1,.36,1)}
+.km-mine .km-fill{background:linear-gradient(90deg,#b4531c,var(--orange,#ff6a3c),var(--gold))}
+.km-done .km-fill{background:linear-gradient(90deg,var(--gold),#f0d876)}
+.km-rfoot{font-size:11.5px;color:var(--muted);margin-top:7px;font-weight:600}
+.km-done .km-rfoot b{color:var(--gold)}
+@media (prefers-reduced-motion: reduce){.km-fill{transition:none}}
+
+/* distance-capture step inside the log sheet */
+.mir-km{padding:4px 0 8px}
+.km-inwrap{display:flex;align-items:baseline;justify-content:center;gap:8px;margin:6px 0 14px}
+.km-inwrap input{width:150px;font-size:44px;font-weight:900;text-align:right;
+  background:transparent;border:0;border-bottom:2px solid var(--hairline);
+  color:var(--text);padding:0 4px 4px;letter-spacing:-.02em}
+.km-inwrap input:focus{outline:none;border-bottom-color:var(--gold)}
+.km-inwrap input::-webkit-outer-spin-button,
+.km-inwrap input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.km-unit{font-size:17px;font-weight:800;color:var(--muted)}
+.km-chips{display:flex;gap:8px;justify-content:center;margin-bottom:16px;flex-wrap:wrap}
+.km-chip{padding:9px 17px;border-radius:99px;border:1px solid var(--hairline);
+  background:rgba(255,255,255,.04);color:var(--text);font-size:14px;font-weight:800;
+  cursor:pointer;transition:transform .12s,border-color .2s}
+.km-chip:active{transform:scale(.94);border-color:var(--gold)}
+.km-remain{font-size:12px;color:var(--muted);text-align:center;margin-bottom:14px}
+.km-remain b{color:var(--gold)}
+.km-go{width:100%;margin:0}
+.km-skip{text-align:center;font-size:12.5px;color:var(--muted);padding:14px 0 4px;
+  cursor:pointer;text-decoration:underline;text-underline-offset:3px}

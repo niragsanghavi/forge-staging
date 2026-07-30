@@ -2,7 +2,24 @@
 **/.DS_Store
 .claude/
 .idea/
+
+# — DOMAIN SAFETY (added 27 Jul 2026) —
+# CNAME contains goforge.in. If it is ever committed to THIS repo, GitHub
+# Pages lets forge-staging claim the production domain, and goforge.in
+# starts serving the staging build. Ignored so `git add -A` can never
+# stage it by accident. forge-landing.html is untracked-by-design too.
+CNAME
+forge-landing.html
 firebase-debug.log
+
+# — GENERATED MEDIA SCRATCH (added 30 Jul 2026) —
+# higgsfield/ is raw AI image+video generation scratch: 101MB of PNGs across
+# logos/, backdrops/, scenecuts/, videoframes/. Untracked but NOT ignored
+# meant one `git add -A` would push 101MB into a PUBLIC repo and it could
+# never be truly removed from history. Source frames live in ~/Downloads and
+# the folder itself; nothing here is needed to build or serve the app.
+higgsfield/
+
 .forge-ai-context.md
 AUDIT_REPORT_FINAL.md
 AUTH_UPGRADE.md

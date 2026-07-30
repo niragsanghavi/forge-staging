@@ -113,6 +113,23 @@ window.reactions = [];          // S5 🔥 reactions. MUST be pre-declared: rend
                                 // kill the whole render pass (seen live on Android, blocked a real user).
 window.selDay = null;
 window.selW = [];
+window.selKm = null;            // distance for the log in flight, km. null = not
+                                // captured (the overwhelming majority of logs).
+                                // Set only by the distance step, which itself only
+                                // appears when season.kmTarget is configured.
+
+// Workout types a distance can meaningfully be attached to. Matched loosely
+// (substring, lowercased) so "Evening walk", "Treadmill Run" and a custom
+// "morning jog" all qualify without needing an exact-match table.
+window.DISTANCE_WORKOUTS = [
+  'walk','run','jog','cycle','cycling','bike','biking','ride','riding',
+  'hike','hiking','trek','trekking','swim','swimming','row','rowing',
+  'treadmill','marathon','sprint','elliptical','stair'
+];
+window.isDistanceWorkout = function(w){
+  const s = String(w||'').toLowerCase();
+  return window.DISTANCE_WORKOUTS.some(k => s.includes(k));
+};
 window.adminUnlocked = false;
 window.unsub = [];
 

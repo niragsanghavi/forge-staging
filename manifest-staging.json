@@ -1,7 +1,11 @@
 {
+  "id": "/forge-staging/",
   "name": "Forge Staging",
   "short_name": "Forge STG",
   "description": "Forged by the group. (test build)",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["health", "fitness", "lifestyle"],
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

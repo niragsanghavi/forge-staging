@@ -14,6 +14,18 @@ function _activeGroupCode(ctx){ return (ctx&&ctx.groupCode)||groupCode||''; }
 
 const _EMPTY_SET = new Set();
 
+// ── TEAM DISTANCE GOAL ───────────────────────────────────────────────────────
+// A season with `kmTarget` set opts its group in: members log distance on
+// distance-type workouts, the team's total is pooled, and when the pool reaches
+// the target every member who actually contributed earns a one-off bonus.
+// With kmTarget unset (every season before Aug 2026) NOTHING here can fire —
+// the bonus is 0, no capture UI appears, and scores are bit-identical to before.
+// The bonus is COMPUTED from logs, never stored, so a miscount self-heals the
+// moment the underlying logs change.
+const KM_CONTRIBUTOR_BONUS = 15;   // per qualifying member, once per season
+const KM_MIN_CONTRIBUTION  = 1;    // km — stops a 0.1km tap from claiming 15 pts
+const KM_MAX_PER_LOG       = 200;  // km — clamps typos (a "500km walk") per log
+
 // ── SNAPSHOT CACHE ──────────────────────────────────────────────────────────
 // score() used to re-scan the whole log array per call, and the team-streak /
 // underdog sections re-scanned it per roster entry per call — one leaderboard
@@ -31,8 +43,11 @@ function _ctxEntry(ctx){
   const tw=_twistWindowsOf(ctx);
   const myGC=_activeGroupCode(ctx);
   const today=new Date();
+  // kmTarget is part of the stamp: the km bonus below reads it, so without it an
+  // admin raising or lowering the target would leave every cached score stale
+  // until the logs array happened to be replaced.
   const stamp=[cfg.month,cfg.year,cfg.days,cfg.capTarget,cfg.vcTarget,cfg.minWorkouts,
-               cfg.rolesEnabled,cfg.teamStreakThreshold,myGC,today.toDateString()].join('|');
+               cfg.rolesEnabled,cfg.teamStreakThreshold,cfg.kmTarget,myGC,today.toDateString()].join('|');
   const hit=_scoreCache.get(logs);
   if(hit && hit.cfg===cfg && hit.rosterRef===roster && hit.twists===twists &&
      hit.bonuses===bonuses && hit.jacks===jacks && hit.ips===ips && hit.tw===tw && hit.stamp===stamp) return hit;
@@ -45,6 +60,11 @@ function _ctxEntry(ctx){
   const teamOf=new Map(roster.map(p=>[p.name,p.team]));
   const logsByPlayer=new Map(), daysByPlayer=new Map();
   const teamDayLog=new Map();                        // team → Map(day → Set(player))
+  // ── DISTANCE (km) ──────────────────────────────────────────────────────────
+  // Accumulated in this same O(N) pass. l.km is whatever the client wrote, so it
+  // is coerced and validated here rather than trusted: a string, a NaN, a
+  // negative or an absurd value must never be able to move a score.
+  const kmByPlayer=new Map(), kmByTeam=new Map();
   for(const l of logs){
     let arr=logsByPlayer.get(l.player); if(!arr) logsByPlayer.set(l.player,arr=[]);
     arr.push(l);
@@ -55,6 +75,12 @@ function _ctxEntry(ctx){
       let td=teamDayLog.get(t); if(!td) teamDayLog.set(t,td=new Map());
       let s=td.get(l.day); if(!s) td.set(l.day,s=new Set());
       s.add(l.player);
+      const k=Number(l.km);
+      if(Number.isFinite(k) && k>0){
+        const capped=Math.min(k, KM_MAX_PER_LOG);
+        kmByPlayer.set(l.player,(kmByPlayer.get(l.player)||0)+capped);
+        kmByTeam.set(t,(kmByTeam.get(t)||0)+capped);
+      }
     }
   }
 
@@ -114,6 +140,10 @@ function _ctxEntry(ctx){
     DAYS, capTarget:cfg.capTarget??16, vcTarget:cfg.vcTarget??20, minWorkouts:cfg.minWorkouts??12,
     rolesEnabled:cfg.rolesEnabled!==false,
     rosterByName, logsByPlayer, daysByPlayer, qualByTeam,
+    // Distance goal: null target = feature dormant (see KM_CONTRIBUTOR_BONUS).
+    // Coerced here so a stringly-typed admin value can't poison comparisons.
+    kmTarget: (Number.isFinite(Number(cfg.kmTarget)) && Number(cfg.kmTarget)>0) ? Number(cfg.kmTarget) : null,
+    kmByPlayer, kmByTeam, teamOf,
     bonusWord, friOn, monOn, bossDays, underdogWindows,
     b30Set, jackCnt, ipSum,
     dowBase, todayDay, isEnd, rosterLen:roster.length,
@@ -130,7 +160,7 @@ function score(playerName, ctx){
 
   const p=E.rosterByName.get(playerName);
   if(!p){
-    r={wo:0,base:0,sb:0,wb:0,rb:0,tb:0,b30:0,pen:0,bossBonus:0,dayBonuses:0,underdogBonus:0,jackBonus:0,ipBonus:0,total:0,streak:0,days:_EMPTY_SET};
+    r={wo:0,base:0,sb:0,wb:0,rb:0,tb:0,b30:0,pen:0,bossBonus:0,dayBonuses:0,underdogBonus:0,jackBonus:0,ipBonus:0,kmBonus:0,myKm:0,teamKm:0,total:0,streak:0,days:_EMPTY_SET};
     E.results.set(playerName,r);
     return r;
   }
@@ -222,8 +252,21 @@ function score(playerName, ctx){
   // Streaks, role bonuses, and all other points are untouched.
   const ipBonus=E.ipSum.get(playerName)||0;
 
-  const total=Math.max(0, base+sb+wb+rb+tb+b30+bossBonus+pen+dayBonuses+underdogBonus+jackBonus+ipBonus);
-  r={wo,base,sb,wb,rb,tb,b30,pen,bossBonus,dayBonuses,underdogBonus,jackBonus,ipBonus,total,streak,days};
+  // ── TEAM DISTANCE BONUS ──────────────────────────────────────────────────
+  // Collective goal, individual reward: the whole team pools distance, and once
+  // the pool clears the target every member who put in at least
+  // KM_MIN_CONTRIBUTION km takes the bonus. Someone who logged nothing gets
+  // nothing, so the bar can't be farmed by one person carrying passengers.
+  // Awarded once — it is a threshold, not a per-km rate.
+  let kmBonus=0, myKm=0, teamKm=0;
+  if(E.kmTarget!==null){
+    myKm   = E.kmByPlayer.get(playerName)||0;
+    teamKm = E.kmByTeam.get(p.team)||0;
+    if(teamKm>=E.kmTarget && myKm>=KM_MIN_CONTRIBUTION) kmBonus=KM_CONTRIBUTOR_BONUS;
+  }
+
+  const total=Math.max(0, base+sb+wb+rb+tb+b30+bossBonus+pen+dayBonuses+underdogBonus+jackBonus+ipBonus+kmBonus);
+  r={wo,base,sb,wb,rb,tb,b30,pen,bossBonus,dayBonuses,underdogBonus,jackBonus,ipBonus,kmBonus,myKm,teamKm,total,streak,days};
   E.results.set(playerName,r);
   return r;
 }
@@ -236,5 +279,31 @@ function teamTotal(team){
   return Math.round(sum/players.length); // average for fair cross-team comparison
 }
 
+// Progress of every team toward the season's distance target, for the bar on the
+// leaderboard. Returns null when the season hasn't opted in, so the caller can
+// simply render nothing. ctx-aware, unlike teamTotal().
+function teamKmProgress(ctx){
+  const E=_ctxEntry(ctx);
+  if(E.kmTarget===null) return null;
+  const teams=[...new Set([...E.rosterByName.values()].map(p=>p.team).filter(Boolean))];
+  return {
+    target: E.kmTarget,
+    teams: teams.map(t=>{
+      const km=E.kmByTeam.get(t)||0;
+      const members=[...E.rosterByName.values()].filter(p=>p.team===t);
+      return {
+        team: t,
+        km: Math.round(km*10)/10,
+        pct: Math.min(100, Math.round((km/E.kmTarget)*100)),
+        filled: km>=E.kmTarget,
+        contributors: members.filter(p=>(E.kmByPlayer.get(p.name)||0)>=KM_MIN_CONTRIBUTION).length,
+        size: members.length
+      };
+    }).sort((a,b)=>b.km-a.km)
+  };
+}
+
 window.score = score;
 window.teamTotal = teamTotal;
+window.teamKmProgress = teamKmProgress;
+window.KM_CONSTS = { bonus:KM_CONTRIBUTOR_BONUS, min:KM_MIN_CONTRIBUTION, maxPerLog:KM_MAX_PER_LOG };

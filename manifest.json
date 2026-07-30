@@ -1,7 +1,11 @@
 {
+  "id": "/",
   "name": "Forge",
   "short_name": "Forge",
   "description": "Forged by the group.",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["health", "fitness", "lifestyle"],
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

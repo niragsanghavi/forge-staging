@@ -326,6 +326,9 @@
   <!-- LEADERBOARD -->
   <div class="page" id="page-lb">
     <div class="page-title">Leaderboard</div>
+    <div id="weeklyMover"></div>
+    <!-- Team distance goal. Renders nothing at all unless season.kmTarget is set. -->
+    <div id="kmGoalCard"></div>
     <div class="shdr">Team Standings</div>
     <div id="teamStand"></div>
     <div class="shdr">Individual Rankings</div>
@@ -344,6 +347,10 @@
   <div class="page" id="page-global">
     <div class="page-title" style="padding-bottom:4px">Global</div>
     <div class="tmuted" style="margin-bottom:16px;font-size:12px">Across every Forge group</div>
+    <!-- Privacy control for THIS board. Sits above the boards on purpose: the
+         opt-out has to be reachable by anyone who is already visible on them.
+         Painted by renderGlobalConsent(), called from loadGlobal(). -->
+    <div id="globalConsentCard" style="margin-bottom:16px"></div>
     <div class="shdr">Most Active Groups Today</div>
     <div class="card" id="globalActive"><div class="tmuted">Open this tab to load…</div></div>
     <div class="shdr">Top Groups — Avg Points / Player</div>
@@ -502,9 +509,15 @@
         <input id="editNumTeams" type="number" min="2" max="3">
         <label>Team streak threshold (% of team needed for bonus)</label>
         <input id="editThreshold" type="number" min="30" max="100">
+        <label>Team distance target (km) — blank or 0 turns the whole feature off</label>
+        <input id="editKmTarget" type="number" min="0" max="10000" placeholder="off">
         <label style="display:flex;align-items:center;gap:8px;margin-top:4px">
           <input type="checkbox" id="editRoles" style="width:auto;margin:0">
           <span>Enable Captains / Vice Captains</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:8px">
+          <input type="checkbox" id="editDemo" style="width:auto;margin:0">
+          <span>Demo / test group — hide from SuperDash and global stats</span>
         </label>
         <div style="display:flex;gap:8px;margin-top:12px">
           <button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="closeEditGroup()">Cancel</button>
@@ -553,30 +566,40 @@
     <div style="margin-top:24px">
       <div class="shdr">Create New Group</div>
       <div class="card">
+        <!-- Two fields to create a group. Everything else was a defaulted number
+             nobody changed, and one of them (days) actively caused a live scoring
+             bug when left at its default in a 31-day month. Season month/year now
+             come from the clock, season length is derived from the calendar, and
+             the scoring knobs take the same defaults the form used to preset —
+             all still editable afterwards in Edit Group. -->
         <label>Group Name</label>
         <input id="newGroupName" placeholder="e.g. Morning Warriors">
-        <label>Month (1-12)</label>
-        <input id="newGroupMonth" type="number" min="1" max="12" value="6">
-        <label>Year</label>
-        <input id="newGroupYear" type="number" value="2026">
-        <label>Days in month</label>
-        <input id="newGroupDays" type="number" value="30">
-        <label>Captain workout target</label>
-        <input id="newGroupCapTarget" type="number" value="16">
-        <label>Vice Captain workout target</label>
-        <input id="newGroupVCTarget" type="number" value="20">
-        <label>Minimum workouts before penalty</label>
-        <input id="newGroupMinWO" type="number" value="12">
-        <label>Number of teams (2 or 3)</label>
-        <input id="newGroupNumTeams" type="number" min="2" max="3" value="3">
-        <label>Team streak threshold (% of team needed for bonus)</label>
-        <input id="newGroupThreshold" type="number" min="30" max="100" value="60">
-        <label style="display:flex;align-items:center;gap:8px;margin-top:4px">
-          <input type="checkbox" id="newGroupRoles" checked style="width:auto;margin:0">
-          <span>Enable Captains / Vice Captains</span>
-        </label>
         <label>Custom code (optional — 6 chars A-Z/0-9; blank = random)</label>
         <input id="newGroupCustomCode" maxlength="6" autocomplete="off" oninput="this.value=this.value.toUpperCase()" placeholder="e.g. FORGE1">
+        <div id="newGroupSeasonNote" class="tmuted" style="font-size:12px;margin-top:10px;line-height:1.5"></div>
+        <details style="margin-top:12px">
+          <summary style="cursor:pointer;font-size:13px;color:var(--muted)">Advanced — scoring defaults</summary>
+          <div style="margin-top:10px">
+            <label>Captain workout target</label>
+            <input id="newGroupCapTarget" type="number" value="16">
+            <label>Vice Captain workout target</label>
+            <input id="newGroupVCTarget" type="number" value="20">
+            <label>Minimum workouts before penalty</label>
+            <input id="newGroupMinWO" type="number" value="12">
+            <label>Number of teams (2 or 3)</label>
+            <input id="newGroupNumTeams" type="number" min="2" max="3" value="3">
+            <label>Team streak threshold (% of team needed for bonus)</label>
+            <input id="newGroupThreshold" type="number" min="30" max="100" value="60">
+            <label style="display:flex;align-items:center;gap:8px;margin-top:4px">
+              <input type="checkbox" id="newGroupRoles" checked style="width:auto;margin:0">
+              <span>Enable Captains / Vice Captains</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;margin-top:8px">
+              <input type="checkbox" id="newGroupDemo" style="width:auto;margin:0">
+              <span>Demo / test group — hide from SuperDash and global stats</span>
+            </label>
+          </div>
+        </details>
         <button class="btn btn-gold" style="margin-top:10px" onclick="createGroup()">Create Group + Generate Code</button>
         <div id="newGroupResult" class="hidden"></div>
       </div>
@@ -838,11 +861,59 @@ function logErr(where, e){
   try { window.ForgeErr && window.ForgeErr.report('error', (e && (e.message||e.code)) || String(e||where), { context: where, stack: (e && e.stack) || '' }); }
   catch(_){}
 }
-function getSessions(){ try { return JSON.parse(localStorage.getItem('forge_sessions')||'[]'); } catch(e){ logErr('getSessions: bad localStorage', e); return []; } }
+// A session is only usable if it carries a player with a name — EVERY consumer
+// dereferences one. bootApp does `me = active.player` and then launchApp reads
+// `me.name[0]`; worse, submitLog's multi-group broadcast reads `sess.player.name`
+// while building the batch, so ONE unusable entry throws before batch.commit()
+// and kills the log for every group, including the active one.
+//
+// So the guard lives here rather than at each of the ~14 call sites. Filtering
+// is also self-healing: upsertSession/removeSession rebuild from this list, so
+// a corrupt entry is dropped on the next write. If nothing survives, callers see
+// an empty array and take their existing "no sessions" path — which for bootApp
+// means onboarding plus the session_lost breadcrumb, the correct outcome.
+function isUsableSession(s){
+  return !!(s && typeof s.code==='string' && s.code &&
+            s.player && typeof s.player.name==='string' && s.player.name.trim());
+}
+// Reported at most once per page load. logErr() forwards to ForgeErr.report, and
+// getSessions() is called from ~14 sites including render and log paths — logging
+// per call would flood remote error collection for exactly the affected users.
+// The condition is a property of stored state, not of any one call, so once is
+// the right number.
+let _badSessionReported = false;
+function getSessions(){
+  try {
+    const raw = JSON.parse(localStorage.getItem('forge_sessions')||'[]');
+    if(!Array.isArray(raw)) {
+      if(!_badSessionReported){ _badSessionReported = true;
+        logErr('getSessions: forge_sessions was not an array', new Error('shape')); }
+      return [];
+    }
+    const good = raw.filter(isUsableSession);
+    if(good.length !== raw.length && !_badSessionReported){
+      _badSessionReported = true;
+      logErr('getSessions: dropped '+(raw.length-good.length)+' of '+raw.length+
+             ' stored session(s) — null/nameless player', new Error('unusable session'));
+    }
+    return good;
+  } catch(e){ logErr('getSessions: bad localStorage', e); return []; }
+}
 function saveSessions(list){ try { localStorage.setItem('forge_sessions', JSON.stringify(list)); } catch(e){ logErr('saveSessions: storage blocked (Safari private mode?)', e); } }
 function getActiveCode(){ return localStorage.getItem('forge_active'); }
 function setActiveCode(code){ try { localStorage.setItem('forge_active', code); } catch(e){ logErr('setActiveCode: storage blocked (Safari private mode?)', e); } }
 function upsertSession(code, player, name){
+  // Refuse to persist a nameless player. Five of the eight call sites pass the
+  // global `me`, so if any of them fires while `me` is null (a failed load, a
+  // mid-flight group switch) this would otherwise overwrite a GOOD entry with
+  // player:null — and because localStorage survives reload, the damage repeats
+  // on every subsequent boot. Better to leave the previous entry alone.
+  // setActiveCode is skipped too: pointing "active" at a group we can't identify
+  // the user in is what produced the broken app screen.
+  if(!player || typeof player.name!=='string' || !player.name.trim()){
+    logErr('upsertSession: refused nameless player for '+code, new Error('would clobber stored session'));
+    return;
+  }
   const list = getSessions();
   const i = list.findIndex(s=>s.code===code);
   // Persist the session WITHOUT the plaintext PIN. The app never reads
@@ -868,7 +939,10 @@ function removeSession(code){
 function migrateLegacySession(){
   const legacy = localStorage.getItem('forge_session');
   if(legacy && getSessions().length===0){
-    try { const s = JSON.parse(legacy); if(s && s.code && s.player){ saveSessions([{code:s.code, player:s.player, name:s.code}]); setActiveCode(s.code); } } catch(e){ logErr('migrateLegacySession', e); }
+    // isUsableSession, not a bare `s.player` truthiness check — a legacy entry
+    // with a player object but no name would otherwise be migrated straight in
+    // and reproduce the broken-boot state it is meant to prevent.
+    try { const s = JSON.parse(legacy); if(isUsableSession(s)){ saveSessions([{code:s.code, player:s.player, name:s.code}]); setActiveCode(s.code); } } catch(e){ logErr('migrateLegacySession', e); }
   }
   localStorage.removeItem('forge_session');
 }
@@ -956,6 +1030,11 @@ async function bootApp(){
     if(hash === SUPER_PIN_HASH){ showScreen('super'); loadSuperAdmin(); return; }
   }
   migrateLegacySession();
+  // getSessions() only returns entries with a usable player, so `active.player`
+  // below is safe to dereference and an all-corrupt store falls through to the
+  // else branch (onboarding + session_lost breadcrumb) rather than landing on a
+  // broken app screen. If getActiveCode() pointed at a dropped entry, find()
+  // misses, sessions[0] takes over, and setActiveCode repairs the pointer.
   const sessions = getSessions();
   if(sessions.length){
     const active = sessions.find(s=>s.code===getActiveCode()) || sessions[0];
@@ -2122,8 +2201,79 @@ async function mirVoidLog(id){
 function mirOpenSheet(){ document.getElementById('mirScrim').classList.add('on'); document.getElementById('mirSheet').classList.add('on'); }
 function mirCloseSheet(){ document.getElementById('mirScrim').classList.remove('on'); document.getElementById('mirSheet').classList.remove('on'); }
 function mirLogQuick(w){
+  // Haptic fires HERE, inside the tap handler, not after the await chain in
+  // mirShowReport — that one runs seconds later with the user activation
+  // possibly stale, which is why the tap has felt dead. Wrapped because
+  // vibrate() throws on some embedded webviews.
+  // NOTE: iOS Safari has no Vibration API at all, so this is a no-op on iPhone
+  // by design of the platform. It works on Android Chrome and in the TWA.
+  try{ if(navigator.vibrate) navigator.vibrate(18); }catch(e){}
+  // DISTANCE STEP — only when this season has opted into a team distance goal
+  // AND the tapped workout is one a distance belongs on. Otherwise the original
+  // one-tap path runs completely unchanged, which is the whole point of Mirror.
+  // (km has to be captured now: the logs update rule allows only voided/voidedBy/
+  //  voidedAt, so a distance can never be attached after the fact.)
+  if(_kmTargetOf()!==null && window.isDistanceWorkout && isDistanceWorkout(w)){
+    mirOpenKmStep(w);
+    return;
+  }
+  mirCloseSheet();
+  selDay=_mirPendingDay; selW=[w]; selKm=null;
+  window._mirrorLogMode=true;
+  submitLog();
+}
+
+// Season distance target, or null when the group hasn't opted in. Single source
+// of truth for every km surface, so one unset check disables the whole feature.
+function _kmTargetOf(){
+  const t = Number(window.season && season.kmTarget);
+  return (Number.isFinite(t) && t>0) ? t : null;
+}
+
+// One extra tap for walkers, with an explicit skip that logs exactly as before.
+function mirOpenKmStep(w){
+  const target=_kmTargetOf();
+  const prog=(typeof teamKmProgress==='function') ? teamKmProgress() : null;
+  const mine=prog && me ? prog.teams.find(t=>t.team===(me.team)) : null;
+  const remain = mine ? Math.max(0, Math.round((target-mine.km)*10)/10) : target;
+  document.getElementById('mirSheetTitle').textContent='How far?';
+  document.getElementById('mirSheetSub').textContent=
+    esc(w)+' · optional — it counts toward your team\'s '+target+' km';
+  document.getElementById('mirSheetBody').innerHTML=
+    `<div class="mir-km">
+       <div class="km-inwrap">
+         <input type="number" id="mirKmInp" inputmode="decimal" step="0.1" min="0" max="${KM_CONSTS.maxPerLog}"
+                placeholder="0.0" autocomplete="off"
+                onkeydown="if(event.key==='Enter')mirKmConfirm('${escForInlineJsAttr(w)}')">
+         <span class="km-unit">km</span>
+       </div>
+       <div class="km-chips">
+         ${[1,2,3,5,10].map(v=>`<button class="km-chip" onclick="mirKmSet(${v})">${v}</button>`).join('')}
+       </div>
+       ${mine ? `<div class="km-remain">Team ${esc(mine.team)} is at <b>${mine.km} km</b>${remain>0?` — ${remain} km to go`:` — target reached`}</div>` : ''}
+       <button class="btn btn-gold km-go" onclick="mirKmConfirm('${escForInlineJsAttr(w)}')">Log it</button>
+       <div class="km-skip" onclick="mirKmSkip('${escForInlineJsAttr(w)}')">Skip — just log the workout</div>
+     </div>`;
+  mirOpenSheet();
+  setTimeout(()=>{ const i=document.getElementById('mirKmInp'); if(i) i.focus(); },80);
+}
+function mirKmSet(v){ const i=document.getElementById('mirKmInp'); if(i){ i.value=v; i.focus(); } }
+function mirKmSkip(w){
+  mirCloseSheet();
+  selDay=_mirPendingDay; selW=[w]; selKm=null;
+  window._mirrorLogMode=true;
+  submitLog();
+}
+function mirKmConfirm(w){
+  const i=document.getElementById('mirKmInp');
+  const raw=i?i.value:'';
+  const v=Number(raw);
+  // Empty is a legitimate "no distance" — same as Skip, not an error.
+  if(raw==='' || !Number.isFinite(v) || v<=0){ mirKmSkip(w); return; }
+  if(v>KM_CONSTS.maxPerLog){ toast(`That\'s over ${KM_CONSTS.maxPerLog} km — check the number.`,'error'); return; }
   mirCloseSheet();
   selDay=_mirPendingDay; selW=[w];
+  selKm=Math.round(v*10)/10;      // one decimal; the engine clamps again on read
   window._mirrorLogMode=true;
   submitLog();
 }
@@ -2547,11 +2697,60 @@ function mirShowReport(rw){
   const ord=n=>n%10==1&&n%100!=11?'st':n%10==2&&n%100!=12?'nd':n%10==3&&n%100!=13?'rd':'th';
   const count=rw?rw.myCount:(allLogs.filter(l=>l.player===me.name).length);
   document.getElementById('mirRWhat').textContent=`${woName} · your ${count}${ord(count)} this month`;
-  // rank card ONLY when today + rank actually moved
+  // Rank card: a 3-row slice of the board centred on you. When the log moved
+  // you up, your row and the row you overtook swap into place. When it didn't,
+  // the card becomes a target instead — the gap to the person still ahead.
   const rr=document.getElementById('mirRRank');
-  if(isToday && rw && rw.movedTo){
-    const from=rw.movedTo+1;   // improved by at least one; show a simple up-move
-    rr.style.display=''; rr.innerHTML=`<div class="mir-rankrow"><span class="from">#${from>rw.movedTo?from:rw.movedTo+1}</span><span class="arrow">→</span><span class="to">#${rw.movedTo}</span></div><div class="rcap">That log moved you up the board</div>`;
+  if(isToday && rw && rw.board){
+    const B=rw.board;
+    const moved=!!rw.movedTo;
+    const delta=moved?Math.max(1,(rw.rankBefore||0)-rw.movedTo):0;
+    const big=delta>=3;
+    const passedSet=new Set(rw.passed||[]);
+    const mkRow=(r,rank,cls)=>{
+      if(!r) return '';
+      const isMe=cls==='meRow';
+      const dim=(!isMe && passedSet.has(r.name))?' passed':'';
+      const nm=isMe?'You':esc(r.name);
+      return `<div class="mir-mb-row ${cls}${dim}"><span class="r">#${rank}</span><span class="n">${nm}</span><span class="p">${r.total}</span></div>`;
+    };
+    const i=B.myRank;
+    let cap;
+    if(moved){
+      const who=(rw.passed||[]).length;
+      cap = big
+        ? `Up <b>${delta}</b> places${who?` — past ${esc((rw.passed||[]).slice(0,2).join(', '))}${who>2?` +${who-2}`:''}`:''}`
+        : (who ? `You passed <b>${esc(rw.passed[0])}</b>` : `That log moved you up the board`);
+    } else if(rw.nextGap!=null){
+      cap = rw.nextGap===0
+        ? `Level with <b>${esc(rw.nextName)}</b> — next log takes the spot`
+        : `<b>${rw.nextGap}</b> ${rw.nextGap===1?'pt':'pts'} to catch <b>${esc(rw.nextName)}</b>`;
+    } else {
+      cap = `Top of the board — nobody left to catch`;
+    }
+    rr.style.display='';
+    rr.innerHTML =
+      (big?`<div class="mir-mb-jump">Big jump</div>`:'')
+      + `<div class="mir-mb">${mkRow(B.above,i-1,'aboveRow')}${mkRow(B.me,i,'meRow')}${mkRow(B.below,i+1,'belowRow')}</div>`
+      + `<div class="rcap">${cap}</div>`;
+    // Swap-in: start my row low and the row I overtook high, then release both.
+    // Pure transform, so it never reflows the sheet. Skipped when nothing moved
+    // and for reduced-motion users.
+    if(moved && !matchMedia('(prefers-reduced-motion: reduce)').matches){
+      const meEl=rr.querySelector('.meRow'), loEl=rr.querySelector('.belowRow');
+      const H=46*Math.min(delta,3);
+      if(meEl||loEl){
+        requestAnimationFrame(()=>{
+          if(meEl){ meEl.style.transition='none'; meEl.style.transform=`translateY(${H}px)`; }
+          if(loEl){ loEl.style.transition='none'; loEl.style.transform='translateY(-46px)'; }
+          requestAnimationFrame(()=>{
+            if(meEl){ meEl.style.transition=''; meEl.style.transform='translateY(0)'; }
+            if(loEl){ loEl.style.transition=''; loEl.style.transform='translateY(0)'; }
+          });
+        });
+      }
+      if(big){ try{ setTimeout(()=>fireConfetti(),260); }catch(e){} }
+    }
   } else rr.style.display='none';
   // streak line (NO rest-day copy)
   const streakNow=score(me.name).streak;
@@ -2571,7 +2770,7 @@ function mirShowReport(rw){
 function mirCloseReport(){
   const rep=document.getElementById('mirReport');
   rep.classList.remove('on'); rep.style.transform='';
-  selDay=null; selW=[]; window._mirrorLogMode=false;
+  selDay=null; selW=[]; selKm=null; window._mirrorLogMode=false;
   try{ renderMirrorHome(); }catch(e){ logErr('mirCloseReport render', e); }
 }
 // swipe-down dismiss on the report
@@ -3370,7 +3569,11 @@ async function submitLog(){
         // DEMO isolation: a log written into a demo group is stamped demo:true
         // so every aggregate/read path can exclude it. Real groups' logs carry
         // NO demo field (undefined-safe filters everywhere).
-        ...(sess._demo ? {demo:true} : {})
+        ...(sess._demo ? {demo:true} : {}),
+        // Distance, only when actually captured. Spread-conditional so the vast
+        // majority of logs carry NO km field at all — every reader treats a
+        // missing km as zero, and the field count stays inside the rules' 16.
+        ...(Number.isFinite(Number(selKm)) && Number(selKm)>0 ? {km:Number(selKm)} : {})
       });
     });
 
@@ -3540,17 +3743,40 @@ function computeRewardData(newLogIds){
   // Needs before+after states, so it requires the echo to have landed;
   // when it hasn't, show nothing rather than guess. Adding a log can only
   // improve your own rank, so `after < before` is the complete condition.
-  let movedTo=null;
+  // Rank movement + the 3-row mini board the afterglow animates.
+  // Still gated on `landed`: without the echo the "after" state is really the
+  // "before" state, and a board built from it would be silently one log stale.
+  // Showing nothing beats showing a wrong number — same rule as before.
+  let movedTo=null, rankBefore=null, board=null, passed=[], nextGap=null, nextName=null;
   if(landed && (season.roster||[]).length>1){
-    const rankIn = ctx => {
-      const rows=(season.roster||[]).map(p=>({name:p.name,total:score(p.name,ctx).total}))
-        .sort((a,b)=>b.total-a.total);
-      return rows.findIndex(r=>r.name===me.name)+1;
-    };
-    const before=rankIn({ season, groupCode, logs: allLogs.filter(l=>!newLogIds.has(l.id)),
+    const rowsIn = ctx => (season.roster||[])
+      .map(p=>({name:p.name,total:score(p.name,ctx).total}))
+      .sort((a,b)=>b.total-a.total);
+    const afterRows = rowsIn(undefined);
+    const beforeRows = rowsIn({ season, groupCode, logs: allLogs.filter(l=>!newLogIds.has(l.id)),
       twists:activeTwists, bonuses:bonus30, jackAwards, ironPledgeBonuses, twistWindows });
-    const after=rankIn(undefined);
-    if(after>0 && before>0 && after<before) movedTo=after;
+    const after = afterRows.findIndex(r=>r.name===me.name)+1;
+    const before = beforeRows.findIndex(r=>r.name===me.name)+1;
+    if(after>0 && before>0){
+      rankBefore = before;
+      // Adding a log can only improve your own rank, so after<before is the
+      // complete "moved up" condition.
+      if(after<before){
+        movedTo = after;
+        // Who did this log actually overtake? Above me before, below me now.
+        const aboveBefore = new Set(beforeRows.slice(0, before-1).map(r=>r.name));
+        passed = afterRows.slice(after).filter(r=>aboveBefore.has(r.name)).map(r=>r.name);
+      }
+      // Three rows centred on me, from the settled state. `above` is whoever is
+      // still ahead (the goal); `below` is whoever I now sit in front of — which
+      // is the row the pass animation swaps with.
+      const i = after-1;
+      board = { myRank:after, above:afterRows[i-1]||null, me:afterRows[i], below:afterRows[i+1]||null };
+      if(afterRows[i-1]){
+        nextName = afterRows[i-1].name;
+        nextGap  = Math.max(0, afterRows[i-1].total - afterRows[i].total);
+      }
+    }
   }
   // Honest personal-best: biggest week of THIS month (distinct trained days
   // per Mon–Sun bucket). Only claimed when the current week strictly beats
@@ -3567,11 +3793,121 @@ function computeRewardData(newLogIds){
     const others=Object.keys(buckets).filter(k=>+k!==curWk).map(k=>buckets[k]);
     bestWeek = cur>=3 && others.length>0 && others.every(n=>cur>n);
   }catch(e){}
-  return { myCount, pace, teamName:'Team '+(me.team||'—'), teamCount, movedTo, bestWeek };
+  return { myCount, pace, teamName:'Team '+(me.team||'—'), teamCount,
+           movedTo, rankBefore, board, passed, nextGap, nextName, bestWeek };
+}
+
+// ── WEEKLY MOVER ──────────────────────────────────────────────────────────
+// Biggest rank climb across the current Mon–Sun week. Recomputed from the logs
+// already in memory by scoring everyone twice — once with this week's logs
+// removed — which is the same before/after trick the afterglow uses. No stored
+// snapshots, no extra reads, no rules change.
+//
+// WHY IT EXISTS: the month-long board resolves once, so by day 20 anyone
+// mid-table has nothing reachable left to chase. This resets every Monday, so
+// there are four winnable races a month instead of one.
+//
+// Returns null whenever the answer would be noise rather than a story.
+function computeWeeklyMover(){
+  try{
+    if(!season || !Array.isArray(allLogs)) return null;
+    const roster=(season.roster||[]).filter(p=>p&&p.name);
+    if(roster.length<3) return null;                    // too small to be a race
+    const now=new Date();
+    if(now.getMonth()+1!==season.month || now.getFullYear()!==season.year) return null;
+    const todayD=now.getDate();
+    const dow=(now.getDay()+6)%7;                       // 0=Mon, matching the perfect-week buckets
+    let weekStart=todayD-dow;
+    // Before 6am Monday the week hasn't really turned over — same boundary the
+    // season rollover uses, so the two can never disagree by a few hours.
+    if(dow===0 && now.getHours()<6) weekStart-=7;
+    if(todayD-weekStart+1 < 3) return null;             // Mon/Tue isn't a story yet
+    const priorLogs=allLogs.filter(l=>l && l.day < weekStart);
+    if(!priorLogs.length) return null;                  // nothing to compare against
+    const order=ctx=>roster.map(p=>({name:p.name,total:score(p.name,ctx).total}))
+                           .sort((a,b)=>b.total-a.total);
+    const beforeRows=order({ season, groupCode, logs:priorLogs, twists:activeTwists,
+                             bonuses:bonus30, jackAwards, ironPledgeBonuses, twistWindows });
+    const afterRows=order(undefined);
+    const rankOf=rows=>{ const m=new Map(); rows.forEach((r,i)=>m.set(r.name,i+1)); return m; };
+    const before=rankOf(beforeRows), after=rankOf(afterRows);
+    // Anyone on zero at week start had no real rank to climb FROM — counting
+    // them manufactures a fake "+6" for whoever simply joined this week.
+    const startTotal=new Map(beforeRows.map(r=>[r.name,r.total]));
+    const deltas=[];
+    roster.forEach(p=>{
+      if((startTotal.get(p.name)||0)<=0) return;
+      const up=(before.get(p.name)||0)-(after.get(p.name)||0);
+      if(up>0) deltas.push({name:p.name, up, rank:after.get(p.name)||0});
+    });
+    if(!deltas.length) return null;                     // nobody moved: say nothing
+    const best=Math.max(...deltas.map(d=>d.up));
+    return {
+      leaders: deltas.filter(d=>d.up===best).sort((a,b)=>a.rank-b.rank),
+      up: best,
+      mine: (me && deltas.find(d=>d.name===me.name)) || null
+    };
+  }catch(e){ logErr('computeWeeklyMover', e); return null; }
+}
+
+function renderWeeklyMover(){
+  const el=document.getElementById('weeklyMover'); if(!el) return;
+  const wm=computeWeeklyMover();
+  if(!wm){ el.innerHTML=''; return; }
+  const iAmLeader=!!(me && wm.leaders.some(l=>l.name===me.name));
+  // On a tie, everyone who tied gets named — showing only "You" would quietly
+  // erase the person who matched you, which is the opposite of the point.
+  const others=wm.leaders.filter(l=>!(me && l.name===me.name));
+  const list=(arr,cap)=>arr.slice(0,cap).map(l=>esc(l.name)).join(' · ')
+                      + (arr.length>cap?` +${arr.length-cap}`:'');
+  const nameStr = iAmLeader
+    ? (others.length ? 'You · '+list(others,1) : 'You')
+    : list(wm.leaders,2);
+  const youLine=(wm.mine && !iAmLeader)
+    ? `<div class="wm-you">You're up <b>${wm.mine.up}</b> place${wm.mine.up===1?'':'s'} this week</div>` : '';
+  el.innerHTML=`<div class="wm-band${iAmLeader?' me':''}">
+      <div class="wm-hd">Weekly Mover<span>Mon–Sun</span></div>
+      <div class="wm-row">
+        <span class="wm-name">${nameStr}</span>
+        <span class="wm-up">▲ ${wm.up} place${wm.up===1?'':'s'}</span>
+      </div>${youLine}
+    </div>`;
 }
 
 // ── LEADERBOARD ───────────────────────────────────────────────────────────
+// ── TEAM DISTANCE GOAL BAR ──────────────────────────────────────────────────
+// Pure render off teamKmProgress(), which returns null when the season hasn't
+// opted in — so an un-opted group sees an empty div and nothing else changes.
+function renderKmGoal(){
+  const el=document.getElementById('kmGoalCard');
+  if(!el) return;
+  const prog=(typeof teamKmProgress==='function') ? teamKmProgress() : null;
+  if(!prog){ el.innerHTML=''; return; }
+  const myTeam = me ? me.team : null;
+  const rows = prog.teams.map(t=>{
+    const mineCls = t.team===myTeam ? ' km-mine' : '';
+    return `<div class="km-row${mineCls}${t.filled?' km-done':''}">
+      <div class="km-rhead">
+        <span class="km-tname">Team ${esc(t.team)}${t.team===myTeam?' · you':''}</span>
+        <span class="km-tval">${t.km}<span class="km-of"> / ${prog.target} km</span></span>
+      </div>
+      <div class="km-track"><div class="km-fill" style="width:${t.pct}%"></div></div>
+      <div class="km-rfoot">${t.filled
+        ? `<b>Target cleared</b> — ${t.contributors} of ${t.size} earned +${KM_CONSTS.bonus}`
+        : `${t.contributors} of ${t.size} contributing · ${Math.max(0,Math.round((prog.target-t.km)*10)/10)} km to go`}</div>
+    </div>`;
+  }).join('');
+  el.innerHTML=`<div class="shdr">The Long Way — ${prog.target} km</div>
+    <div class="card km-card">
+      <div class="km-intro">Log distance on any walk, run, ride or swim. Clear the target and
+        every member who put in at least ${KM_CONSTS.min} km takes <b>+${KM_CONSTS.bonus} points</b>.</div>
+      ${rows}
+    </div>`;
+}
+
 function renderLB(){
+  try{ renderWeeklyMover(); }catch(e){ logErr('renderWeeklyMover', e); }
+  try{ renderKmGoal(); }catch(e){ logErr('renderKmGoal', e); }
   if(!season) return;
   const players=season.roster||[];
   const teams=[...new Set(players.map(p=>p.team))];
@@ -3701,7 +4037,7 @@ function renderFeed(){
       <div style="font-size:10px;font-weight:700;color:${topTeam?tcol(topTeam):'var(--muted)'};text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Leading today</div>
     </div>
     ${topStreakers.length>0?`<div style="background:var(--gold-l);border-radius:10px;padding:12px;text-align:center;grid-column:1/-1">
-      <div style="font-size:16px;font-weight:800;color:var(--orange)">${topStreakers.length<=3?topStreakers.map(p=>p.name).join(' · ')+' · '+topStreak+' days '+flameIco('flk-m'):'Multiple players · '+topStreak+' days '+flameIco('flk-m')}</div>
+      <div style="font-size:16px;font-weight:800;color:var(--orange)">${(function(){const d=topStreak+(topStreak===1?' day ':' days ')+flameIco('flk-m');return topStreakers.length<=3?topStreakers.map(p=>p.name).join(' · ')+' · '+d:'Multiple players · '+d;})()}</div>
       <div style="font-size:10px;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">${topStreakers.length<=3?'Longest active streak':topStreakers.length+' players tied — check the board'}</div>
     </div>`:''}
   </div>`;
@@ -4335,6 +4671,16 @@ async function applyRebalance(){
 
 // ── SUPER ADMIN ───────────────────────────────────────────────────────────
 async function loadSuperAdmin(){
+  // Create-group no longer asks for month/year/days — say plainly what it will
+  // make, so "current month" is visible rather than assumed.
+  try{
+    const el=document.getElementById('newGroupSeasonNote');
+    if(el){
+      const n=new Date(), m=n.getMonth()+1, y=n.getFullYear();
+      const MN=['January','February','March','April','May','June','July','August','September','October','November','December'];
+      el.textContent=`Season will be ${MN[m-1]} ${y} (${seasonIdOf(m,y)}), ${new Date(y,m,0).getDate()} days — taken from today's date.`;
+    }
+  }catch(e){ logErr('newGroupSeasonNote', e); }
   const snap=await db.collection('groups').get();
   const groups=snap.docs.map(d=>({code:d.id,...d.data()}));
 
@@ -4452,7 +4798,11 @@ async function openEditGroup(code){
     document.getElementById('editMinWO').value=s.minWorkouts ?? 12;
     document.getElementById('editNumTeams').value=s.numTeams ?? 3;
     document.getElementById('editThreshold').value=Math.round((s.teamStreakThreshold ?? 0.6)*100);
+    // Blank, not 0 — the placeholder reads "off", and blank round-trips to null.
+    document.getElementById('editKmTarget').value = (Number(s.kmTarget)>0) ? Number(s.kmTarget) : '';
     document.getElementById('editRoles').checked=(s.rolesEnabled!==false);
+    // demo lives on the GROUP doc, not the season — it outlives any one month.
+    document.getElementById('editDemo').checked=(g.demo===true);
 
     document.getElementById('editGroupStatus').textContent='';
     document.getElementById('editGroupModal').classList.remove('hidden');
@@ -4478,7 +4828,14 @@ async function saveEditGroup(){
   const minWorkouts=parseInt(document.getElementById('editMinWO').value)||12;
   const numTeams=Math.min(3,Math.max(2,parseInt(document.getElementById('editNumTeams').value)||3));
   const thresholdPct=Math.min(100,Math.max(30,parseInt(document.getElementById('editThreshold').value)||60));
+  // null (not 0, not absent) is the explicit "off" value — every km surface tests
+  // Number(kmTarget)>0, and writing null lets an admin switch the feature back off
+  // after switching it on.
+  const _kmRaw=document.getElementById('editKmTarget').value;
+  const _kmNum=parseFloat(_kmRaw);
+  const kmTarget=(_kmRaw!=='' && Number.isFinite(_kmNum) && _kmNum>0) ? Math.min(10000,_kmNum) : null;
   const rolesEnabled=document.getElementById('editRoles').checked;
+  const isDemo=document.getElementById('editDemo').checked;
 
   // ── Guard: reducing team count while players sit on a vanishing team ──
   if(numTeams===2){
@@ -4492,10 +4849,11 @@ async function saveEditGroup(){
   status.textContent='Saving…';
   try{
     await Promise.all([
-      db.collection('groups').doc(code).update({ name: newGroupName }),
+      db.collection('groups').doc(code).update({ name: newGroupName, demo: isDemo }),
       db.collection('groups').doc(code).collection('seasons').doc(sid).update({
         days, capTarget, vcTarget, minWorkouts, numTeams,
         teamStreakThreshold: thresholdPct/100,
+        kmTarget,
         rolesEnabled
       })
     ]);
@@ -4503,9 +4861,9 @@ async function saveEditGroup(){
     document.getElementById('editGroupName').textContent=`${newGroupName} (${sid})`;
     // If we're editing the group we're currently viewing in-app, refresh local in-memory state.
     if(window.season && window.seasonId===sid && window.groupCode===code){
-      Object.assign(window.season,{days,capTarget,vcTarget,minWorkouts,numTeams,teamStreakThreshold:thresholdPct/100,rolesEnabled});
+      Object.assign(window.season,{days,capTarget,vcTarget,minWorkouts,numTeams,teamStreakThreshold:thresholdPct/100,kmTarget,rolesEnabled});
     }
-    if(window.groupData && window.groupCode===code) window.groupData.name=newGroupName;
+    if(window.groupData && window.groupCode===code){ window.groupData.name=newGroupName; window.groupData.demo=isDemo; }
     status.textContent='✅ Saved.';
     setTimeout(()=>{ closeEditGroup(); loadSuperAdmin(); }, 700);
   }catch(e){ console.error(e); status.textContent='❌ Save failed: '+e.message; }
@@ -5267,15 +5625,25 @@ function todayStamp(){
 async function createGroup(){
   const name=document.getElementById('newGroupName').value.trim();
   if(!name){toast('Enter a group name','error');return;}
-  const month=parseInt(document.getElementById('newGroupMonth').value);
-  const year=parseInt(document.getElementById('newGroupYear').value);
-  const days=parseInt(document.getElementById('newGroupDays').value);
+  // A group is always created into the CURRENT month — there is no case for
+  // seeding one into a month that has already been and gone, and the old
+  // hardcoded month=6/year=2026 inputs meant every group created after June
+  // silently landed in the wrong season unless someone remembered to change them.
+  const _now=new Date();
+  const month=_now.getMonth()+1;
+  const year=_now.getFullYear();
+  // Season length is the calendar month's length, by definition — the data model is
+  // month-scoped, so there is no legitimate reason for it to differ. Derived here
+  // exactly as performRollover() does, rather than read from an input that defaulted
+  // to 30 and mis-set every group created in a 31-day month.
+  const days=new Date(year, month, 0).getDate();
   const capTarget=parseInt(document.getElementById('newGroupCapTarget').value);
   const vcTarget=parseInt(document.getElementById('newGroupVCTarget').value);
   const minWorkouts=parseInt(document.getElementById('newGroupMinWO').value);
   const numTeams=Math.min(3, Math.max(2, parseInt(document.getElementById('newGroupNumTeams').value)||3));
   const thresholdPct=Math.min(100, Math.max(30, parseInt(document.getElementById('newGroupThreshold').value)||60));
   const rolesEnabled=document.getElementById('newGroupRoles').checked;
+  const isDemo=document.getElementById('newGroupDemo').checked;
   // Optional custom code first; else random 6-char (collision-checked —
   // batch.set() would silently REPLACE an existing group's doc).
   const custom=await validateCustomCode(document.getElementById('newGroupCustomCode')?.value);
@@ -5300,7 +5668,10 @@ async function createGroup(){
     name,
     players: [],            // canonical roster of names; populated as players register
     currentSeasonId: sid,
-    createdAt: now
+    createdAt: now,
+    // Only stamped when true — real groups carry no demo field at all, which is
+    // what every `demo!==true` filter in the app already assumes.
+    ...(isDemo ? {demo:true} : {})
   });
   const seasonRef = groupRef.collection('seasons').doc(sid);
   batch.set(seasonRef, {
@@ -5418,6 +5789,11 @@ const GLOBAL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 // eventually-consistent (refreshed whenever a group's member is active; seed
 // all groups once with window.backfillGlobalStats()).
 async function loadGlobal(){
+  // Consent first, and independently of everything below: it must paint even
+  // when the board data is cached, still loading, or fails outright. Without
+  // this call renderGlobalConsent() had no caller at all, so anyone already
+  // opted in had no way to opt back out.
+  try{ renderGlobalConsent(); }catch(e){ logErr('renderGlobalConsent', e); }
   const actEl=document.getElementById('globalActive');
   const grpEl=document.getElementById('globalGroups');
   const ptsEl=document.getElementById('globalPoints');
@@ -6029,7 +6405,102 @@ if('serviceWorker' in navigator){
   // Ordinal: 1→1st, 2→2nd, 3→3rd, 4→4th … (for team-rank messaging)
   function ordinal(n){ var s=['th','st','nd','rd'], v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); }
 
+  // Mon=0 … Sun=6, matching computeRecap's weekday arrays.
+  var DOW_INDEX = { Monday:0, Tuesday:1, Wednesday:2, Thursday:3, Friday:4, Saturday:5, Sunday:6 };
+
+  // "Monday" · "Monday and Friday" · "Monday, Friday and Sunday".
+  // conj is switchable because "didn't miss a single Monday AND Thursday" is
+  // wrong — a negated list needs "or".
+  function listOf(a, conj){
+    if(!a || !a.length) return '';
+    if(a.length===1) return a[0];
+    return a.slice(0,-1).join(', ')+' '+(conj||'and')+' '+a[a.length-1];
+  }
+
+  // The family percentile line. Returns '' when the read hasn't landed (or
+  // failed), which renders as an empty, invisible div.
+  function familyLine(d){
+    if(d.familyPct==null || !d.familyOf) return '';
+    if(d.familyPct>=50)
+      return 'That puts you ahead of <b>'+d.familyPct+'%</b> of everyone on Forge.';
+    if(d.familyPct>0)
+      return 'Ahead of <b>'+d.familyPct+'%</b> of Forge. Room above you.';
+    return 'Everyone on Forge trained more. A clean slate for next month.';
+  }
+
+  // One dry line about the weekday the viewer skipped most. Dry, not gym-bro —
+  // it should read as a raised eyebrow, never a lecture.
+  function worstDaySnark(day, n, occ){
+    if(n===0){
+      var zero = {
+        Monday:   'Not one Monday all month. Mondays remain undefeated.',
+        Tuesday:  'Tuesdays went entirely unbothered.',
+        Wednesday:'Zero Wednesdays. The week\'s soft middle.',
+        Thursday: 'Not a single Thursday. Thursday got away with it.',
+        Friday:   'Zero Fridays. Friday had other plans, every single time.',
+        Saturday: 'Not one Saturday. We won\'t ask.',
+        Sunday:   'Zero Sundays. Aggressive rest.'
+      };
+      return zero[day] || ('Not one '+day+' all month.');
+    }
+    if(occ && occ-n===1) return day+' nearly held — you missed exactly one.';
+    return day+' is where it leaks: '+n+' of '+occ+'.';
+  }
+
   // No localStorage tracking — button is a repeatable manual action, not a one-shot pop-up.
+
+  // ── FAMILY PERCENTILE — the one piece that needs I/O ───────────────────────
+  // analytics/global/monthly/{YYYY-MM} carries, per group, a days map of
+  // player -> [day numbers]. Demo groups never write into it and voided logs
+  // are dropped at write time, so the population is real people only.
+  //
+  // Runs AFTER showModal() so the card is never gated on a network read: it
+  // patches one line in place and stays silent on any failure. One read, and
+  // cached per month so reopening the card is free.
+  //
+  // Deduped by userId where the rollup knows one — the same human in two groups
+  // must count once — and the day numbers are UNIONED, not added, because
+  // logging the same calendar day in two groups is one day of training.
+  var _familyCache = {};
+  async function enrichFamily(d){
+    try{
+      if(typeof db==='undefined' || !d) return;
+      var ym = d.seasonId || '';
+      if(!/^\d{4}-\d{2}$/.test(ym)) return;
+      var pop = _familyCache[ym];
+      if(!pop){
+        var snap = await db.collection('analytics').doc('global').collection('monthly').doc(ym).get();
+        if(!snap.exists) return;
+        var groups = (snap.data().groups)||{};
+        var byPerson = {};
+        Object.keys(groups).forEach(function(code){
+          var g = groups[code]||{}, days = g.days||{}, users = g.users||{};
+          Object.keys(days).forEach(function(nm){
+            var key = users[nm] || (code+':'+nm.toLowerCase());
+            if(!byPerson[key]) byPerson[key] = {};
+            (Array.isArray(days[nm])?days[nm]:[]).forEach(function(dd){ byPerson[key][dd]=1; });
+          });
+        });
+        pop = { keys:byPerson,
+                counts:Object.keys(byPerson).map(function(k){ return Object.keys(byPerson[k]).length; }) };
+        _familyCache[ym] = pop;
+      }
+      if(pop.counts.length<5) return;   // too small a population for a percentile to mean anything
+
+      // My own figure must be measured the same way as everyone else's (union
+      // across groups), or a two-group member compares their one-group total
+      // against other people's combined ones.
+      var myKey = (window.me && me.userId) || ((d.groupCode||'')+':'+String(d.meName||'').toLowerCase());
+      var mine = pop.keys[myKey] ? Object.keys(pop.keys[myKey]).length : (d.myWo||0);
+
+      var below = 0;
+      pop.counts.forEach(function(v){ if(v<mine) below++; });
+      d.familyPct = Math.round((below/pop.counts.length)*100);
+      d.familyOf  = pop.counts.length;
+      var el = document.getElementById('recapFamily');
+      if(el) el.innerHTML = familyLine(d);
+    }catch(e){ /* line simply stays absent */ }
+  }
 
   // ── COMPUTE — purely from in-memory data, no I/O ───────────────────────────
   function computeRecap(){
@@ -6120,8 +6591,92 @@ if('serviceWorker' in navigator){
         myWoCount[norm].n++;
       });
     });
-    var myTopWorkouts = Object.keys(myWoCount).map(function(k){ return myWoCount[k]; })
-      .sort(function(a,b){ return b.n-a.n; }).slice(0,3);   // ≤3; fewer if not enough distinct types
+    // ── PERSONAL RECAP (rewritten 30 Jul 2026) ─────────────────────────────
+    // The card now leads with the viewer's own month. Group standings still
+    // ride along lower down, but nothing above the fold is about anyone else.
+
+    // Active players = anyone who logged at least one day. Used as the
+    // denominator for "vs group average" so that people who never showed up
+    // don't deflate the average and flatter everybody who did.
+    var activeSet = {};
+    logs.forEach(function(l){ if(l.player) activeSet[l.player]=1; });
+    var activeCount = Object.keys(activeSet).length || 1;
+
+    // My top FIVE types, each carrying the per-person group average for that
+    // same type and my delta against it. groupTotal can never be below mine
+    // (I'm inside the group), so avg>0 whenever I logged the type at all.
+    var myTopWorkouts = Object.keys(myWoCount).map(function(k){
+      var mine = myWoCount[k].n;
+      var groupTotal = woCount[k] ? woCount[k].n : mine;
+      var avg = groupTotal/activeCount;
+      return { label:myWoCount[k].label, n:mine,
+               groupAvg: Math.round(avg*10)/10,
+               pct: (avg>0) ? Math.round(((mine-avg)/avg)*100) : null };
+    }).sort(function(a,b){ return b.n-a.n; }).slice(0,5);   // ≤5; fewer if not enough distinct types
+
+    // Individual workouts I logged — a single day can carry several, so this is
+    // deliberately NOT the same number as mySc.wo (which counts days).
+    var myWorkoutCount = 0;
+    logs.forEach(function(l){
+      if(l.player!==me.name) return;
+      myWorkoutCount += (Array.isArray(l.workouts)?l.workouts:[]).length;
+    });
+
+    // ── WEEKDAY RHYTHM ─────────────────────────────────────────────────────
+    // trainedDow[i] = distinct days I trained that fell on weekday i.
+    // occurredDow[i] = how many of weekday i exist in the season month at all
+    // (July has five Fridays but only four Mondays — comparing raw counts
+    // without this would invent a rhythm that isn't there).
+    // i is Mon=0 … Sun=6, matching the rest of the app.
+    var DOW_NAMES = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    var trainedDow=[0,0,0,0,0,0,0], occurredDow=[0,0,0,0,0,0,0];
+    var lastCalDay = new Date(season.year, season.month, 0).getDate();
+    for(var dnum=1; dnum<=lastCalDay; dnum++){
+      var jsd = new Date(season.year, season.month-1, dnum).getDay();
+      occurredDow[jsd===0?6:jsd-1]++;
+    }
+    var myDaySet = {};
+    logs.forEach(function(l){
+      if(l.player!==me.name || typeof l.day!=='number') return;
+      myDaySet[l.day]=1;
+    });
+    Object.keys(myDaySet).forEach(function(ds){
+      var jsd2 = new Date(season.year, season.month-1, parseInt(ds,10)).getDay();
+      trainedDow[jsd2===0?6:jsd2-1]++;
+    });
+
+    // Ranked by RATIO (trained / occurred), not by raw count. July 2026 has
+    // five Wednesdays but only four Mondays, so 2-of-5 is a worse showing than
+    // 2-of-4 even though both are "2" — comparing raw counts would name the
+    // wrong day. Ties are kept so "favourite dayS" can be plural.
+    var bestR=-1, worstR=Infinity;
+    for(var wi=0; wi<7; wi++){
+      if(!occurredDow[wi]) continue;
+      var r = trainedDow[wi]/occurredDow[wi];
+      if(r>bestR) bestR=r;
+      if(r<worstR) worstR=r;
+    }
+    var bestDows=[], worstDows=[], perfectDows=[];
+    var EPS = 1e-9;   // ratios are fractions; compare with a tolerance
+    for(var wj=0; wj<7; wj++){
+      if(!occurredDow[wj]) continue;
+      var rj = trainedDow[wj]/occurredDow[wj];
+      if(Math.abs(rj-bestR)<EPS && trainedDow[wj]>0) bestDows.push(DOW_NAMES[wj]);
+      if(Math.abs(rj-worstR)<EPS) worstDows.push(DOW_NAMES[wj]);
+      if(trainedDow[wj]===occurredDow[wj]) perfectDows.push(DOW_NAMES[wj]);
+    }
+    // Flat month — every weekday at the same ratio means there's no rhythm to
+    // report, and naming one day as both favourite and worst reads as a bug.
+    if(Math.abs(bestR-worstR)<EPS){ bestDows=[]; worstDows=[]; }
+    // Display counts for the day actually named.
+    var bestN  = bestDows.length  ? trainedDow[DOW_NAMES.indexOf(bestDows[0])]  : 0;
+    var worstN = worstDows.length ? trainedDow[DOW_NAMES.indexOf(worstDows[0])] : 0;
+    var weekday = {
+      trained: trainedDow, occurred: occurredDow,
+      best: bestDows, bestN: (bestN>0?bestN:0),
+      worst: worstDows, worstN: (worstN===Infinity?0:worstN),
+      perfect: perfectDows
+    };
 
     // ── CHANGE 3: viewing player's team + this team's rank/gap vs 1st ──
     // teamScores is already sorted descending by total.
@@ -6164,7 +6719,13 @@ if('serviceWorker' in navigator){
       totalWorkouts: totalWorkouts, topWorkout: topWorkout,
       meName: me.name, myWo: mySc.wo||0,
       myTopWorkouts: myTopWorkouts, myTeamResult: myTeamResult,
-      achievements: achievements
+      achievements: achievements,
+      // Personal-recap additions (30 Jul 2026)
+      myWorkoutCount: myWorkoutCount, weekday: weekday, activeCount: activeCount,
+      // Filled in asynchronously by enrichFamily() after the card is already
+      // on screen — one read of the shared monthly rollup. Stays null if that
+      // read fails, and the render skips the line rather than guessing.
+      familyPct: null, familyOf: null
     };
   }
 
@@ -6226,7 +6787,23 @@ if('serviceWorker' in navigator){
       '.recap-trigger-dot{width:10px;height:10px;border-radius:50%;background:#d4a843;flex-shrink:0;animation:recapDotPulse 1.4s ease-in-out infinite}'+
       '@keyframes recapDotPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}'+
       '.recap-trigger-label{flex:1;font-size:15px;font-weight:700;color:#d4a843;letter-spacing:-.01em}'+
-      '.recap-trigger-arrow{font-size:22px;color:rgba(212,168,67,.7);font-weight:300;line-height:1}';
+      '.recap-trigger-arrow{font-size:22px;color:rgba(212,168,67,.7);font-weight:300;line-height:1}'+
+      /* ── personal-recap additions (30 Jul 2026) ── */
+      /* Family percentile: empty until the async read lands, and an empty div
+         must take up no space at all — hence :empty{display:none}. */
+      '.recap-family{font-size:13px;line-height:1.5;color:rgba(245,245,247,.62);'+
+        'text-align:center;margin-top:6px}'+
+      '.recap-family:empty{display:none}'+
+      '.recap-family b{color:#d4a843;font-weight:800}'+
+      /* Delta chip sits BELOW the workout label, not beside it — on a 320px
+         screen an inline chip pushes the count off the row. */
+      '.recap-delta{display:block;font-size:11px;font-weight:700;letter-spacing:.02em;'+
+        'margin-top:3px;opacity:.9}'+
+      '.rd-up{color:#d4a843}'+
+      '.rd-dn{color:rgba(245,245,247,.45)}'+
+      '.rd-eq{color:rgba(245,245,247,.45)}'+
+      '.recap-note{font-size:12.5px;line-height:1.55;color:rgba(245,245,247,.7);margin-top:8px}'+
+      '.recap-note-dry{font-style:italic;color:rgba(245,245,247,.52)}';
     document.head.appendChild(s);
   }
 
@@ -6243,8 +6820,13 @@ if('serviceWorker' in navigator){
             '<div class="recap-title">'+rEsc(d.monthName)+' '+rEsc(d.year)+'</div>'+
             '<div class="recap-group">'+rEsc(d.groupName)+'</div>';
 
-    // 2) Personal line
-    html += '<div class="recap-personal">You logged <b>'+d.myWo+'</b> workout'+(d.myWo===1?'':'s')+' this month</div>';
+    // 2) Personal line — days trained, plus the raw workout count when a day
+    //    carried more than one. The family percentile below it arrives async.
+    html += '<div class="recap-personal">You trained on <b>'+d.myWo+'</b> day'+(d.myWo===1?'':'s')+' in '+rEsc(d.monthName)+
+            (d.myWorkoutCount>d.myWo ? ' — <b>'+d.myWorkoutCount+'</b> workouts in total' : '')+'</div>';
+    // Patched in place by enrichFamily(); empty (and invisible) until then, so
+    // a slow or failed read costs nothing but this line.
+    html += '<div class="recap-family" id="recapFamily">'+familyLine(d)+'</div>';
 
     // 2b) Your season stats (myTotal/myStreak) — only set by archived-recap
     // callers (Profile tab); computeRecap() never sets these, so this section
@@ -6256,13 +6838,40 @@ if('serviceWorker' in navigator){
         '</div>';
     }
 
-    // 3) Your Top 3 workouts (viewing player's own logs)
+    // 3) Your top workouts, each against the per-person group average for that
+    //    same type. Archived recaps carry an empty list, so this skips itself.
     if(d.myTopWorkouts && d.myTopWorkouts.length){
       html += '<div class="recap-sec"><div class="recap-h">Your top '+d.myTopWorkouts.length+' workout'+(d.myTopWorkouts.length===1?'':'s')+'</div>';
       d.myTopWorkouts.forEach(function(w,i){
-        html += '<div class="recap-row"><div class="rr-nm">'+(i+1)+'. '+rEsc(w.label)+'</div>'+
-          '<div class="rr-pts">'+w.n+' time'+(w.n===1?'':'s')+'</div></div>';
+        var chip = '';
+        if(w.pct!=null && w.groupAvg!=null){
+          var up = w.pct>0;
+          chip = '<span class="recap-delta '+(up?'rd-up':(w.pct<0?'rd-dn':'rd-eq'))+'">'+
+                 (up?'+':'')+w.pct+'% vs group</span>';
+        }
+        html += '<div class="recap-row"><div class="rr-nm">'+(i+1)+'. '+rEsc(w.label)+chip+'</div>'+
+          '<div class="rr-pts">'+w.n+'&times;</div></div>';
       });
+      html += '</div>';
+    }
+
+    // 3b) Weekday rhythm — favourite day(s), any weekday you never missed, and
+    //     one dry line about the day you skipped most. Live recaps only.
+    var wk = d.weekday;
+    if(wk && (wk.best.length || wk.worst.length || wk.perfect.length)){
+      html += '<div class="recap-sec"><div class="recap-h">Your week</div>';
+      if(wk.best.length){
+        html += '<div class="recap-stat"><span>Favourite day'+(wk.best.length===1?'':'s')+' to train</span>'+
+                '<b>'+rEsc(listOf(wk.best))+'</b></div>';
+      }
+      if(wk.perfect.length){
+        html += '<div class="recap-note">You didn\'t miss a single '+
+                rEsc(listOf(wk.perfect,'or'))+' this month.</div>';
+      }
+      if(wk.worst.length){
+        html += '<div class="recap-note recap-note-dry">'+
+                rEsc(worstDaySnark(wk.worst[0], wk.worstN, wk.occurred[DOW_INDEX[wk.worst[0]]]))+'</div>';
+      }
       html += '</div>';
     }
 
@@ -6512,7 +7121,7 @@ if('serviceWorker' in navigator){
         '<span class="recap-trigger-arrow">›</span>'+
       '</div>';
     wrap.querySelector('.recap-trigger-card').addEventListener('click', function(){
-      try{ var data=computeRecap(); if(data) showModal(data); }catch(e){}
+      try{ var data=computeRecap(); if(data){ showModal(data); enrichFamily(data); } }catch(e){}
     });
     // Mirror: anchor the recap trigger before the chart card (heroCard is gone).
     var anchor = document.getElementById('mirChartCard') || document.getElementById('mirCaptionCard');
@@ -6543,6 +7152,13 @@ if('serviceWorker' in navigator){
   // Profile tab (on-demand recap for archived seasons) needs to open this
   // same modal from OUTSIDE this IIFE. One hook, nothing else exposed.
   window.__recapShowFromData = function(d){ try{ showModal(d); }catch(e){} };
+  // Second hook, same rationale: the live recap is otherwise only reachable on
+  // the last day of the month after 18:00, which makes it untestable on any
+  // other date and unopenable from anywhere else. Computes from data the
+  // client already holds — no new reads, no privileged access.
+  window.__recapOpenLive = function(){
+    try{ var d=computeRecap(); if(d){ showModal(d); enrichFamily(d); } return d; }catch(e){ return null; }
+  };
 })();
 </script>
 <script>
@@ -6579,10 +7195,15 @@ if('serviceWorker' in navigator){
   function prevMonth(m,y){ return m===1?{m:12,y:y-1}:{m:m-1,y:y}; }
   function pct(n,d){ return d>0?Math.round(n/d*100):0; }
 
-  var state={ selM:null, selY:null, groups:null, data:null, trendMode:'combined', partDenom:'platform', partScope:'', partChart:null };
+  var state={ selM:null, selY:null, groups:null, data:null, trendMode:'combined', partDenom:'platform', partScope:'', partChart:null,
+              woTotals:null, keepWo:false };
   window.SuperDash={ render:render, setMonth:setMonth, player:openPlayer, closePlayer:closePlayer, trendMode:setTrendMode, errmode:setErrMode, errdetail:openError, partScope:setPartScope, partDenom:setPartDenom };
 
-  function setMonth(m,y){ state.selM=m; state.selY=y; render(state.groups); }
+  // keepWo: the all-time counter is NOT month-scoped, so a month switch reuses
+  // the totals already in hand instead of re-reading the monthly collection
+  // (~1 read per active month, every switch). Opening the cockpit fresh from
+  // loadSuperAdmin leaves keepWo false, so the counter still refreshes there.
+  function setMonth(m,y){ state.selM=m; state.selY=y; state.keepWo=true; render(state.groups); }
   function setTrendMode(mode){ state.trendMode=mode; var t=document.getElementById('sdTrendsInner'); if(t&&state.data) t.innerHTML=buildTrendsInner(state.data); }
 
   async function render(groups){
@@ -6592,8 +7213,10 @@ if('serviceWorker' in navigator){
     if(state.selM==null){ state.selM=now.getMonth()+1; state.selY=now.getFullYear(); }
     root.innerHTML='<div class="tmuted" style="padding:28px;text-align:center">Loading cockpit…</div>';
     try{
-      var data=await fetchAll(groups, state.selM, state.selY);
-      state.data=data;
+      var reuseWo = state.keepWo ? state.woTotals : null;
+      state.keepWo = false;
+      var data=await fetchAll(groups, state.selM, state.selY, reuseWo);
+      state.data=data; state.woTotals=data.woTotals;
       injectStyle();
       root.innerHTML=buildHTML(data);
       renderPartChart();   // Chart.js needs the canvas in the DOM first (C3)
@@ -6601,7 +7224,7 @@ if('serviceWorker' in navigator){
   }
 
   // ── DATA ───────────────────────────────────────────────────────────────
-  async function fetchAll(groups, selM, selY){
+  async function fetchAll(groups, selM, selY, cachedWo){
     var now=new Date(), todayMid=midnight(now);
     var curM=now.getMonth()+1, curY=now.getFullYear();
     // Month set: selected + its prior, current + its prior (covers rolling
@@ -6625,10 +7248,18 @@ if('serviceWorker' in navigator){
     // per (group, player-string) with its cross-month workout-day set and the
     // write-time-resolved userId. dayAll/dayByGroup: per-day LOG counts.
     var curKey=ymKey(curY,curM);
-    var gpMap={}, dayAll={}, dayByGroup={}, membersCount={};
+    // The rollup doc holds a slice for EVERY code that has ever written one —
+    // including demo groups seeded before the demo flag existed, QA fixture
+    // groups, and groups since deleted. render() is handed a list already
+    // filtered to demo!==true, but this flattening used to ignore it and walk
+    // every slice, so fixture players surfaced in Needs Attention / At-risk.
+    // The caller's list is the universe: anything outside it is skipped.
+    var allowed={}; groups.forEach(function(g){ if(g && g.code) allowed[g.code]=1; });
+    var gpMap={}, dayAll={}, dayByGroup={}, membersCount={}, skipped={};
     monthList.forEach(function(mo){
       var key=ymKey(mo.y,mo.m), slice=rollups[key]||{};
       Object.keys(slice).forEach(function(code){
+        if(!allowed[code]){ skipped[code]=1; return; }
         var s=slice[code]||{};
         if(s.members!=null && (key===curKey || membersCount[code]==null)) membersCount[code]=s.members;
         var days=s.days||{}, users=s.users||{};
@@ -6647,6 +7278,9 @@ if('serviceWorker' in navigator){
       });
     });
     var gpList=Object.keys(gpMap).map(function(k){return gpMap[k];});
+    var skippedCodes=Object.keys(skipped);
+    if(skippedCodes.length) console.log('[SuperDash] excluded '+skippedCodes.length+
+      ' non-dashboard group slice(s) from the rollup: '+skippedCodes.join(', '));
 
     // Per group: seasons list → current-season roster + latest archived snapshot.
     var groupInfo={};
@@ -6692,11 +7326,17 @@ if('serviceWorker' in navigator){
           userId:e.userId||null, uid:e.uid||null, env:e.env||{}, url:e.url||'', clientTs:e.clientTs||0 }); });
     }catch(err){ errorsDenied=true; }
 
+    // All-time workout counter (one collection read). Never fatal: a denied or
+    // empty read leaves woTotals null and the band renders as unavailable,
+    // exactly like the errors/users sections degrade.
+    var woTotals=cachedWo||null;
+    if(!woTotals){ try{ woTotals=await fetchWorkoutTotals(); }catch(e){} }
+
     return { now:now, todayMid:todayMid, curM:curM, curY:curY, selM:selM, selY:selY,
              isCurrentMonth:(selM===curM&&selY===curY), groups:groups, groupInfo:groupInfo,
              errors:errors, errorsDenied:errorsDenied,
              monthList:monthList, rollups:rollups, gpList:gpList,
-             dayAll:dayAll, dayByGroup:dayByGroup,
+             dayAll:dayAll, dayByGroup:dayByGroup, woTotals:woTotals,
              membersCount:membersCount, canonicalCount:canonicalCount, usersDenied:usersDenied };
   }
   function ymKey(y,m){ return y+'-'+String(m).padStart(2,'0'); }
@@ -6722,6 +7362,45 @@ if('serviceWorker' in navigator){
     var total=await agg(null);
     var tombs=await agg({ fieldFilter:{ field:{fieldPath:'mergedInto'}, op:'GREATER_THAN', value:{stringValue:''} } });
     return Math.max(0, total-tombs);
+  }
+
+  // ── ALL-TIME WORKOUT COUNTER ─────────────────────────────────────────────
+  // Every monthly rollup doc carries, per group, a workout-type distribution
+  // wo:{key:{label,n}}. Summing n across every type, every group, every month
+  // is the platform's lifetime workout count for ONE collection read (~1 doc
+  // per calendar month with activity) — no logs scan, no users scan.
+  //
+  // A WORKOUT is one entry in a log's workouts[] array: a single log reading
+  // "Run + Weights" counts 2. This is NOT comparable to stats/global.totalLogs
+  // — that one counts log DOCUMENTS and is a blind increment counter that has
+  // never been reconciled (staging reads 1266 against 196 real workouts; prod's
+  // totalUsers needed a manual 51->48 correction in July). This number is
+  // recomputed from rollups every render, so it is the trustworthy one. Do not
+  // try to reconcile the two.
+  //
+  // Clean by construction: writeMonthlyRollup skips demo groups and voided
+  // logs, and REPLACES each group's slice wholesale, so voids/backdates/
+  // renames self-heal on the next recompute instead of drifting the way an
+  // increment counter would.
+  //
+  // COVERAGE: only months that have a rollup doc are counted. The ongoing
+  // writer creates the current month; window.backfillGlobalStats() seeds
+  // current + 6 prior — and that seed writes a doc even for months with no
+  // activity. So `months` counts months that actually HAVE workouts, not
+  // snap.size: staging carries 7 rollup docs of which 6 are empty backfill
+  // months, and "7 months tracked" would badly overstate the history.
+  async function fetchWorkoutTotals(){
+    var snap=await db.collection('analytics').doc('global').collection('monthly').get();
+    var allTime=0, byMonth={}, keys=[];
+    snap.docs.forEach(function(dd){
+      var wc=mergeWo((dd.data()||{}).groups||{}), n=0;
+      Object.keys(wc).forEach(function(k){ n+=(wc[k]&&wc[k].n)||0; });
+      byMonth[dd.id]=n; allTime+=n;
+      if(n>0) keys.push(dd.id);
+    });
+    keys.sort();
+    return { allTime:allTime, byMonth:byMonth, months:keys.length, docs:snap.size,
+             firstMonth:keys[0]||null, lastMonth:keys[keys.length-1]||null };
   }
 
   // Set of logged dateStrs for (group,player) — same key format as before,
@@ -6807,7 +7486,8 @@ if('serviceWorker' in navigator){
   // ── BUILD ──────────────────────────────────────────────────────────────
   function buildHTML(data){
     var sets=buildDaySets(data);
-    return monthSelector(data)
+    return buildWorkoutCounter(data)
+      + monthSelector(data)
       + buildPulse(data,sets)
       + buildMetrics(data)
       + buildParticipation(data)
@@ -6833,6 +7513,34 @@ if('serviceWorker' in navigator){
       +'<select onchange="(function(v){var p=v.split(\'-\');window.SuperDash.setMonth(+p[1],+p[0]);})(this.value)" style="width:auto;margin:0;padding:6px 10px;font-size:13px">'+opts+'</select>'
       +note+'</div>';
   }
+
+  // ── 0. WORKOUTS FORGED (all-time counter) ──
+  // Sits above the month selector because it is NOT month-scoped — the big
+  // number is lifetime. The footer line is the selected month, so the band
+  // still answers the selector instead of looking frozen.
+  function buildWorkoutCounter(data){
+    var t=data.woTotals;
+    if(!t) return '<div class="sd-forged">'
+      +'<div class="sd-forged-l">Workouts forged</div>'
+      +'<div class="sd-forged-v" style="color:var(--muted)">—</div>'
+      +'<div class="sd-forged-s">Counter unavailable — monthly rollups could not be read.</div>'
+      +'</div>';
+    var selN=t.byMonth[ymKey(data.selY,data.selM)]||0;
+    var span=t.months>1 ? ' ('+t.firstMonth+' → '+t.lastMonth+')'
+           : (t.firstMonth ? ' ('+t.firstMonth+')' : '');
+    var cover=t.months
+      ? '<b>'+grp(selN)+'</b> in '+MONTHS[data.selM-1]+' '+data.selY
+        +' · <b>'+t.months+'</b> active month'+(t.months===1?'':'s')+span
+      : 'No workouts in any rollup yet — run backfillGlobalStats() to seed history.';
+    return '<div class="sd-forged">'
+      +'<div class="sd-forged-l">Workouts forged</div>'
+      +'<div class="sd-forged-v">'+grp(t.allTime)+'</div>'
+      +'<div class="sd-forged-s">every group · all time · demo excluded</div>'
+      +'<div class="sd-forged-m">'+cover+'</div>'
+      +'</div>';
+  }
+  // 1234567 -> "1,234,567"
+  function grp(n){ return String(n==null?0:n).replace(/\B(?=(\d{3})+(?!\d))/g,','); }
 
   // ── 1. PULSE (always live/today) ──
   function buildPulse(data,sets){
@@ -7349,7 +8057,13 @@ if('serviceWorker' in navigator){
     if(document.getElementById('sdStyle')) return;
     var s=document.createElement('style'); s.id='sdStyle';
     s.textContent=
-      '.sd-pulse{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}'
+      '.sd-forged{background:linear-gradient(135deg,rgba(212,175,55,.14),rgba(255,90,31,.06));border:1px solid rgba(212,175,55,.45);border-radius:16px;padding:18px 16px;text-align:center;margin-bottom:14px}'
+      +'.sd-forged-l{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.18em;color:var(--muted)}'
+      +'.sd-forged-v{font-size:44px;font-weight:900;color:var(--gold);line-height:1.05;margin:6px 0 3px;font-variant-numeric:tabular-nums}'
+      +'.sd-forged-s{font-size:11px;color:var(--muted)}'
+      +'.sd-forged-m{font-size:12px;color:var(--muted);margin-top:12px;padding-top:10px;border-top:1px solid rgba(212,175,55,.25)}'
+      +'.sd-forged-m b{color:var(--text);font-variant-numeric:tabular-nums}'
+      +'.sd-pulse{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}'
       +'.sd-metrics3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px}'
       +'.sd-tile{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center}'
       +'.sd-tile-v{font-size:24px;font-weight:900;color:var(--gold);line-height:1.1}'
