@@ -6803,7 +6803,30 @@ if('serviceWorker' in navigator){
       '.rd-dn{color:rgba(245,245,247,.45)}'+
       '.rd-eq{color:rgba(245,245,247,.45)}'+
       '.recap-note{font-size:12.5px;line-height:1.55;color:rgba(245,245,247,.7);margin-top:8px}'+
-      '.recap-note-dry{font-style:italic;color:rgba(245,245,247,.52)}';
+      '.recap-note-dry{font-style:italic;color:rgba(245,245,247,.52)}'+
+      /* ── earned badges (31 Jul 2026) ── */
+      '.recap-badges{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin:22px 0 4px}'+
+      '.rb{flex:1 1 0;min-width:132px;max-width:190px;margin:0;padding:16px 10px 14px;'+
+        'border-radius:16px;text-align:center;border:1px solid rgba(255,255,255,.08);'+
+        'background:radial-gradient(120% 90% at 50% 0%,rgba(255,255,255,.06),rgba(255,255,255,0) 70%)}'+
+      '.rb img{display:block;margin:0 auto 10px;width:120px;height:120px;'+
+        'filter:drop-shadow(0 8px 22px rgba(0,0,0,.55))}'+
+      /* the art is decorative — if it 404s the tile keeps its caption */
+      '.rb-noart img{display:none}'+
+      '.rb figcaption b{display:block;font-size:12px;font-weight:900;letter-spacing:.14em;line-height:1.35}'+
+      '.rb figcaption span{display:block;font-size:11.5px;color:rgba(245,245,247,.6);margin-top:5px;line-height:1.45}'+
+      '.rb-gold{border-color:rgba(212,168,67,.4);box-shadow:0 0 26px -10px rgba(212,168,67,.5)}'+
+      '.rb-gold figcaption b{color:#d4a843}'+
+      '.rb-team-a{border-color:rgba(255,95,87,.4);box-shadow:0 0 26px -10px rgba(255,95,87,.45)}'+
+      '.rb-team-a figcaption b{color:#ff5f57}'+
+      '.rb-team-b{border-color:rgba(79,156,247,.4);box-shadow:0 0 26px -10px rgba(79,156,247,.45)}'+
+      '.rb-team-b figcaption b{color:#4f9cf7}'+
+      '.rb-team-c{border-color:rgba(63,207,142,.4);box-shadow:0 0 26px -10px rgba(63,207,142,.45)}'+
+      '.rb-team-c figcaption b{color:#3fcf8e}'+
+      '@keyframes rbIn{from{opacity:0;transform:translateY(10px) scale(.92)}to{opacity:1;transform:none}}'+
+      '.recap-overlay.recap-in .rb{animation:rbIn .5s cubic-bezier(.22,1,.36,1) both}'+
+      '.recap-overlay.recap-in .rb:nth-child(2){animation-delay:.12s}'+
+      '@media (prefers-reduced-motion: reduce){.recap-overlay.recap-in .rb{animation:none}}';
     document.head.appendChild(s);
   }
 
@@ -6875,9 +6898,40 @@ if('serviceWorker' in navigator){
       html += '</div>';
     }
 
+    var a = d.achievements || {};
+
+    // 3c) EARNED BADGES — the award moment, above the text banners so it reads
+    //     as a trophy rather than another line of copy. Rendered metal, ~7KB
+    //     each. Every part of this is fail-soft: the images are decorative, so
+    //     an onerror hides the tile and the banners below still explain what was
+    //     won. Archived recaps reach this too — buildRecapDataFromArchive maps
+    //     the season_winner / team_winner badge strings onto the same fields.
+    var earned = [];
+    if(a.topScorer)
+      earned.push({ src:'assets/badges/champion.webp', cls:'rb-gold',
+                    kicker:'CHAMPION', line:'Highest scorer in '+rEsc(d.groupName) });
+    var mt = d.myTeamResult;
+    if(mt && mt.won && mt.team){
+      var t = String(mt.team).toLowerCase();
+      if(t === 'a' || t === 'b' || t === 'c')   // only A/B/C art exists; anything else renders no tile
+        earned.push({ src:'assets/badges/team-'+t+'.webp', cls:'rb-team rb-team-'+t,
+                      kicker:'TEAM '+rEsc(mt.team)+' TOOK THE SEASON',
+                      line: mt.total!=null ? 'Winning team · '+mt.total+' avg pts' : 'Winning team' });
+    }
+    if(earned.length){
+      html += '<div class="recap-badges">';
+      earned.forEach(function(b){
+        html += '<figure class="rb '+b.cls+'">'+
+                  '<img src="'+b.src+'" alt="" width="120" height="120" loading="eager" '+
+                       'onerror="this.closest(\'.rb\').classList.add(\'rb-noart\')">'+
+                  '<figcaption><b>'+b.kicker+'</b><span>'+b.line+'</span></figcaption>'+
+                '</figure>';
+      });
+      html += '</div>';
+    }
+
     // 4) Achievement banners — only the ones the VIEWER qualifies for; whole
     //    section is skipped (no empty state) if none qualify.
-    var a = d.achievements || {};
     if(a.topScorer || a.biggestClimber || a.longestStreak){
       if(a.topScorer)
         html += '<div class="recap-ban recap-ban-gold"><b>You were the highest scorer of your group!</b> '+
@@ -6964,6 +7018,19 @@ if('serviceWorker' in navigator){
     ov.innerHTML = buildHTML(d);
     document.body.appendChild(ov);
     requestAnimationFrame(function(){ ov.classList.add('recap-in'); });
+
+    // Confetti only when something was actually WON — a badge tile is present.
+    // Fired off the rendered DOM rather than re-deriving the conditions, so the
+    // celebration can never disagree with what the card is showing. Delayed to
+    // land with the badge's entry animation, and wrapped because fireConfetti
+    // lives outside this IIFE and is not worth breaking the recap over.
+    if(ov.querySelector('.recap-badges')){
+      var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if(!reduce) setTimeout(function(){
+        try{ if(typeof fireConfetti === 'function') fireConfetti(); }catch(e){}
+      }, 420);
+    }
+
     var share = ov.querySelector('[data-recap-share]');
     var cont  = ov.querySelector('[data-recap-continue]');
     if(share) share.addEventListener('click', function(){ try{ generateImage(d); }catch(e){} });
