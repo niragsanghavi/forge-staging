@@ -2402,8 +2402,23 @@ function mirPaintChart(myDays, prevDays, daysInMonth, todayD, prevLabel){
 }
 
 // ── CAPTION LADDER (8 rules, first match wins, seeded per day, no repeat) ──
+// DISABLED 31 Jul 2026 at Nirag's request — not deleted. The whole ladder below
+// (mirCaption + its 8 rules) is intact and untouched; only the render is short-
+// circuited, so flipping this one flag brings it all back.
+// It also removed the confusing "Team X is N points behind" line, which was
+// rule id:2 comparing the viewer's team to the LEADING team — read by users as
+// the app comparing them personally against a team.
+const COACH_NOTES_ENABLED = false;
+
 function mirRenderCaption(sc){
   const el=document.getElementById('mirCaption'); if(!el) return;
+  const card=document.getElementById('mirCaptionCard');
+  if(!COACH_NOTES_ENABLED){
+    el.innerHTML='';
+    if(card) card.style.display='none';   // hide the whole card, not just its text
+    return;
+  }
+  if(card) card.style.display='';
   const cap=mirCaption(sc);
   el.innerHTML=cap;
 }
@@ -2619,9 +2634,32 @@ function mirLoadMineAll(){
   const p=(async()=>{
     try{
       if(!me || !me.userId) return;   // pre-identity: retry next render, never latch
-      const snap=await db.collection('logs').where('userId','==',me.userId).get();
-      window._mirReadCount=(window._mirReadCount||0)+snap.size;
-      _mirMineAll=snap.docs.map(d=>d.data()).filter(l=>!l.voided);
+      // userId ALONE under-counts badly. Identity stamping is forward-only, so
+      // most historical logs carry no userId at all — which made "All-time" show
+      // FEWER workout types than "This month" (this month matches on name, all
+      // time matched on userId). Same fallback the rest of the app uses: the
+      // groupCode|nameLower roster map.
+      const seen=new Set(), out=[];
+      const take=snap=>{
+        window._mirReadCount=(window._mirReadCount||0)+snap.size;
+        snap.docs.forEach(d=>{
+          if(seen.has(d.id)) return;          // a log can match BOTH queries
+          seen.add(d.id);
+          const l=d.data();
+          if(!l.voided) out.push(l);
+        });
+      };
+      take(await db.collection('logs').where('userId','==',me.userId).get());
+      // Every group this person is on this device, by the name they use there.
+      const mine=(typeof getSessions==='function'?getSessions():[])
+        .filter(s=>s && s.player && s.player.name);
+      for(const s of mine){
+        try{
+          take(await db.collection('logs').where('groupCode','==',s.code)
+                       .where('player','==',s.player.name).get());
+        }catch(e){ logErr('mirLoadMineAll: name pass '+s.code, e); }
+      }
+      _mirMineAll=out;
     }catch(e){ logErr('mirLoadMineAll', e); _mirMineAll=_mirMineAll||[]; }
   })();
   _mirInflight['mine']=p;
@@ -7177,13 +7215,11 @@ if('serviceWorker' in navigator){
           ctx.fillText('YOUR TOP WORKOUTS', 150, yy);
           yy += 50;
           tw.forEach(function(w){
+            // No "% vs group" here. On a card that leaves the app it means
+            // nothing to anyone outside the group, and it turns a personal
+            // recap back into a comparison. The count alone is the story.
             ctx.textAlign='left'; ctx.fillStyle='#f5f5f7'; ctx.font='600 34px '+FONT;
             ctx.fillText(fit(w.label, 520), 150, yy);
-            if(w.pct!=null){
-              ctx.fillStyle = w.pct>0 ? '#d4a843' : '#8b8b96';
-              ctx.font='700 21px '+FONT;
-              ctx.fillText((w.pct>0?'+':'')+w.pct+'% vs group', 150, yy+27);
-            }
             ctx.textAlign='right'; ctx.fillStyle='#d4a843'; ctx.font='800 34px '+FONT;
             ctx.fillText(w.n+'×', S-150, yy);
             yy += ROW_H;

@@ -478,17 +478,21 @@ svg.mir-ico{fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:roun
 .mir-calpanel{flex:none;width:100%;scroll-snap-align:start;scroll-snap-stop:always}
 .mir-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
 .mir-dh{font-size:11px;color:var(--muted);text-align:center;font-weight:700;padding-bottom:4px;opacity:.7}
-.mir-day{aspect-ratio:1;min-height:46px;border-radius:10px;background:rgba(255,255,255,.03);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;position:relative;cursor:pointer;transition:transform .12s}
+/* Gold hairline on every day cell (31 Jul 2026): on the dark theme the cells
+   were a near-invisible 3%-white fill on a near-black card, so the grid read
+   as a smudge. The border defines each block without adding weight. */
+.mir-day{aspect-ratio:1;min-height:46px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid rgba(212,168,67,.22);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;position:relative;cursor:pointer;transition:transform .12s,border-color .2s}
 :root[data-theme="light"] .mir-day{background:rgba(0,0,0,.03)}
 .mir-day:active{transform:scale(.92)}
 .mir-day .n{font-size:11px;color:var(--muted);position:absolute;top:3px;right:5px;line-height:1}
+.mir-day.hit{border-color:rgba(212,168,67,.55)}
 .mir-day.hit svg{width:17px;height:17px;margin-top:5px}
 .mir-day.today{border:1.5px dashed rgba(212,168,67,.5)}
 .mir-day.today .plus{font-size:16px;color:var(--gold);font-weight:600;line-height:1}
 .mir-day.today .n{position:static;font-size:11px;color:var(--gold);font-weight:700}
-.mir-day.future{opacity:.32;cursor:default}
+.mir-day.future{opacity:.32;cursor:default;border-color:rgba(212,168,67,.10)}
 .mir-day.future .n,.mir-day.empty .n{position:static}
-.mir-day.empty{background:transparent;cursor:default}
+.mir-day.empty{background:transparent;cursor:default;border-color:transparent}
 .mir-day.capped{opacity:.7}
 .mir-day .multi{position:absolute;bottom:3px;right:4px;min-width:14px;height:14px;border-radius:7px;background:var(--gold);color:var(--ink);font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 3px}
 .mir-day.shake{animation:mirShake .3s}
