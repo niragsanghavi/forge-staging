@@ -6906,9 +6906,15 @@ if('serviceWorker' in navigator){
     //     an onerror hides the tile and the banners below still explain what was
     //     won. Archived recaps reach this too — buildRecapDataFromArchive maps
     //     the season_winner / team_winner badge strings onto the same fields.
+    // The champion coin SPINS in the card (18-frame rendered loop, 68KB, only
+    // ever fetched by someone who actually won). Reduced-motion gets the still,
+    // and the share canvas always uses the still — an animated WebP draws only
+    // its first frame to a canvas anyway.
+    var _reduceMo = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var earned = [];
     if(a.topScorer)
-      earned.push({ src:'assets/badges/champion.webp', cls:'rb-gold',
+      earned.push({ src: _reduceMo ? 'assets/badges/champion.webp' : 'assets/badges/champion-spin.webp',
+                    cls:'rb-gold',
                     kicker:'CHAMPION', line:'Highest scorer in '+rEsc(d.groupName) });
     var mt = d.myTeamResult;
     if(mt && mt.won && mt.team){
@@ -7038,130 +7044,170 @@ if('serviceWorker' in navigator){
   }
 
   // ── SHAREABLE IMAGE — pure HTML5 Canvas, no library, no network ────────────
+  // ── SHARE IMAGE — personal, matching the card ─────────────────────────────
+  // Rewritten 31 Jul 2026. The old version led with the group: group name,
+  // winning team, top-3 table. What leaves the app is now the viewer's OWN
+  // month — their days, their percentile, their workouts, their awards — which
+  // is both what people actually want to post and a far better advert for Forge
+  // than a leaderboard nobody outside the group can read.
+  //
+  // Async because the award art has to decode before it can be drawn. Every
+  // image is optional: a failed load skips that tile and the download still
+  // happens, so the share can never be blocked by a missing asset.
   function generateImage(d){
     try{
       var S = 1080;
-      var cv = document.createElement('canvas'); cv.width = S; cv.height = S;
-      var ctx = cv.getContext('2d'); if(!ctx) return;
       var FONT = '-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
-      function fit(text,maxw){
-        text = String(text==null?'':text);
-        if(ctx.measureText(text).width <= maxw) return text;
-        while(text.length>1 && ctx.measureText(text+'…').width>maxw) text = text.slice(0,-1);
-        return text+'…';
+
+      // Which award art does this recap need? Static stills only — an animated
+      // WebP draws just its first frame to a canvas, so the spin is a preview
+      // affordance and the share gets the clean still.
+      var wants = [];
+      var a = d.achievements || {};
+      if(a.topScorer) wants.push({key:'champion', src:'assets/badges/champion.webp',
+                                  cap:'CHAMPION', sub:'Top scorer'});
+      var mt = d.myTeamResult;
+      if(mt && mt.won && mt.team){
+        var tl = String(mt.team).toLowerCase();
+        if(tl==='a'||tl==='b'||tl==='c')
+          wants.push({key:'team', src:'assets/badges/team-'+tl+'.webp',
+                      cap:'TEAM '+mt.team, sub:'Winning team'});
       }
 
-      // Background + gold glow + frame
-      ctx.fillStyle = '#0a0a0d'; ctx.fillRect(0,0,S,S);
-      var g = ctx.createRadialGradient(S/2,120,40,S/2,120,760);
-      g.addColorStop(0,'rgba(212,168,67,0.20)'); g.addColorStop(1,'rgba(212,168,67,0)');
-      ctx.fillStyle = g; ctx.fillRect(0,0,S,S);
-      ctx.strokeStyle = 'rgba(212,168,67,0.35)'; ctx.lineWidth = 4;
-      ctx.strokeRect(42,42,S-84,S-84);
-
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#d4a843'; ctx.font = '700 32px '+FONT;
-      ctx.fillText(fit(String(d.groupName).toUpperCase(),S-200), S/2, 138);
-      ctx.fillStyle = '#f5f5f7'; ctx.font = '800 70px '+FONT;
-      ctx.fillText('Season Recap', S/2, 218);
-      ctx.fillStyle = '#9a9aa3'; ctx.font = '500 32px '+FONT;
-      ctx.fillText((d.monthName+' '+d.year).trim(), S/2, 268);
-
-      ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(140,310); ctx.lineTo(S-140,310); ctx.stroke();
-
-      // Winning team (live recap) — or, when the group-wide winner isn't
-      // known (archived recap: only this player's own team/rank survived),
-      // a leaner "YOUR TEAM" block in the same slot so the layout never
-      // shows a gap where the live recap always has content.
-      if(d.winningTeam){
-        var wc = teamHex(d.winningTeam.team);
-        ctx.fillStyle = '#9a9aa3'; ctx.font = '700 24px '+FONT;
-        ctx.fillText('WINNING TEAM', S/2, 380);
-        ctx.fillStyle = wc; ctx.font = '800 58px '+FONT;
-        ctx.fillText('Team '+d.winningTeam.team, S/2, 446);
-        ctx.fillStyle = '#c8c8d0'; ctx.font = '500 28px '+FONT;
-        ctx.fillText(d.winningTeam.total+' avg pts', S/2, 488);
-      } else if(d.myTeamResult){
-        var mtc = teamHex(d.myTeamResult.team);
-        ctx.fillStyle = '#9a9aa3'; ctx.font = '700 24px '+FONT;
-        ctx.fillText('YOUR TEAM', S/2, 380);
-        ctx.fillStyle = mtc; ctx.font = '800 58px '+FONT;
-        ctx.fillText('Team '+d.myTeamResult.team, S/2, 446);
-        ctx.fillStyle = '#c8c8d0'; ctx.font = '500 28px '+FONT;
-        ctx.fillText(d.myTeamResult.won ? 'Won this season 🏆' : ('Finished '+ordinal(d.myTeamResult.rank||0)), S/2, 488);
-      }
-
-      // Top 3 (live recap) — or, when other players' scores aren't archived,
-      // this player's own season stats in the same slot.
-      var top = d.top3 || [];
-      ctx.textAlign = 'left';
-      var rowY = 628;
-      if(top.length){
-        ctx.fillStyle = '#9a9aa3'; ctx.font = '700 24px '+FONT;
-        ctx.fillText('TOP PERFORMERS', 150, 568);
-        top.forEach(function(p,i){
-          var c = MEDAL[i] || '#9a9aa3';
-          ctx.beginPath(); ctx.arc(176, rowY-10, 22, 0, Math.PI*2);
-          ctx.strokeStyle = c; ctx.lineWidth = 4; ctx.stroke();
-          ctx.fillStyle = c; ctx.textAlign = 'center'; ctx.font = '800 26px '+FONT;
-          ctx.fillText(String(i+1), 176, rowY-1);
-          ctx.textAlign = 'left'; ctx.fillStyle = '#f5f5f7'; ctx.font = '600 38px '+FONT;
-          ctx.fillText(fit(p.name, 560), 224, rowY);
-          ctx.textAlign = 'right'; ctx.fillStyle = '#d4a843'; ctx.font = '800 38px '+FONT;
-          ctx.fillText(p.total+' pts', S-150, rowY);
-          ctx.textAlign = 'left';
-          rowY += 78;
+      function loadOne(w){
+        return new Promise(function(res){
+          var im = new Image();
+          im.onload  = function(){ res(Object.assign({img:im}, w)); };
+          im.onerror = function(){ res(null); };          // missing art must not block the share
+          im.src = w.src;
         });
-      } else if(d.myTotal!=null || d.myWo!=null || (d.myStreak!=null && d.myStreak>0)){
-        ctx.fillStyle = '#9a9aa3'; ctx.font = '700 24px '+FONT;
-        ctx.fillText('YOUR SEASON', 150, 568);
-        function statRow(label,val){
-          ctx.textAlign='left'; ctx.fillStyle='#c8c8d0'; ctx.font='500 30px '+FONT;
-          ctx.fillText(label, 150, rowY);
-          ctx.textAlign='right'; ctx.fillStyle='#d4a843'; ctx.font='800 34px '+FONT;
-          ctx.fillText(String(val), S-150, rowY);
-          ctx.textAlign='left';
-          rowY += 56;
-        }
-        if(d.myTotal!=null) statRow('Total points', d.myTotal);
-        statRow('Workouts logged', d.myWo||0);
-        if(d.myStreak!=null && d.myStreak>0) statRow('Streak at season end', d.myStreak+' day'+(d.myStreak===1?'':'s'));
-        if(d.badges && d.badges.length) statRow('Badges earned', d.badges.length);
       }
 
-      // Group totals — archived recaps have neither field, so the whole
-      // section (including its divider) is skipped rather than showing 0s.
-      if(d.totalWorkouts!=null || d.topWorkout){
-        var ty = rowY + 36;
-        ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(150,ty-30); ctx.lineTo(S-150,ty-30); ctx.stroke();
-        if(d.totalWorkouts!=null){
-          ctx.fillStyle = '#c8c8d0'; ctx.font = '500 30px '+FONT;
-          ctx.fillText('Workouts logged', 150, ty+18);
-          ctx.textAlign = 'right'; ctx.fillStyle = '#f5f5f7'; ctx.font = '800 30px '+FONT;
-          ctx.fillText(String(d.totalWorkouts), S-150, ty+18);
-          ctx.textAlign = 'left';
+      Promise.all(wants.map(loadOne)).then(function(loaded){
+        draw(loaded.filter(Boolean));
+      }).catch(function(){ draw([]); });
+
+      function draw(art){
+        var cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+        var ctx = cv.getContext('2d'); if(!ctx) return;
+        function fit(text,maxw){
+          text = String(text==null?'':text);
+          if(ctx.measureText(text).width <= maxw) return text;
+          while(text.length>1 && ctx.measureText(text+'…').width>maxw) text = text.slice(0,-1);
+          return text+'…';
         }
-        if(d.topWorkout){
-          ctx.fillStyle = '#c8c8d0'; ctx.font = '500 30px '+FONT;
-          ctx.fillText('Most popular', 150, ty+68);
-          ctx.textAlign = 'right'; ctx.fillStyle = '#f5f5f7'; ctx.font = '800 30px '+FONT;
-          ctx.fillText(fit(d.topWorkout.label+' ('+d.topWorkout.n+')', 560), S-150, ty+68);
-          ctx.textAlign = 'left';
+
+        // background, heat glow, frame
+        ctx.fillStyle = '#0a0a0d'; ctx.fillRect(0,0,S,S);
+        var g = ctx.createRadialGradient(S/2, S-60, 40, S/2, S-60, 820);
+        g.addColorStop(0,'rgba(255,90,31,0.16)'); g.addColorStop(1,'rgba(255,90,31,0)');
+        ctx.fillStyle = g; ctx.fillRect(0,0,S,S);
+        ctx.strokeStyle = 'rgba(212,168,67,0.32)'; ctx.lineWidth = 4;
+        ctx.strokeRect(42,42,S-84,S-84);
+
+        // ── header ──
+        ctx.textAlign='left';  ctx.fillStyle='#d4a843'; ctx.font='900 30px '+FONT;
+        ctx.fillText('FORGE', 96, 122);
+        ctx.textAlign='right'; ctx.fillStyle='#8b8b96'; ctx.font='700 26px '+FONT;
+        ctx.fillText(((d.monthName||'')+' '+(d.year||'')).trim().toUpperCase(), S-96, 122);
+
+        // ── hero: the viewer's own month ──
+        // Vertical budget is tight: the worst case is TWO award tiles plus three
+        // workout rows plus the week line, all inside 1080 with a 42px frame.
+        // The hero number therefore scales DOWN when awards are present rather
+        // than letting the workout rows run off the bottom edge.
+        var hasArt = art.length > 0;
+        ctx.textAlign='center';
+        ctx.fillStyle='#8b8b96'; ctx.font='700 26px '+FONT;
+        ctx.fillText(fit(String(d.meName||'').toUpperCase(), S-260), S/2, 186);
+
+        var days = d.myWo||0;
+        ctx.fillStyle='#f5f5f7'; ctx.font='900 '+(hasArt?130:200)+'px '+FONT;
+        ctx.fillText(String(days), S/2, hasArt?300:372);
+        ctx.fillStyle='#d4a843'; ctx.font='800 34px '+FONT;
+        ctx.fillText(days===1?'DAY TRAINED':'DAYS TRAINED', S/2, hasArt?344:424);
+
+        var yy = hasArt ? 390 : 480;
+        if(d.myWorkoutCount>days){
+          ctx.fillStyle='#c8c8d0'; ctx.font='500 29px '+FONT;
+          ctx.fillText(d.myWorkoutCount+' workouts in total', S/2, yy); yy += 40;
         }
+        if(d.familyPct!=null){
+          ctx.fillStyle='#8b8b96'; ctx.font='500 28px '+FONT;
+          ctx.fillText('Ahead of '+d.familyPct+'% of everyone on Forge', S/2, yy); yy += 40;
+        }
+
+        // ── awards ── the reason this image gets posted at all
+        if(hasArt){
+          var BW = 120, gap = 40;
+          var totalW = art.length*BW + (art.length-1)*gap;
+          var bx = (S-totalW)/2, by = yy + 6;
+          art.forEach(function(b){
+            ctx.drawImage(b.img, bx, by, BW, BW);
+            ctx.textAlign='center';
+            ctx.fillStyle = b.key==='champion' ? '#d4a843' : teamHex(mt&&mt.team);
+            ctx.font='900 23px '+FONT;
+            ctx.fillText(b.cap, bx+BW/2, by+BW+30);
+            ctx.fillStyle='#8b8b96'; ctx.font='500 21px '+FONT;
+            ctx.fillText(b.sub, bx+BW/2, by+BW+56);
+            bx += BW + gap;
+          });
+          yy = by + BW + 82;
+        } else {
+          yy += 10;
+        }
+
+        // ── top workouts ──
+        // FOOTER_TOP is the hard floor: nothing may be drawn below it or it
+        // collides with goforge.in and the frame. Rows are dropped from the
+        // bottom until they fit rather than overflowing the canvas.
+        var FOOTER_TOP = S - 110;
+        var ROW_H = 64;
+        var tw = (d.myTopWorkouts||[]).slice(0,3);
+        if(tw.length){
+          var headY = yy + 44;
+          var room  = Math.floor((FOOTER_TOP - (headY + 50)) / ROW_H);
+          tw = tw.slice(0, Math.max(0, room));
+        }
+        if(tw.length){
+          ctx.strokeStyle='rgba(255,255,255,0.10)'; ctx.lineWidth=2;
+          ctx.beginPath(); ctx.moveTo(150,yy); ctx.lineTo(S-150,yy); ctx.stroke();
+          yy += 44;
+          ctx.textAlign='left'; ctx.fillStyle='#8b8b96'; ctx.font='700 23px '+FONT;
+          ctx.fillText('YOUR TOP WORKOUTS', 150, yy);
+          yy += 50;
+          tw.forEach(function(w){
+            ctx.textAlign='left'; ctx.fillStyle='#f5f5f7'; ctx.font='600 34px '+FONT;
+            ctx.fillText(fit(w.label, 520), 150, yy);
+            if(w.pct!=null){
+              ctx.fillStyle = w.pct>0 ? '#d4a843' : '#8b8b96';
+              ctx.font='700 21px '+FONT;
+              ctx.fillText((w.pct>0?'+':'')+w.pct+'% vs group', 150, yy+27);
+            }
+            ctx.textAlign='right'; ctx.fillStyle='#d4a843'; ctx.font='800 34px '+FONT;
+            ctx.fillText(w.n+'×', S-150, yy);
+            yy += ROW_H;
+          });
+        }
+
+        // ── one line about the week, only if it genuinely fits ──
+        var wk = d.weekday;
+        if(wk && wk.best && wk.best.length && (yy + 10) <= FOOTER_TOP){
+          ctx.textAlign='left'; ctx.fillStyle='#8b8b96'; ctx.font='500 27px '+FONT;
+          ctx.fillText(fit('Favourite day to train: '+wk.best.join(' & '), S-300), 150, yy+4);
+        }
+
+        // ── footer ──
+        ctx.textAlign='center'; ctx.fillStyle='#d4a843'; ctx.font='900 30px '+FONT;
+        ctx.fillText('goforge.in', S/2, S-84);
+
+        var url = cv.toDataURL('image/png');
+        var el = document.createElement('a');
+        el.href = url;
+        el.download = 'forge-'+(d.seasonId||'recap')+'-'+String(d.meName||'').replace(/[^a-zA-Z0-9]/g,'')+'.png';
+        document.body.appendChild(el); el.click();
+        setTimeout(function(){ try{ el.remove(); }catch(e){} }, 0);
       }
-
-      // forge wordmark
-      ctx.textAlign = 'center'; ctx.fillStyle = '#d4a843'; ctx.font = '900 52px '+FONT;
-      ctx.fillText('forge', S/2, S-78);
-
-      var url = cv.toDataURL('image/png');
-      var a = document.createElement('a');
-      a.href = url;
-      a.download = 'forge-recap-'+(d.groupCode||'')+'-'+(d.seasonId||'')+'.png';
-      document.body.appendChild(a); a.click();
-      setTimeout(function(){ try{ a.remove(); }catch(e){} }, 0);
     }catch(e){ /* image is best-effort — never break the modal/app */ }
   }
 
