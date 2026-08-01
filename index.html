@@ -2393,9 +2393,16 @@ function mirPaintChart(myDays, prevDays, daysInMonth, todayD, prevLabel){
   [0.5,0.25].forEach(f=>{ const y=(H-PB)-(f)*(H-PT-PB); svg+=`<line x1="0" y1="${y.toFixed(0)}" x2="${W}" y2="${y.toFixed(0)}" stroke="var(--border)"/>`; });
   svg+=`<line x1="0" y1="${H-PB}" x2="${W}" y2="${H-PB}" stroke="var(--border)"/>`;
   if(prC) svg+=`<path d="${path(prC,daysInMonth)}" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4 4" opacity=".55"/>`;
-  svg+=`<path d="${path(myC,todayD)}" fill="none" stroke="var(--gold)" stroke-width="2.5" stroke-linecap="round"/>`;
+  // Behind last month on the SAME day = red; level or ahead = gold. Compared at
+  // today's day-of-month, not against the previous month's final total, so the
+  // colour answers "am I behind the pace I set" rather than "have I beaten it
+  // yet" — which would be red for almost the whole month.
+  const prevAtToday = prC ? prC[Math.min(todayD, daysInMonth)] : null;
+  const behind = prevAtToday!=null && myC[todayD] < prevAtToday;
+  const lineCol = behind ? 'var(--red, #ff5f57)' : 'var(--gold)';
+  svg+=`<path d="${path(myC,todayD)}" fill="none" stroke="${lineCol}" stroke-width="2.5" stroke-linecap="round"/>`;
   const tipX=X(todayD), tipY=Y(myC[todayD]);
-  svg+=`<circle cx="${tipX.toFixed(1)}" cy="${tipY.toFixed(1)}" r="4" fill="var(--gold)"/>`;
+  svg+=`<circle cx="${tipX.toFixed(1)}" cy="${tipY.toFixed(1)}" r="4" fill="${lineCol}"/>`;
   svg+=`</svg>`;
   document.getElementById('mirChart').innerHTML=svg;
   document.getElementById('mirChartAxis').innerHTML=`<span>${MIR_MONTHNAMES[season.month-1].slice(0,3)} 1</span><span>today · ${todayD}</span><span>${MIR_MONTHNAMES[season.month-1].slice(0,3)} ${daysInMonth}</span>`;
@@ -5115,14 +5122,24 @@ async function performRollover(code){
   return result;
 }
 
+// Forge's season boundaries are defined in IST. Shifting Date.now() by this and
+// then reading the getUTC* fields yields IST wall-clock on ANY device, which is
+// what every global season decision below is gated on.
+const IST_OFFSET_MS = 5.5*60*60*1000;
+
 // Shared eligibility check for performRollover — checked once before the
 // snapshot writer runs, and again inside the transaction (race guard).
 function checkRolloverEligibility(seasonData){
   const startedAtMs = seasonData.startedAt?.toMillis ? seasonData.startedAt.toMillis() : ((seasonData.startedAt?.seconds||0)*1000);
   const ageDays = (Date.now()-startedAtMs)/86400000;
   if(ageDays < 20) return {ok:false, reason:'TOO_YOUNG', ageDays};
-  const now = new Date();
-  const seasonEnded = (seasonData.year<now.getFullYear()) || (seasonData.year===now.getFullYear() && seasonData.month<now.getMonth()+1);
+  // IST for the same reason as the 6am gate above: "has the season's month
+  // ended" is a global fact about the season, not about the viewer's timezone.
+  // On device-local time a client far enough ahead answers yes while it is
+  // still the 31st in India.
+  const now = new Date(Date.now() + IST_OFFSET_MS);
+  const nowY = now.getUTCFullYear(), nowM = now.getUTCMonth()+1;
+  const seasonEnded = (seasonData.year<nowY) || (seasonData.year===nowY && seasonData.month<nowM);
   if(!seasonEnded) return {ok:false, reason:'NOT_YET_DUE'};
   return {ok:true};
 }
@@ -5137,11 +5154,19 @@ function checkRolloverEligibility(seasonData){
 // majority of boots.
 async function checkAutoRollover(code){
   // Rollover holds until 6:00 on the 1st — the midnight-to-dawn window still
-  // belongs to the OLD month (night-owl loggers finishing the 31st). From
-  // 6am, or any later day, roll as before. Client-local time by design
-  // (the user base is IST); the manual repair path is deliberately ungated.
-  const now=new Date();
-  if(now.getDate()===1 && now.getHours()<6) return;
+  // belongs to the OLD month (night-owl loggers finishing the 31st).
+  //
+  // FIXED 1 Aug 2026. This used to read the DEVICE clock (`new Date()` local).
+  // Rollover is a GLOBAL write — it flips currentSeasonId for the whole group —
+  // so the gate must not depend on whichever client happens to open the app
+  // first. At 00:30 IST it is already 19:00 UTC on the 31st, so any device at
+  // UTC+11 or later (or simply set wrong) read "past 06:00 on the 1st" and
+  // rolled August in for EVERYONE at half past midnight IST.
+  // Season boundaries are IST by definition, so the gate is evaluated in IST
+  // regardless of where the device thinks it is. The manual repair path stays
+  // deliberately ungated.
+  const ist = new Date(Date.now() + IST_OFFSET_MS);
+  if(ist.getUTCDate()===1 && ist.getUTCHours()<6) return;
   const result = await performRollover(code);
   if(result.ok) console.log(`[Forge] Auto-rollover: ${code} ${result.prevSid} -> ${result.newSid}`);
 }
