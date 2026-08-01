@@ -1551,6 +1551,12 @@ function launchApp(){
 function renderGroupSwitcher(){
   const el = document.getElementById('groupSwitcher');
   if(!el) return;
+  // RETIRED 31 Jul 2026 — there were two group switchers on screen at once. The
+  // home-hero pills (mirRenderPills) are strictly better: they carry each
+  // group's RANK, not just its name, and already highlight the active group.
+  // Left in place rather than ripped out so it can be restored in one line.
+  el.style.display='none'; el.innerHTML=''; return;
+  /* eslint-disable no-unreachable */
   const sessions = getSessions();
   if(window.fromSuper || sessions.length <= 1){ el.style.display='none'; el.innerHTML=''; return; }
   el.style.display='flex';
@@ -7255,7 +7261,16 @@ if('serviceWorker' in navigator){
     var today = new Date();
     var inSeasonMonth = (today.getMonth()+1)===season.month && today.getFullYear()===season.year;
     var lastCalendarDay = new Date(season.year, season.month, 0).getDate();
-    return inSeasonMonth && today.getDate()===lastCalendarDay && today.getHours()>=18;
+    // Final evening of the season month...
+    if(inSeasonMonth && today.getDate()===lastCalendarDay && today.getHours()>=18) return true;
+    // ...and all of the 1st of the NEXT month, up until rollover swaps `season`
+    // out at 06:00. Before this the card vanished at midnight on the 31st, which
+    // is exactly when most people would open it. After rollover the same recap is
+    // still reachable as the closed-month card on the calendar.
+    var nextM = season.month===12 ? 1 : season.month+1;
+    var nextY = season.month===12 ? season.year+1 : season.year;
+    if(today.getDate()===1 && (today.getMonth()+1)===nextM && today.getFullYear()===nextY) return true;
+    return false;
   }
 
   function injectRecapBtn(){
@@ -7266,7 +7281,7 @@ if('serviceWorker' in navigator){
     wrap.innerHTML =
       '<div class="recap-trigger-card">'+
         '<span class="recap-trigger-dot"></span>'+
-        '<span class="recap-trigger-label">Season Recap is ready</span>'+
+        '<span class="recap-trigger-label">'+rEsc(MONTHS[(window.season&&season.month||1)-1]||'')+' Season Recap is ready</span>'+
         '<span class="recap-trigger-arrow">›</span>'+
       '</div>';
     wrap.querySelector('.recap-trigger-card').addEventListener('click', function(){
