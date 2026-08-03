@@ -130,6 +130,34 @@ window.isDistanceWorkout = function(w){
   const s = String(w||'').toLowerCase();
   return window.DISTANCE_WORKOUTS.some(k => s.includes(k));
 };
+
+window.selNote = null;          // free-text detail for the log in flight (muscle
+                                // groups on a lift). Personal record only — never
+                                // scored, never on any leaderboard.
+
+// Workouts where "what did you train" is a meaningful question. Same loose
+// substring match as the distance list, so "Leg day at the gym" and a custom
+// "push gym session" both qualify.
+window.LIFT_WORKOUTS = [
+  'gym','weight','strength','lift','bodybuild','crossfit','resistance','calisthen'
+];
+window.isLiftWorkout = function(w){
+  const s = String(w||'').toLowerCase();
+  return window.LIFT_WORKOUTS.some(k => s.includes(k));
+};
+
+// Offered as chips; anything else goes in the free-text box.
+window.MUSCLE_GROUPS = ['Chest','Back','Shoulders','Arms','Legs','Core','Glutes','Full body'];
+
+// Per-device opt-out. Defaults to asking; one tap on "don't ask again" silences
+// it forever without touching anyone else's experience.
+window.liftPromptEnabled = function(){
+  try{ return localStorage.getItem('forge_no_lift_prompt') !== '1'; }catch(e){ return true; }
+};
+window.setLiftPrompt = function(on){
+  try{ on ? localStorage.removeItem('forge_no_lift_prompt')
+          : localStorage.setItem('forge_no_lift_prompt','1'); }catch(e){}
+};
 window.adminUnlocked = false;
 window.unsub = [];
 

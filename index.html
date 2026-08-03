@@ -1867,12 +1867,15 @@ function _mirDaySet(logs){ const s=new Set(); (logs||[]).forEach(l=>{ if(l&&l.da
 function mirMonthDesc(month, year, readonly, myLogs){
   const days = new Date(year, month, 0).getDate();
   const firstDOW = (new Date(year, month-1, 1).getDay()+6)%7;   // Mon=0
-  const byDay={};              // day -> [{workouts:[...], id}]
+  const byDay={};              // day -> [{workouts:[...], id, note}]
   const iconByDay={};          // day -> primary icon id
   (myLogs||[]).forEach(l=>{
     if(!l||!l.day) return;
     const ws=Array.isArray(l.workouts)?l.workouts:(l.workout?[l.workout]:[]);
-    (byDay[l.day]||(byDay[l.day]=[])).push({workouts:ws, id:l.id});
+    // `note` rides along in this projection: the day-detail sheet renders from
+    // byDay, not from allLogs, so anything omitted here is invisible even though
+    // it exists on the log. (Muscle groups were dropped exactly this way.)
+    (byDay[l.day]||(byDay[l.day]=[])).push({workouts:ws, id:l.id, note:l.note||null});
     if(!iconByDay[l.day] && ws.length) iconByDay[l.day]=mirIconOf(ws[0]);
   });
   const loggedDays=Object.keys(byDay).map(Number);
@@ -1882,8 +1885,14 @@ function mirMonthDesc(month, year, readonly, myLogs){
 }
 
 // The current (active season) month, built from in-memory allLogs (my logs).
+// NOTE: this is the THIRD place a log gets projected into the calendar shape
+// (the other two are in _mirLoadMonthLogsInner). Any field the day-detail sheet
+// needs has to be added to all three or it silently vanishes on one path only —
+// which is exactly how the muscle-group note went missing on the current month
+// while working on past months.
 function mirCurrentDesc(){
-  const myLogs=(allLogs||[]).filter(l=>l.player===me.name).map(l=>({day:l.day, workouts:l.workouts||(l.workout?[l.workout]:[]), id:l.id}));
+  const myLogs=(allLogs||[]).filter(l=>l.player===me.name)
+    .map(l=>({day:l.day, workouts:l.workouts||(l.workout?[l.workout]:[]), id:l.id, note:l.note||null}));
   return mirMonthDesc(season.month, season.year, false, myLogs);
 }
 
@@ -1906,7 +1915,7 @@ async function _mirLoadMonthLogsInner(month, year, key){
       .where('groupCode','==',groupCode).where('year','==',year)
       .where('month','==',month).where('player','==',me.name).get({source:'default'});
     out=snap.docs.map(d=>({id:d.id,...d.data()})).filter(l=>!l.voided)
-       .map(l=>({day:l.day, workouts:l.workouts||(l.workout?[l.workout]:[]), id:l.id}));
+       .map(l=>({day:l.day, workouts:l.workouts||(l.workout?[l.workout]:[]), id:l.id, note:l.note||null}));
     window._mirReadCount=(window._mirReadCount||0)+snap.size;
   }catch(e){
     logErr('mirLoadMonthLogs('+month+'/'+year+')', e);
@@ -1914,7 +1923,7 @@ async function _mirLoadMonthLogsInner(month, year, key){
       const snap=await db.collection('logs').where('groupCode','==',groupCode)
         .where('year','==',year).where('month','==',month).get();
       out=snap.docs.map(d=>({id:d.id,...d.data()})).filter(l=>!l.voided && l.player===me.name)
-         .map(l=>({day:l.day, workouts:l.workouts||(l.workout?[l.workout]:[]), id:l.id}));
+         .map(l=>({day:l.day, workouts:l.workouts||(l.workout?[l.workout]:[]), id:l.id, note:l.note||null}));
       window._mirReadCount=(window._mirReadCount||0)+snap.size;
     }catch(e2){ logErr('mirLoadMonthLogs fallback', e2); }
   }
@@ -2196,7 +2205,7 @@ function mirOpenDayDetail(d){
   document.getElementById('mirSheetSub').textContent=`${DOW[dt.getDay()]} · ${logs.reduce((n,l)=>n+l.workouts.length,0)} logged`;
   // One row PER LOG (Remove tombstones the whole log — Forge logs are atomic);
   // a multi-workout log shows its workouts joined so nothing is hidden.
-  const rows=logs.map(l=>`<div class="ddrow">${mirIco(mirIconOf(l.workouts[0]||''),'color:'+mirColOf(l.workouts[0]||''))}<span class="ddw">${esc((l.workouts||[]).join(' · ')||'Workout')}</span><span class="ddvoid" onclick="mirVoidLog('${l.id}')">Remove</span></div>`).join('');
+  const rows=logs.map(l=>`<div class="ddrow">${mirIco(mirIconOf(l.workouts[0]||''),'color:'+mirColOf(l.workouts[0]||''))}<span class="ddw">${esc((l.workouts||[]).join(' · ')||'Workout')}${l.note?`<span class="ddnote">${esc(l.note)}</span>`:''}</span><span class="ddvoid" onclick="mirVoidLog('${l.id}')">Remove</span></div>`).join('');
   document.getElementById('mirSheetBody').innerHTML=`<div class="mir-daydetail">${rows}<button class="btn btn-surface mir-daddbtn" onclick="mirOpenLogSheet(${d})">+ Add another</button></div>`;
   mirOpenSheet();
 }
@@ -2223,11 +2232,69 @@ function mirLogQuick(w){
     mirOpenKmStep(w);
     return;
   }
+  // MUSCLE-GROUP STEP — same reasoning as the distance step: a note has to be
+  // captured NOW because the logs update rule permits only voided/voidedBy/
+  // voidedAt, so nothing can be attached to a log after it exists.
+  // Purely personal: never scored, never on a leaderboard. Opt-out is
+  // per-device, so silencing it can't affect anyone else.
+  if(window.isLiftWorkout && isLiftWorkout(w) && liftPromptEnabled()){
+    mirOpenLiftStep(w);
+    return;
+  }
   mirCloseSheet();
-  selDay=_mirPendingDay; selW=[w]; selKm=null;
+  selDay=_mirPendingDay; selW=[w]; selKm=null; selNote=null;
   window._mirrorLogMode=true;
   submitLog();
 }
+
+// ── MUSCLE-GROUP STEP ───────────────────────────────────────────────────────
+// Deliberately mirrors mirOpenKmStep: same sheet, same chip-then-confirm shape,
+// same prominent skip. A second pattern for a second optional detail would just
+// be two things to learn.
+let _liftPicked = [];
+function mirOpenLiftStep(w){
+  _liftPicked = [];
+  document.getElementById('mirSheetTitle').textContent='What did you train?';
+  document.getElementById('mirSheetSub').textContent=
+    esc(w)+' · optional, and just for you — it changes nothing on the board';
+  document.getElementById('mirSheetBody').innerHTML=
+    `<div class="mir-lift">
+       <div class="lf-chips">
+         ${MUSCLE_GROUPS.map(m=>`<button class="lf-chip" data-m="${escForInlineJsAttr(m)}"
+              onclick="mirLiftToggle(this,'${escForInlineJsAttr(m)}')">${esc(m)}</button>`).join('')}
+       </div>
+       <input type="text" id="mirLiftInp" maxlength="60" placeholder="Anything else? e.g. deadlifts, PB attempt"
+              autocomplete="off" onkeydown="if(event.key==='Enter')mirLiftConfirm('${escForInlineJsAttr(w)}')">
+       <button class="btn btn-gold lf-go" onclick="mirLiftConfirm('${escForInlineJsAttr(w)}')">Log it</button>
+       <div class="lf-skip" onclick="mirLiftSkip('${escForInlineJsAttr(w)}')">Skip — just log the workout</div>
+       <div class="lf-never" onclick="mirLiftNever('${escForInlineJsAttr(w)}')">Don't ask me this again</div>
+     </div>`;
+  mirOpenSheet();
+}
+function mirLiftToggle(el, m){
+  const i=_liftPicked.indexOf(m);
+  if(i>=0){ _liftPicked.splice(i,1); el.classList.remove('on'); }
+  else { _liftPicked.push(m); el.classList.add('on'); }
+  try{ if(navigator.vibrate) navigator.vibrate(8); }catch(e){}
+}
+function _mirLiftGo(w, note){
+  mirCloseSheet();
+  selDay=_mirPendingDay; selW=[w]; selKm=null;
+  selNote = note || null;
+  window._mirrorLogMode=true;
+  submitLog();
+}
+function mirLiftConfirm(w){
+  const inp=document.getElementById('mirLiftInp');
+  const free=(inp && inp.value || '').trim().slice(0,60);
+  // Same character guard the custom-workout field uses — this string ends up in
+  // innerHTML on the day detail and the feed.
+  if(/[<>"'\\]/.test(free)){ toast('Notes can\'t contain these characters: < > " \' \\','error'); return; }
+  const parts=[..._liftPicked]; if(free) parts.push(free);
+  _mirLiftGo(w, parts.length ? parts.join(', ').slice(0,90) : null);
+}
+function mirLiftSkip(w){ _mirLiftGo(w, null); }
+function mirLiftNever(w){ setLiftPrompt(false); toast('Won\'t ask again on this device.'); _mirLiftGo(w, null); }
 
 // Season distance target, or null when the group hasn't opted in. Single source
 // of truth for every km surface, so one unset check disables the whole feature.
@@ -2821,7 +2888,7 @@ function mirShowReport(rw){
 function mirCloseReport(){
   const rep=document.getElementById('mirReport');
   rep.classList.remove('on'); rep.style.transform='';
-  selDay=null; selW=[]; selKm=null; window._mirrorLogMode=false;
+  selDay=null; selW=[]; selKm=null; selNote=null; window._mirrorLogMode=false;
   try{ renderMirrorHome(); }catch(e){ logErr('mirCloseReport render', e); }
 }
 // swipe-down dismiss on the report
@@ -3624,7 +3691,10 @@ async function submitLog(){
         // Distance, only when actually captured. Spread-conditional so the vast
         // majority of logs carry NO km field at all — every reader treats a
         // missing km as zero, and the field count stays inside the rules' 16.
-        ...(Number.isFinite(Number(selKm)) && Number(selKm)>0 ? {km:Number(selKm)} : {})
+        ...(Number.isFinite(Number(selKm)) && Number(selKm)>0 ? {km:Number(selKm)} : {}),
+        // Personal note (muscle groups on a lift). Never scored, never ranked —
+        // it exists so the logger can look back and see what they actually did.
+        ...(selNote ? {note:String(selNote).slice(0,90)} : {})
       });
     });
 
