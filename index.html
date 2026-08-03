@@ -2252,13 +2252,42 @@ function mirLogQuick(w){
 // same prominent skip. A second pattern for a second optional detail would just
 // be two things to learn.
 let _liftPicked = [];
+// Your last few noted lifts, most recent first. This is the whole point of
+// recording muscle groups: the information is worth something at the moment you
+// decide what to train next, not buried in a past day's detail sheet. Read from
+// allLogs (current month, already in memory) so it costs nothing.
+function _recentLiftNotes(limit){
+  const out=[];
+  const today=new Date().getDate();
+  (allLogs||[])
+    .filter(l=>l && l.player===me.name && l.note && typeof l.day==='number'
+                && window.isLiftWorkout && (l.workouts||[]).some(w=>isLiftWorkout(w)))
+    .sort((a,b)=>b.day-a.day)
+    .forEach(l=>{
+      if(out.length>=limit) return;
+      if(out.some(o=>o.day===l.day)) return;              // one line per day
+      const ago = (season.month===new Date().getMonth()+1 && season.year===new Date().getFullYear())
+        ? (l.day===today ? 'today' : (today-l.day===1 ? 'yesterday' : (today-l.day)+' days ago'))
+        : (MIR_MONTHNAMES[season.month-1]+' '+l.day);
+      out.push({day:l.day, note:l.note, ago});
+    });
+  return out;
+}
+
 function mirOpenLiftStep(w){
   _liftPicked = [];
+  const recent=_recentLiftNotes(3);
+  const history = recent.length
+    ? `<div class="lf-hist"><div class="lf-histh">LAST TIME</div>`+
+      recent.map(r=>`<div class="lf-histrow"><span class="lf-when">${esc(r.ago)}</span><span class="lf-what">${esc(r.note)}</span></div>`).join('')+
+      `</div>`
+    : '';
   document.getElementById('mirSheetTitle').textContent='What did you train?';
   document.getElementById('mirSheetSub').textContent=
     esc(w)+' · optional, and just for you — it changes nothing on the board';
   document.getElementById('mirSheetBody').innerHTML=
     `<div class="mir-lift">
+       ${history}
        <div class="lf-chips">
          ${MUSCLE_GROUPS.map(m=>`<button class="lf-chip" data-m="${escForInlineJsAttr(m)}"
               onclick="mirLiftToggle(this,'${escForInlineJsAttr(m)}')">${esc(m)}</button>`).join('')}
