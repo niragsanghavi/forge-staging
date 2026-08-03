@@ -5130,18 +5130,34 @@ const IST_OFFSET_MS = 5.5*60*60*1000;
 // Shared eligibility check for performRollover — checked once before the
 // snapshot writer runs, and again inside the transaction (race guard).
 function checkRolloverEligibility(seasonData){
-  const startedAtMs = seasonData.startedAt?.toMillis ? seasonData.startedAt.toMillis() : ((seasonData.startedAt?.seconds||0)*1000);
-  const ageDays = (Date.now()-startedAtMs)/86400000;
-  if(ageDays < 20) return {ok:false, reason:'TOO_YOUNG', ageDays};
+  // ORDER MATTERS. "Has this season's calendar month ended" is the only real
+  // question; age is not a veto over it.
+  //
+  // FIXED 3 Aug 2026 — this used to refuse any season younger than 20 days
+  // BEFORE asking whether its month was over, which bricked a whole class of
+  // group. A group created on, say, 20 August has a 12-day-old season on 1
+  // September, so rollover was refused as TOO_YOUNG; the season stayed on
+  // month=8 while the server clock said 9; and because the logs rule requires a
+  // log's month to equal the SERVER month, every single write from that group
+  // was then rejected with permission-denied. Silent, total logging outage for
+  // anyone whose group was created after roughly the 12th. Verified live on
+  // staging, whose 21-July fixture season was stuck at exactly this.
+  //
   // IST for the same reason as the 6am gate above: "has the season's month
   // ended" is a global fact about the season, not about the viewer's timezone.
-  // On device-local time a client far enough ahead answers yes while it is
-  // still the 31st in India.
   const now = new Date(Date.now() + IST_OFFSET_MS);
   const nowY = now.getUTCFullYear(), nowM = now.getUTCMonth()+1;
   const seasonEnded = (seasonData.year<nowY) || (seasonData.year===nowY && seasonData.month<nowM);
   if(!seasonEnded) return {ok:false, reason:'NOT_YET_DUE'};
-  return {ok:true};
+
+  // The month IS over, so this season must roll however young it is. The only
+  // remaining sanity check is a startedAt in the FUTURE, which means a corrupt
+  // or clock-skewed season doc rather than a legitimately new one.
+  const startedAtMs = seasonData.startedAt?.toMillis ? seasonData.startedAt.toMillis() : ((seasonData.startedAt?.seconds||0)*1000);
+  const ageDays = (Date.now()-startedAtMs)/86400000;
+  if(startedAtMs && ageDays < -1) return {ok:false, reason:'FUTURE_START', ageDays};
+
+  return {ok:true, ageDays};
 }
 
 // Opportunistic trigger: called when a client loads a group (loadGroup).
@@ -5184,7 +5200,12 @@ async function manualRolloverRepair(code){
     return;
   }
   const messages = {
-    TOO_YOUNG: `This season is only ${Math.floor(result.ageDays)} day(s) old — rollover requires at least 20.`,
+    // TOO_YOUNG retired 3 Aug 2026 — a season's age is no longer a reason to
+    // refuse rollover once its month has ended (it bricked logging for any
+    // group created after ~the 12th). Kept in the map so an older client's
+    // result code still renders something sensible rather than "undefined".
+    TOO_YOUNG: 'This season is young, but its month has ended — rolling over is correct. Retry.',
+    FUTURE_START: 'This season claims to start in the future — check the season doc before rolling over.',
     NOT_YET_DUE: 'This season\'s month hasn\'t ended yet.',
     TARGET_SEASON_EXISTS: 'The next season already exists for this group — nothing to do.',
     GROUP_MISSING: 'Group not found.',
