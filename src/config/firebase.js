@@ -98,6 +98,75 @@ window.resetFirestoreState = function(reason){
   sweep.finally(() => { location.reload(); });
 };
 
+// ── HARD DEVICE RESET ────────────────────────────────────────────────────────
+// resetFirestoreState above is the gentle one: it clears Firebase's local
+// databases and KEEPS you logged in. That fixes a wedged live channel, and it
+// is the right first move — which is why the nav's ↻ does exactly that.
+//
+// This is the one for the state it cannot fix. Dhwani hit it: closed every tab,
+// came back, and the app refused her login. When the stored session pointer
+// itself is stale — pointing at a player row or a device token the server no
+// longer agrees with — no amount of clearing Firebase's cache helps, because
+// the bad data is Forge's own localStorage. The only fix was someone manually
+// resetting her, which is not a support model.
+//
+// So this wipes everything this origin holds: Firebase's IndexedDB, every
+// forge_* key, sessionStorage, the service worker and its caches (a stale
+// cached index.html is its own version of the same bug). It is a factory reset
+// for the device, not the account — nothing server-side is touched, no log,
+// score or streak is at risk. The cost is re-entering the group code and PIN.
+//
+// Deliberately lives HERE, in firebase.js, next to its gentler sibling and
+// outside index.html's giant script block: if that block ever throws during
+// boot, this function is still defined and the recovery screen can still call
+// it. A recovery path that needs the broken thing to work is not a recovery
+// path.
+window.hardResetDevice = function(reason){
+  try { console.warn('[Forge] HARD device reset. Reason:', reason); } catch(e){}
+  const jobs = [];
+  // 1. every IndexedDB this origin owns (Firebase auth, heartbeat, Firestore cache)
+  const purge = name => new Promise(resolve => {
+    let settled = false; const done = () => { if(!settled){ settled = true; resolve(); } };
+    try { const req = indexedDB.deleteDatabase(name); req.onsuccess=done; req.onerror=done; req.onblocked=done; }
+    catch(e){ done(); }
+    setTimeout(done, 600);
+  });
+  jobs.push((async () => {
+    const names = new Set([
+      'firebaseLocalStorageDb', 'firebase-heartbeat-database',
+      `firestore/[DEFAULT]/${FB_CFG.projectId}/main`
+    ]);
+    try {
+      if (indexedDB.databases) (await indexedDB.databases()).forEach(d => { if(d.name) names.add(d.name); });
+    } catch(e){ /* older Safari has no databases() — the known list still covers Firebase */ }
+    await Promise.all([...names].map(purge));
+  })());
+  // 2. Forge's own stored state — the part resetFirestoreState deliberately spares
+  try {
+    Object.keys(localStorage)
+      .filter(k => /^forge[_-]/i.test(k) || k === 'forge_session')
+      .forEach(k => { try { localStorage.removeItem(k); } catch(e){} });
+  } catch(e){}
+  try { sessionStorage.clear(); } catch(e){}
+  // 3. the service worker and its caches — a stale cached shell is the third
+  //    way this failure shows up, and it survives both of the steps above
+  jobs.push((async () => {
+    try { if(window.caches) await Promise.all((await caches.keys()).map(k => caches.delete(k))); } catch(e){}
+    try {
+      if(navigator.serviceWorker){
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.unregister().catch(()=>{})));
+      }
+    } catch(e){}
+  })());
+  // Cache-busted reload so the very next request cannot be served from a
+  // memory/HTTP cache that outlived everything we just deleted.
+  Promise.all(jobs).catch(()=>{}).finally(() => {
+    try { location.replace(location.pathname + '?fresh=' + Date.now()); }
+    catch(e){ location.reload(); }
+  });
+};
+
 // ── LIVE CHANNEL ERROR DETECTOR ──────────────────────────────────────────────
 // Rolling-window burst detector: a single Firestore hiccup is normal network
 // noise; TWO OR MORE distinct channels failing within 8s is the signature of

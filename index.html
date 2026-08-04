@@ -175,6 +175,10 @@
       <div id="codeError" class="warn-box warn-red hidden">Group not found. Check your code.</div>
       <button class="btn btn-gold" onclick="verifyCode()">Continue</button>
       <div id="joinCancel" class="hidden" style="margin-top:12px;text-align:center"><span onclick="cancelJoin()" style="font-size:12px;color:var(--gold);cursor:pointer">← Back to my group</span></div>
+      <!-- The escape hatch, ON THE FIRST SCREEN. The nav's ↻ only exists once
+           you're already inside, which is no use to someone the login is
+           refusing — that's exactly the person who needs it. -->
+      <div class="ob-fix"><span onclick="confirmHardReset()">Stuck on this screen? Clear this device and start fresh</span></div>
     </div>
     <div class="ob-step" id="ob-s2">
       <div class="ob-title">Who are you?</div>
@@ -206,6 +210,9 @@
       <button class="btn btn-gold" style="margin-top:10px" onclick="submitPinEntry()">Continue</button>
       <div style="margin-top:14px;font-size:11px;color:var(--muted);text-align:center">Forgot your PIN? Message your group admin to reset it.</div>
       <div style="margin-top:8px;text-align:center"><span onclick="backToPicker()" style="font-size:12px;color:var(--gold);cursor:pointer">← Not you? Pick a different name</span></div>
+      <!-- Second placement: a PIN that "should work" but doesn't is the other
+           face of the same stale-session bug. -->
+      <div class="ob-fix"><span onclick="confirmHardReset()">PIN not being accepted? Clear this device and start fresh</span></div>
     </div>
   </div>
 </div>
@@ -1020,6 +1027,27 @@ function confirmConnReset(){
   }
 }
 
+// The heavier hammer, offered on the login screens (see hardResetDevice in
+// firebase.js for what it actually clears and why it has to be this thorough).
+// Worded around the only thing the user cares about — is my stuff safe — and
+// stating the actual cost up front, because a "fix it" button that silently
+// logs you out is how people stop trusting the fix.
+function confirmHardReset(){
+  if(confirm(
+    'Clear this device and start fresh?\n\n'+
+    'This wipes Forge’s saved data ON THIS PHONE ONLY — the stale login that’s blocking you.\n\n'+
+    'Your workouts, points and streak are safe on the server and come straight back.\n\n'+
+    'You’ll need your group code and PIN to sign back in.'
+  )){
+    try{ if(typeof hardResetDevice==='function') return hardResetDevice('login-screen-manual'); }
+    catch(e){ logErr('confirmHardReset', e); }
+    // firebase.js failed to load at all — do what we can inline rather than
+    // leaving the button dead on exactly the broken boot it exists for.
+    try{ Object.keys(localStorage).filter(k=>/^forge[_-]/i.test(k)).forEach(k=>localStorage.removeItem(k)); }catch(e){}
+    location.reload();
+  }
+}
+
 // ── BOOT ──────────────────────────────────────────────────────────────────
 window.onload = () => {
   // Ask the browser to keep our storage (the localStorage session + Firebase's
@@ -1588,11 +1616,17 @@ function launchApp(){
 // would also throw that away, and guessing which trade people want is worse
 // than asking them.
 //
-// Writes into the same create-only `survey` collection the standalone survey
-// page uses (read:false, update:false at the rules level — answers go in and
-// nobody, including a signed-in client, can read them back out). Answering
-// retires the prompt permanently on this device; "Not now" defers it three
-// days, because a snooze that never returns is just a slower dismiss.
+// OFF BY DEFAULT, and it stays off until a superadmin turns it on for a group
+// (Manage Groups → Ask survey). Interrupting people is a decision with a cost,
+// so it's Nirag's to time, not a thing that fires the moment the code ships.
+// The switch is `surveyAsk` on the GROUP doc, so one group can be asked as a
+// pilot before the rest — and turning it off stops it mid-flight.
+//
+// Answers go into the same create-only `survey` collection the standalone
+// survey page uses (read:false, update:false at the rules level — they go in
+// and no client, signed in or not, can read them back). Answering retires the
+// prompt permanently on this device; "Not now" defers it three days, because a
+// snooze that never returns is just a slower dismiss.
 const SURVEY_ID='wa_vs_forge';
 const SURVEY_SNOOZE_DAYS=3;
 function _surveyState(){
@@ -1605,6 +1639,9 @@ function maybeAskSurvey(){
   if(!window.me || !window.groupCode) return;
   if(window.fromSuper) return;                       // super-admin isn't the audience
   if(window.IS_DEMO || (groupData && groupData.demo===true)) return;
+  // The switch. No superadmin has turned this group's survey on → nobody is
+  // interrupted, and this function costs one property read.
+  if(!groupData || groupData.surveyAsk !== SURVEY_ID) return;
   const st=_surveyState();
   if(st && st.answered) return;
   if(st && st.snoozedAt && (Date.now()-st.snoozedAt) < SURVEY_SNOOZE_DAYS*86400000) return;
@@ -5261,8 +5298,31 @@ async function loadSuperAdmin(){
         <div style="display:flex;gap:8px;margin-top:10px">
           <button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="event.stopPropagation();openEditGroup('${g.code}')">⚙ Manage</button>
           <button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="event.stopPropagation();manualRolloverRepair('${g.code}')">↻ Roll Over</button>
+          <button class="btn ${g.surveyAsk?'btn-gold':'btn-surface'} btn-sm" style="flex:1;margin:0"
+            title="One-question survey on next open"
+            onclick="event.stopPropagation();toggleSurveyAsk('${g.code}',${g.surveyAsk?'false':'true'})">${g.surveyAsk?'✓ Asking':'Ask survey'}</button>
         </div>
       </div>`).join('');
+}
+
+// ── SURVEY SWITCH (superadmin) ──────────────────────────────────────────────
+// Turns the one-question modal on for a group. Nobody is interrupted until this
+// is flipped, and flipping it back stops it immediately for anyone who hasn't
+// answered yet — a member who already answered stays retired either way, so
+// toggling can never re-ask the same person.
+//
+// Per-group on purpose: pilot it on one group, read the answers, then decide
+// whether to run it everywhere. Takes effect the next time each member opens
+// the app (the flag rides on the group doc they already load at login, so it
+// costs no extra read).
+async function toggleSurveyAsk(code, on){
+  try{
+    await db.collection('groups').doc(code).set(
+      { surveyAsk: on ? SURVEY_ID : firebase.firestore.FieldValue.delete() }, {merge:true});
+    toast(on ? 'Survey on for this group — members see it next time they open Forge.'
+             : 'Survey off. Nobody new will be asked.', 'success');
+    loadSuperAdmin();
+  }catch(e){ logErr('toggleSurveyAsk '+code, e); toast('Could not change the survey setting.','error'); }
 }
 
 // (Removed: renderSuperDashboard — dead code since the SuperDash cockpit
