@@ -46,10 +46,38 @@ service cloud.firestore {
         && ( !request.resource.data.diff(resource.data).affectedKeys().hasAny(['globalStats']) || validGlobalStats() );
       allow delete: if false;
 
+      // SEASON DOC. The roster lives here, and a live probe (1 Aug 2026)
+      // replaced a nine-person roster with a single row in one PATCH — teams,
+      // roles and PIN material gone in a single request.
+      //
+      // It cannot be locked to an admin under anonymous auth: EVERY member's
+      // client writes this array through normal use (consent toggle, PIN set,
+      // identity self-heal, role save), and rules have no way to tell those
+      // clients apart. What it can be is RATCHETED. A grep of the app finds no
+      // remove-player path at all — no legitimate flow has ever shrunk a
+      // roster — so a write that drops more than one entry is by definition not
+      // the app. That turns "wipe the group" into "chip away one row per
+      // request", which is loud, slow, and recoverable.
+      //
+      // month/year are the season's identity and are frozen after create.
+      // Rollover always writes a NEW season doc (performRollover bails on
+      // TARGET_SEASON_EXISTS before any write), so nothing legitimate ever
+      // rewrites them.
+      //
+      // HONEST LIMIT: this does not stop a member corrupting one roster row at
+      // a time, or an outsider doing the same. Real ownership needs stable
+      // per-person identity — the Google Sign-In work in AUTH_DESIGN_FINAL.md.
+      // This is a ratchet, not a lock.
       match /seasons/{sid} {
         allow read:   if isAuthed();
         allow create: if isAuthed();
-        allow update: if isAuthed();
+        allow update: if isAuthed()
+          && ( !('roster' in request.resource.data)
+               || ( request.resource.data.roster is list
+                    && request.resource.data.roster.size() <= 200
+                    && request.resource.data.roster.size() >= resource.data.get('roster', []).size() - 1 ) )
+          && request.resource.data.get('month', 0) == resource.data.get('month', 0)
+          && request.resource.data.get('year', 0)  == resource.data.get('year', 0);
         allow delete: if false;
 
         match /twists/{twistId} {
@@ -294,9 +322,50 @@ service cloud.firestore {
     // marketing page reads this via plain REST fetch with NO Firebase auth,
     // so read must be public. Writes stay behind the existing authed posture
     // (the app's fire-and-forget increments + the seeding script).
+    // ── PUBLIC COUNTER (stats/global) ─────────────────────────────────────
+    // The only world-READABLE doc in the database — goforge.in's landing page
+    // reads it without signing in. It was also world-WRITABLE by any signed-in
+    // client, and under anonymous auth "signed in" means anybody: a live probe
+    // (1 Aug 2026) overwrote it in a single request, so the public number was
+    // whatever the last stranger felt like typing.
+    //
+    // The app only ever touches this through bumpGlobalStat(): a FieldValue
+    // increment of ±1 (a new user, a voided log) or +targets.length for a
+    // multi-group broadcast (realistically ≤5), plus updatedAt as a
+    // serverTimestamp. The rule is shaped around exactly that, so nothing else
+    // fits through:
+    //   · only the `global` doc, only those three keys
+    //   · updatedAt must equal request.time — i.e. genuinely serverTimestamp()
+    //   · a counter may move at most 10 per write, in either direction
+    //   · counters stay non-negative and finite
+    //
+    // HONEST LIMIT: this does not stop a patient attacker walking a counter up
+    // ten at a time. That's a rate-limit problem (App Check), not a rules one.
+    // It stops the one-request wipe, which is the attack that was demonstrated.
+    function statStep(k) {
+      return request.resource.data.get(k, 0) is int
+        && request.resource.data.get(k, 0) >= 0
+        && request.resource.data.get(k, 0) <= 10000000
+        && request.resource.data.get(k, 0) >= resource.data.get(k, 0) - 10
+        && request.resource.data.get(k, 0) <= resource.data.get(k, 0) + 10;
+    }
+    match /stats/global {
+      allow read:   if true;
+      allow create: if isAuthed()
+        && request.resource.data.keys().hasOnly(['totalLogs','totalUsers','updatedAt'])
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isAuthed()
+        && request.resource.data.keys().hasOnly(['totalLogs','totalUsers','updatedAt'])
+        && request.resource.data.updatedAt == request.time
+        && statStep('totalLogs')
+        && statStep('totalUsers');
+      allow delete: if false;
+    }
+    // Every other stats/* doc: readable (nothing sensitive has ever lived
+    // there) but not writable. The app writes exactly one counter doc.
     match /stats/{docId} {
       allow read:  if true;
-      allow write: if isAuthed();
+      allow write: if false;
     }
 
     // ── ANONYMOUS SURVEY (goforge.in/survey) ──────────────────────────────

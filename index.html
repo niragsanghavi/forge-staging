@@ -321,6 +321,22 @@
       <div id="mirMix"></div>
       <div class="mix-rec" id="mirMixRec"></div>
     </div>
+
+    <!-- GYM TRACKER. Stays display:none until this person has actually logged a
+         lift, so walkers, swimmers and padel players never see an empty card
+         about a thing they don't do. Same month/all-time shape as Your mix, and
+         it reads the SAME two sources (allLogs in memory, _mirMineAll cache) —
+         so the all-time view costs zero extra reads once the mix card has been
+         opened once, and one shared fetch if it hasn't. -->
+    <div class="card" id="mirLiftCard" style="display:none">
+      <div class="row" style="margin-bottom:10px">
+        <div class="card-title" style="margin:0;display:flex;align-items:center;gap:6px"><svg class="mir-ico" viewBox="0 0 24 24" style="width:15px;height:15px"><use href="#g-gym"/></svg>Gym log</div>
+        <div class="mix-tgl"><button type="button" id="lfTglM" class="on" onclick="mirSetLiftMode('month')">This month</button><button type="button" id="lfTglA" onclick="mirSetLiftMode('all')">All-time</button></div>
+      </div>
+      <div class="mix-stat" id="mirLiftStat"></div>
+      <div id="mirLiftBody"></div>
+      <div class="lf-nudge" id="mirLiftNudge"></div>
+    </div>
   </div>
 
   <!-- LEADERBOARD -->
@@ -465,10 +481,26 @@
       <div class="big">LOGGED</div>
       <div class="rwhat" id="mirRWhat"></div>
       <div class="mir-rcard" id="mirRRank" style="display:none"></div>
+      <div class="mir-rcard" id="mirRCross" style="display:none"></div>
       <div class="mir-rcard" id="mirRStreak"></div>
       <div class="mir-rcard" id="mirRWitness" style="display:none"></div>
       <button class="mir-closebtn" onclick="mirCloseReport()">Close</button>
       <div class="mir-staynote">swipe down or close — no timer</div>
+    </div>
+  </div>
+
+  <!-- ONE-QUESTION SURVEY. Hidden until maybeAskSurvey opens it; see there for
+       why it asks, and why answering retires it permanently. -->
+  <div class="sv-scrim" id="surveyModal">
+    <div class="sv-box">
+      <div class="sv-k">ONE QUESTION</div>
+      <div class="sv-q">Right now you post the photo in WhatsApp and log it here.</div>
+      <div class="sv-sub">Would it be better if all of it happened inside Forge — or is the WhatsApp chat worth keeping for the community feeling?</div>
+      <button class="sv-opt" onclick="surveyPick('all_forge')"><b>Move it all into Forge</b><span>One place. Photos, logs, the lot.</span></button>
+      <button class="sv-opt" onclick="surveyPick('keep_whatsapp')"><b>Keep the WhatsApp chat</b><span>Forge for logging, WhatsApp for the talking.</span></button>
+      <button class="sv-opt" onclick="surveyPick('both')"><b>Both — post here, chat there</b><span>Happy to log in Forge, as long as the group chat stays.</span></button>
+      <input type="text" id="surveyText" maxlength="300" placeholder="Anything you'd add? (optional)" autocomplete="off">
+      <div class="sv-later" onclick="surveyLater()">Not now</div>
     </div>
   </div>
 
@@ -1545,6 +1577,63 @@ function launchApp(){
   const fgi=document.getElementById('foundryGoalInput');
   if(fgi) fgi.placeholder=season.foundryGoal?'Current: '+season.foundryGoal+' (edit to change)':'e.g. 200 (auto if blank)';
   subscribe();
+  // One question, once, after the app has settled. Never on the login or join
+  // screens, and never in front of a first-run user who has no opinion yet.
+  setTimeout(()=>{ try{ maybeAskSurvey(); }catch(e){ logErr('maybeAskSurvey', e); } }, 1400);
+}
+
+// ── ONE-QUESTION SURVEY ─────────────────────────────────────────────────────
+// WhatsApp is where the group actually talks — the announcements land there and
+// get answered there. Moving all of that into Forge would help it scale and
+// would also throw that away, and guessing which trade people want is worse
+// than asking them.
+//
+// Writes into the same create-only `survey` collection the standalone survey
+// page uses (read:false, update:false at the rules level — answers go in and
+// nobody, including a signed-in client, can read them back out). Answering
+// retires the prompt permanently on this device; "Not now" defers it three
+// days, because a snooze that never returns is just a slower dismiss.
+const SURVEY_ID='wa_vs_forge';
+const SURVEY_SNOOZE_DAYS=3;
+function _surveyState(){
+  try{ return JSON.parse(localStorage.getItem('forge_survey_'+SURVEY_ID)||'null'); }catch(e){ return null; }
+}
+function _surveySet(v){
+  try{ localStorage.setItem('forge_survey_'+SURVEY_ID, JSON.stringify(v)); }catch(e){}
+}
+function maybeAskSurvey(){
+  if(!window.me || !window.groupCode) return;
+  if(window.fromSuper) return;                       // super-admin isn't the audience
+  if(window.IS_DEMO || (groupData && groupData.demo===true)) return;
+  const st=_surveyState();
+  if(st && st.answered) return;
+  if(st && st.snoozedAt && (Date.now()-st.snoozedAt) < SURVEY_SNOOZE_DAYS*86400000) return;
+  const el=document.getElementById('surveyModal'); if(!el) return;
+  el.classList.add('on');
+}
+function surveyPick(choice){
+  const box=document.getElementById('surveyModal');
+  const free=(document.getElementById('surveyText')||{}).value||'';
+  const note=String(free).trim().slice(0,300);
+  _surveySet({answered:true, at:Date.now(), choice});
+  // Fire-and-forget. The answer is already recorded on this device, so a failed
+  // write costs one data point and never a broken close.
+  try{
+    db.collection('survey').add({
+      groupCode: groupCode||null,
+      version: 'inapp-'+SURVEY_ID,
+      answers: { choice, note: note||null, player: (me&&me.name)||null },
+      userId: (me&&me.userId)||null,
+      completedAt: new Date().toISOString()
+    }).catch(e=>logErr('survey write', e));
+  }catch(e){ logErr('survey write', e); }
+  if(box) box.classList.remove('on');
+  toast('Noted — thank you.','success');
+}
+function surveyLater(){
+  _surveySet({answered:false, snoozedAt:Date.now()});
+  const box=document.getElementById('surveyModal');
+  if(box) box.classList.remove('on');
 }
 
 // Top row of group chips — tap to switch. Hidden when only one group or in super-admin.
@@ -1584,7 +1673,7 @@ function switchGroup(code){
   setActiveCode(code);
   groupCode = s.code; me = s.player;
   allLogs=[]; bonus30=[]; flags=[]; reactions=[]; activeTwists={}; jackAwards=[]; bets={}; ironPledgeBonuses=[]; twistWindows=[]; adminUnlocked=false; _myGoals=null;
-  ['roleBar','teamStand','indLb','ptsBk','feedList','mirPills','mirCaltrack','mirChart','mirMix','mirCalFoot','mirRecap','mirCaption'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=''; });
+  ['roleBar','teamStand','indLb','ptsBk','feedList','mirPills','mirCaltrack','mirChart','mirMix','mirCalFoot','mirRecap','mirCaption','mirLiftBody','mirLiftStat','mirLiftNudge'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=''; });
   // Mirror: drop the previous group's calendar panels so a switch can't ghost
   // the old group's months (session caches keyed by code are safe to keep).
   _mirMonths=[]; _mirIdx=0; _mirNoMore=false;
@@ -1963,6 +2052,7 @@ function renderMirrorHome(){
   mirRenderChart(sc).then(mirRepaintDerived);
   mirRenderCaption(sc);
   mirRenderMix();
+  try{ mirRenderLift(); }catch(e){ logErr('mirRenderLift', e); }
   // async enrich (fire-and-forget): ranks + best-month
   if(_mirRanks===null) mirLoadRanks();
   if(_mirBestMonth===null) mirLoadBestMonth().then(mirRepaintDerived);
@@ -2185,12 +2275,26 @@ function mirRecent5(){
   if(types.length<5){ for(const w of ['Walk','Gym','Run','Yoga','Cricket']){ if(types.length>=5) break; if(!types.includes(w)) types.push(w); } }
   return types.slice(0,5);
 }
+// Where this log is actually going. The sheet used to name only the active
+// group, which under-sold what the button does: a submit broadcasts to every
+// group you're in that's on the same season. Someone in three groups was told
+// they were logging to one. Named up to two, counted beyond that — the exact
+// membership check (each group's currentSeasonId) happens at submit, so this is
+// the honest upper bound, not a promise.
+function _mirLogTargetLabel(){
+  const mine=(typeof getSessions==='function'?getSessions():[])
+    .filter(s=>s && s.player && s.player.name);
+  if(mine.length<=1) return (groupData && groupData.name) || groupCode;
+  const names=mine.map(s=>s.name||s.code);
+  return names.length===2 ? `${names[0]} and ${names[1]}` : `${names[0]}, ${names[1]} +${names.length-2} more`;
+}
+
 function mirOpenLogSheet(d){
   const dt=new Date(season.year, season.month-1, d);
   const DOW=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const already=(_mirMonths[_mirMonths.length-1].byDay[d]);
   document.getElementById('mirSheetTitle').textContent=already?`Add another to ${MIR_MONTHNAMES[season.month-1]} ${d}?`:(d===new Date().getDate()?'Log today?':`Log for ${MIR_MONTHNAMES[season.month-1]} ${d}?`);
-  document.getElementById('mirSheetSub').textContent=`${DOW[dt.getDay()]}, ${MIR_MONTHNAMES[season.month-1]} ${d} · logging to ${groupData.name||groupCode}`;
+  document.getElementById('mirSheetSub').textContent=`${DOW[dt.getDay()]}, ${MIR_MONTHNAMES[season.month-1]} ${d} · logging to ${_mirLogTargetLabel()}`;
   const picks=mirRecent5().map(w=>`<div class="mir-pick" onclick="mirLogQuick('${escForInlineJsAttr(w)}')">${mirIco(mirIconOf(w),'color:'+mirColOf(w))}<span class="lbl">${esc(w)}</span></div>`).join('');
   document.getElementById('mirSheetBody').innerHTML=`<div class="mir-picks">${picks}</div><div class="mir-else" onclick="mirOpenFull()">Something else? <b>Open full list</b></div>`;
   mirOpenSheet();
@@ -2252,42 +2356,21 @@ function mirLogQuick(w){
 // same prominent skip. A second pattern for a second optional detail would just
 // be two things to learn.
 let _liftPicked = [];
-// Your last few noted lifts, most recent first. This is the whole point of
-// recording muscle groups: the information is worth something at the moment you
-// decide what to train next, not buried in a past day's detail sheet. Read from
-// allLogs (current month, already in memory) so it costs nothing.
-function _recentLiftNotes(limit){
-  const out=[];
-  const today=new Date().getDate();
-  (allLogs||[])
-    .filter(l=>l && l.player===me.name && l.note && typeof l.day==='number'
-                && window.isLiftWorkout && (l.workouts||[]).some(w=>isLiftWorkout(w)))
-    .sort((a,b)=>b.day-a.day)
-    .forEach(l=>{
-      if(out.length>=limit) return;
-      if(out.some(o=>o.day===l.day)) return;              // one line per day
-      const ago = (season.month===new Date().getMonth()+1 && season.year===new Date().getFullYear())
-        ? (l.day===today ? 'today' : (today-l.day===1 ? 'yesterday' : (today-l.day)+' days ago'))
-        : (MIR_MONTHNAMES[season.month-1]+' '+l.day);
-      out.push({day:l.day, note:l.note, ago});
-    });
-  return out;
-}
 
 function mirOpenLiftStep(w){
   _liftPicked = [];
-  const recent=_recentLiftNotes(3);
-  const history = recent.length
-    ? `<div class="lf-hist"><div class="lf-histh">LAST TIME</div>`+
-      recent.map(r=>`<div class="lf-histrow"><span class="lf-when">${esc(r.ago)}</span><span class="lf-what">${esc(r.note)}</span></div>`).join('')+
-      `</div>`
-    : '';
+  // No history here. The first build showed your last three noted sessions
+  // above the chips — right idea, wrong moment: by the time this sheet is open
+  // the workout is already done and the decision it would have informed was
+  // made hours ago. It reads as homework standing between you and the log.
+  // That recall now lives on Home as its own tracker card (mirRenderLift),
+  // where it's something you go and look at rather than something that
+  // ambushes you.
   document.getElementById('mirSheetTitle').textContent='What did you train?';
   document.getElementById('mirSheetSub').textContent=
     esc(w)+' · optional, and just for you — it changes nothing on the board';
   document.getElementById('mirSheetBody').innerHTML=
     `<div class="mir-lift">
-       ${history}
        <div class="lf-chips">
          ${MUSCLE_GROUPS.map(m=>`<button class="lf-chip" data-m="${escForInlineJsAttr(m)}"
               onclick="mirLiftToggle(this,'${escForInlineJsAttr(m)}')">${esc(m)}</button>`).join('')}
@@ -2412,7 +2495,7 @@ function mirOpenFull(){
     </div>`;
   const sec=(label,arr,tag)=>arr.length?`<div class="mir-fsec">${label}</div>`+arr.map(w=>row(w,tag)).join(''):'';
   document.getElementById('mirSheetTitle').textContent=`Log for ${MIR_MONTHNAMES[season.month-1]} ${d}`;
-  document.getElementById('mirSheetSub').textContent=`Pick a workout · logging to ${groupData.name||groupCode}`;
+  document.getElementById('mirSheetSub').textContent=`Pick a workout · logging to ${_mirLogTargetLabel()}`;
   document.getElementById('mirSheetBody').innerHTML=
     `<div class="mir-full">`+
       sec('YOUR WORKOUTS', mine, '')+
@@ -2832,6 +2915,129 @@ function mirRenderMixRec(){
   el.innerHTML=line?`<span class="rec-k">COACH'S NOTE</span> ${esc(line)}`:'';
 }
 
+// ── GYM TRACKER ─────────────────────────────────────────────────────────────
+// The muscle groups people tag at log time are worth something, but not in the
+// two seconds after a workout — they're worth something when you're deciding
+// what to train NEXT. So the recall lives here, on Home, as a card you choose
+// to look at.
+//
+// Same two sources as Your mix and not one read more: MONTH from allLogs
+// (already in memory), ALL-TIME from the _mirMineAll cache the mix card
+// already populates. All-time genuinely starts this month — the note field
+// didn't exist before August 2026 — and the card says so rather than
+// pretending to a history it doesn't have.
+let _mirLiftMode='month';
+function mirSetLiftMode(m){
+  _mirLiftMode=m;
+  const b1=document.getElementById('lfTglM'), b2=document.getElementById('lfTglA');
+  if(b1) b1.classList.toggle('on', m==='month');
+  if(b2) b2.classList.toggle('on', m==='all');
+  mirRenderLift();
+}
+const _dnum=l=>(l.year||0)*10000+(l.month||0)*100+(l.day||0);
+// Whole days between a log's calendar date and today, local. Both sides are
+// floored to midnight so a 9pm session yesterday reads "yesterday", not "0".
+function _daysSince(l){
+  if(!l.year||!l.month||!l.day) return null;
+  const then=new Date(l.year, l.month-1, l.day);
+  const now=new Date(); const today=new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((today-then)/86400000);
+}
+function _agoLabel(n){
+  if(n===null) return '';
+  if(n<=0) return 'today';
+  if(n===1) return 'yesterday';
+  return n+' days ago';
+}
+// A note is a comma-joined list of picked chips plus whatever free text was
+// typed. Chips match MUSCLE_GROUPS exactly (they came from it); anything else
+// is the person's own words and is kept verbatim for the recent-sessions list
+// rather than being forced into a bucket it doesn't belong in.
+function _liftStats(logs){
+  const groups={}; let sessions=0, tagged=0; const recent=[];
+  logs.forEach(l=>{
+    const ws=Array.isArray(l.workouts)?l.workouts:(l.workout?[l.workout]:[]);
+    if(!ws.length || !window.isLiftWorkout || !ws.some(w=>isLiftWorkout(w))) return;
+    sessions++;
+    if(!l.note) return;
+    tagged++;
+    recent.push(l);
+    String(l.note).split(',').map(s=>s.trim()).filter(Boolean).forEach(part=>{
+      const hit=MUSCLE_GROUPS.find(m=>m.toLowerCase()===part.toLowerCase());
+      if(!hit) return;
+      const e=groups[hit]||(groups[hit]={n:0,last:null});
+      e.n++;
+      if(!e.last || _dnum(l)>_dnum(e.last)) e.last=l;
+    });
+  });
+  recent.sort((a,b)=>_dnum(b)-_dnum(a));
+  return {groups, sessions, tagged, recent};
+}
+function mirRenderLift(){
+  const card=document.getElementById('mirLiftCard'); if(!card) return;
+  const body=document.getElementById('mirLiftBody');
+  const statEl=document.getElementById('mirLiftStat');
+  const nudgeEl=document.getElementById('mirLiftNudge');
+  const monthLogs=(allLogs||[]).filter(l=>l.player===me.name && !l.voided);
+  // Visibility is decided on THIS MONTH plus whatever all-time we already hold,
+  // never on a fetch — the card must not cause a read just to discover it has
+  // nothing to say.
+  const everLifted = _liftStats(monthLogs).sessions>0
+                  || (_mirMineAll ? _liftStats(_mirMineAll).sessions>0 : false);
+  if(!everLifted){ card.style.display='none'; return; }
+  card.style.display='';
+
+  let logs;
+  if(_mirLiftMode==='month'){ logs=monthLogs; }
+  else {
+    if(!_mirMineAll){
+      mirLoadMineAll().then(()=>mirRenderLift());
+      body.innerHTML='<div class="tmuted" style="font-size:12px">Adding it all up…</div>';
+      statEl.textContent=''; nudgeEl.innerHTML=''; return;
+    }
+    logs=_mirMineAll;
+  }
+  const r=_liftStats(logs);
+  const scope=_mirLiftMode==='month'?'this month':'all-time';
+  statEl.innerHTML=`<b>${r.sessions}</b> gym session${r.sessions===1?'':'s'} ${scope}`
+    + (r.tagged?` · <b>${r.tagged}</b> tagged`:'')
+    + (_mirLiftMode==='all'?' <span class="mixnote">(tagging started August 2026)</span>':'');
+
+  const entries=Object.keys(r.groups).map(k=>({k, ...r.groups[k]})).sort((a,b)=>b.n-a.n);
+  if(!entries.length){
+    const haveElsewhere = _mirLiftMode==='month' && _mirMineAll && _liftStats(_mirMineAll).tagged>0;
+    body.innerHTML=`<div class="tmuted" style="font-size:12px">${haveElsewhere
+      ? 'Nothing tagged yet this month — All-time still has your history.'
+      : 'Tag the muscle groups next time you log a gym session and they\'ll stack up here.'}</div>`;
+    nudgeEl.innerHTML=''; return;
+  }
+  const max=entries[0].n;
+  // The neglected group is the honest headline: of everything you HAVE trained,
+  // which has waited longest. Never invents a group you've never tagged — that
+  // would be a training plan, and this card isn't one.
+  const coldest=entries.slice().sort((a,b)=>_dnum(a.last)-_dnum(b.last))[0];
+  body.innerHTML=entries.map(e=>{
+    const since=_daysSince(e.last);
+    const cold=entries.length>1 && e.k===coldest.k && since!==null && since>=4;
+    const col=cold?'var(--orange,#ff5a1f)':'var(--gold)';
+    return `<div class="mir-bar"><div class="lbl" style="color:${col}"><span>${esc(e.k)}</span></div>`
+      + `<div class="track"><div class="fill" style="width:${Math.max(6,Math.round(e.n/max*100))}%;background:${col}"></div></div>`
+      + `<div class="bv">${e.n}</div></div>`;
+  }).join('');
+
+  const parts=[];
+  const cSince=_daysSince(coldest.last);
+  if(entries.length>1 && cSince!==null && cSince>=4)
+    parts.push(`<b>${esc(coldest.k)}</b> hasn't come up in ${cSince} days.`);
+  const shown=r.recent.slice(0,3).map(l=>{
+    const n=_daysSince(l);
+    const when=(n!==null && n<=13) ? _agoLabel(n) : `${MIR_MONTHNAMES[(l.month||1)-1].slice(0,3)} ${l.day}`;
+    return `<div class="lf-histrow"><span class="lf-when">${esc(when)}</span><span class="lf-what">${esc(l.note)}</span></div>`;
+  }).join('');
+  nudgeEl.innerHTML=(parts.length?`<div class="lf-cold">${parts.join(' ')}</div>`:'')
+    + (shown?`<div class="lf-hist"><div class="lf-histh">RECENT SESSIONS</div>${shown}</div>`:'');
+}
+
 // ── AFTERGLOW REPORT (Home log path) ──
 function mirShowReport(rw){
   // QA 23 Jul: logging worked but the celebration never fired on the Mirror
@@ -2902,18 +3108,181 @@ function mirShowReport(rw){
   // streak line (NO rest-day copy)
   const streakNow=score(me.name).streak;
   document.getElementById('mirRStreak').innerHTML=`<div class="mir-rline">${mirIco('g-flame','color:var(--gold)')}<span>Streak now <b>${streakNow}</b> — see you tomorrow</span></div>`;
-  // witnesses from already-loaded feed data
-  const witness=[...new Set(allLogs.filter(l=>l.day===todayD && l.player!==me.name).map(l=>l.player))].slice(0,3);
-  const wc=document.getElementById('mirRWitness');
-  if(witness.length && isToday){
-    wc.style.display='';
-    wc.innerHTML=`<div class="mir-rline"><span><b>${esc(witness.join(', '))}</b> also showed up today</span></div>`;
-  } else wc.style.display='none';
+  // Who else showed up, and where you moved. The ACTIVE group's answer comes
+  // from memory and paints now; every other group this log reached is filled in
+  // asynchronously by mirFillCrossGroup (see there for why it can't be done
+  // synchronously and why that's fine).
+  const activeShowed=[...new Set(allLogs.filter(l=>l.day===todayD && l.player!==me.name && !l.voided).map(l=>l.player))];
+  _mirRenderWitness(isToday ? [{name:(groupData&&groupData.name)||groupCode, showed:activeShowed}] : []);
+  document.getElementById('mirRCross').style.display='none';
+  // Runs for backlogs too. A day filled in late still earns real points and can
+  // still move you — the active group's card stays quiet on a backlog (its
+  // board maths assumes today), but that's no reason to stay quiet about the
+  // groups this log ALSO landed in. `isToday` only gates the who-else-showed-up
+  // line, which genuinely is a statement about today.
+  try{ mirFillCrossGroup(activeShowed, !!(rw && rw.movedTo), isToday); }
+  catch(e){ logErr('mirFillCrossGroup', e); }
   window._mirLast={day:_mirPendingDay};
   if(navigator.vibrate) navigator.vibrate([25,30,60]);
   const rep=document.getElementById('mirReport');
   rep.classList.add('on'); rep.style.transform='';
 }
+// ── CROSS-GROUP AFTERGLOW ───────────────────────────────────────────────────
+// Logging is one act; membership is many. A submit already broadcasts to every
+// group whose season matches the workout — but the report only ever described
+// the group that happened to be open on the feed, so a log that moved you in
+// three groups looked like it moved you in one, and the two you weren't looking
+// at silently got nothing.
+//
+// This runs AFTER the report is already on screen, deliberately. The active
+// group's board is in memory and paints instantly; the other groups need a
+// season doc and a month of logs each, and a slow network should delay a line,
+// never the celebration. People in exactly one group never enter here at all,
+// so the common case costs nothing.
+let _mirCrossToken=0;
+
+// "Also out today", from a per-group list. A single group keeps the original
+// sentence. Past three names a group becomes a count — six names is a list
+// nobody finishes reading, where "6 members" is a crowd.
+function _mirRenderWitness(groups){
+  const wc=document.getElementById('mirRWitness'); if(!wc) return;
+  const live=(groups||[]).filter(g=>g && Array.isArray(g.showed) && g.showed.length);
+  if(!live.length){ wc.style.display='none'; wc.innerHTML=''; return; }
+  const phrase=n=> n.length<=3 ? `<b>${esc(n.join(', '))}</b>` : `<b>${n.length} members</b>`;
+  wc.style.display='';
+  wc.innerHTML = live.length===1
+    ? `<div class="mir-rline"><span>${phrase(live[0].showed)} also showed up today</span></div>`
+    : `<div class="mir-rsub">ALSO OUT TODAY</div>`
+      + live.map(g=>`<div class="mir-rline mir-rgline"><span class="gn">${esc(g.name)}</span><span>${phrase(g.showed)}</span></div>`).join('');
+}
+
+// One other group's before/after board. Scored with the SAME engine and that
+// group's OWN config — passing ctx matters here, because score() with no ctx
+// falls back to the active group's season and twists, which would quietly
+// score HardCore Gully under Squad +1s' rules.
+async function _mirGroupMove(t, bc){
+  const sRef=db.collection('groups').doc(t.code).collection('seasons').doc(seasonId);
+  const sSnap=await sRef.get();
+  if(!sSnap.exists) return null;
+  const sData=sSnap.data();
+  const roster=Array.isArray(sData.roster)?sData.roster:[];
+  if(!roster.length) return null;
+  // submitLog only targets groups already on this seasonId, so a mismatch here
+  // means the group rolled over between the write and this read. Say nothing
+  // rather than compare two different months.
+  if(sData.month!==bc.month || sData.year!==bc.year) return null;
+
+  const [logsSnap, bonusSnap, twistsSnap] = await Promise.all([
+    db.collection('logs').where('groupCode','==',t.code).where('month','==',bc.month).where('year','==',bc.year).get(),
+    db.collection('bonuses_30day').where('groupCode','==',t.code).where('month','==',bc.month).where('year','==',bc.year).get(),
+    sRef.collection('twists').get()
+  ]);
+  const twists={}; twistsSnap.docs.forEach(d=>{ twists[d.id]=d.data(); });
+  const bonuses=bonusSnap.docs.map(d=>d.data());
+  // The twist-scoped extras can only be non-empty when their twist is on, so
+  // they're fetched only then. For every group in use today that's three
+  // queries per log not run.
+  const on=k=>!!(twists[k] && twists[k].enabled);
+  const [jackSnap, ipSnap, twwSnap] = await Promise.all([
+    on('jack_of_all_trades') ? sRef.collection('jackAwards').get() : null,
+    on('double_or_nothing')  ? db.collection('bonuses_iron_pledge').where('groupCode','==',t.code).where('month','==',bc.month).where('year','==',bc.year).get() : null,
+    on('double_or_nothing')  ? sRef.collection('twistWindows').get() : null
+  ]);
+  const docsOf=s=>s?s.docs.map(d=>d.data()):[];
+
+  let after=logsSnap.docs.map(d=>({id:d.id,...d.data()})).filter(l=>!l.voided);
+  // The batch committed moments ago and a server read usually reflects it —
+  // but "usually" is no basis for telling someone they passed a teammate. If
+  // the doc isn't back yet, stand it in from exactly what we wrote.
+  if(!after.some(l=>l.id===t.logId)){
+    after=after.concat([{ id:t.logId, groupCode:t.code, player:t.player, team:t.team, role:t.role,
+      workouts:bc.workouts, day:bc.day, month:bc.month, year:bc.year,
+      ...(Number.isFinite(Number(bc.km))&&Number(bc.km)>0?{km:Number(bc.km)}:{}) }]);
+  }
+  const before=after.filter(l=>l.id!==t.logId);
+  // Distinct array objects, so score()'s snapshot cache keys them separately —
+  // and neither is window.allLogs, so the active group's cache is untouched.
+  const boardOf=logs=>{
+    const ctx={season:sData, logs, twists, bonuses, jackAwards:docsOf(jackSnap),
+               ironPledgeBonuses:docsOf(ipSnap), twistWindows:docsOf(twwSnap), groupCode:t.code};
+    return roster.map(p=>({name:p.name, total:score(p.name, ctx).total})).sort((a,b)=>b.total-a.total);
+  };
+  const bB=boardOf(before), bA=boardOf(after);
+  const iA=bA.findIndex(x=>x.name===t.player);
+  if(iA<0) return null;                                    // not on this roster
+  const iB=bB.findIndex(x=>x.name===t.player);
+  const moved=iB<0?0:Math.max(0,iB-iA);
+  // In the BEFORE board, everyone between my new slot and my old one is exactly
+  // who this log went past.
+  const passed=iB<0?[]:bB.slice(iA,iB).map(x=>x.name).filter(n=>n!==t.player);
+  const ahead=bA[iA-1]||null;
+  const showed=[...new Set(after.filter(l=>l.day===bc.day && l.player!==t.player && !l.voided).map(l=>l.player))];
+  return { code:t.code, name:t.name, rank:iA+1, moved, passed, showed,
+           aheadName: ahead?ahead.name:null,
+           gap: ahead?(ahead.total-bA[iA].total):null };
+}
+
+async function mirFillCrossGroup(activeShowed, activeMoved, isToday){
+  const bc=window._mirBroadcast;
+  if(!bc || !Array.isArray(bc.list)) return;
+  const others=bc.list.filter(t=>t.code!==groupCode).slice(0,4);   // read cap
+  if(!others.length) return;                                        // single group
+  const token=++_mirCrossToken;
+  const cross=document.getElementById('mirRCross');
+  if(!cross) return;
+  cross.style.display='';
+  cross.innerHTML=`<div class="mir-rsub">YOUR OTHER GROUPS</div>`
+    + `<div class="mir-rline"><span class="tmuted">Checking ${others.length===1?'the other board':'the other boards'}…</span></div>`;
+
+  const results=(await Promise.all(others.map(t=>
+    _mirGroupMove(t, bc).catch(e=>{ logErr('cross-group '+t.code, e); return null; })
+  ))).filter(Boolean);
+
+  if(token!==_mirCrossToken) return;                       // a newer log superseded this
+  const rep=document.getElementById('mirReport');
+  if(!rep || !rep.classList.contains('on')) return;        // closed while we waited
+  if(!results.length){ cross.style.display='none'; return; }
+
+  const anyMove=results.some(r=>r.moved>0);
+  // "too" is only true if the active group's card above actually reported a
+  // move. When it didn't — you were already top there, or this was a backlog —
+  // this card IS the news, and saying "too" would be claiming a move that the
+  // card above visibly doesn't show.
+  const head=anyMove ? (activeMoved ? 'YOU MOVED HERE TOO' : 'THIS MOVED YOU') : 'YOUR OTHER GROUPS';
+  cross.innerHTML=`<div class="mir-rsub">${head}</div>`
+    + results.map((r,i)=>{
+        const rise=r.moved>0?' rise':'';
+        const delay=r.moved>0?` style="animation-delay:${i*110}ms"`:'';
+        let tail;
+        if(r.moved>0){
+          const who=r.passed.length
+            ? ` past <b>${esc(r.passed.slice(0,2).join(', '))}</b>${r.passed.length>2?` +${r.passed.length-2}`:''}`
+            : '';
+          tail=`<span class="up">▲${r.moved}</span><span>to <b>#${r.rank}</b>${who}</span>`;
+        } else if(r.gap===0){
+          tail=`<span>#${r.rank} — level with <b>${esc(r.aheadName)}</b></span>`;
+        } else if(r.gap!=null){
+          tail=`<span>#${r.rank} — <b>${r.gap}</b> ${r.gap===1?'pt':'pts'} to <b>${esc(r.aheadName)}</b></span>`;
+        } else {
+          tail=`<span>#${r.rank} — nobody left to catch</span>`;
+        }
+        return `<div class="mir-rgline mir-rline${rise}"${delay}><span class="gn">${esc(r.name)}</span>${tail}</div>`;
+      }).join('');
+
+  if(isToday){
+    _mirRenderWitness([{name:(groupData&&groupData.name)||groupCode, showed:activeShowed}]
+      .concat(results.map(r=>({name:r.name, showed:r.showed}))));
+  }
+
+  // The confetti only ever fired for a move in the group that happened to be on
+  // screen. If this log moved you somewhere else and nowhere here, that's the
+  // case that used to get silence — so it gets the celebration instead.
+  if(anyMove && !activeMoved && !matchMedia('(prefers-reduced-motion: reduce)').matches){
+    try{ fireConfetti(); }catch(e){}
+    try{ if(navigator.vibrate) navigator.vibrate([18,40,28]); }catch(e){}
+  }
+}
+
 function mirCloseReport(){
   const rep=document.getElementById('mirReport');
   rep.classList.remove('on'); rep.style.transform='';
@@ -3695,9 +4064,16 @@ async function submitLog(){
 
     const batch = db.batch();
     const newLogIds = new Set();   // reward screen: tells "already echoed into allLogs" apart from listener lag
+    // Which log doc landed in which group. The afterglow needs this to work out
+    // what each group's board looked like WITHOUT this log — the only honest way
+    // to say "you passed Twinkle" for a group whose logs aren't in memory.
+    const broadcast = [];
     targets.forEach(sess => {
       const ref = db.collection('logs').doc();
       newLogIds.add(ref.id);
+      broadcast.push({ code: sess.code, name: sess.name || sess.code,
+                       player: sess.player.name, team: sess.player.team,
+                       role: sess.player.role, logId: ref.id, demo: !!sess._demo });
       batch.set(ref, {
         groupCode: sess.code,
         player: sess.player.name,
@@ -3815,6 +4191,15 @@ async function submitLog(){
       let rw=null;
       try { rw = computeRewardData(newLogIds); }
       catch(e){ logErr('submitLog: reward computation failed', e); }
+
+      // Hand the afterglow the full broadcast so it can describe every group
+      // this log landed in, not just the one on screen. Snapshot the day/
+      // workouts too — mirCloseReport clears the sel* globals, and the
+      // cross-group fill can still be in flight when it does.
+      window._mirBroadcast = { list: broadcast, day: selDay,
+                               month: season.month, year: season.year,
+                               workouts: (selW||[]).slice(),
+                               km: selKm, note: selNote };
 
       // Only presentation left: the afterglow report.
       try { mirShowReport(rw); }
@@ -4207,8 +4592,21 @@ function renderFeed(){
     const ct=(season.roster||[]).find(x=>x.name===l.player)?.team||l.team;
     const flagCount=flags.filter(f=>f.logId===l.id).length;
     const alreadyFlagged=flags.some(f=>f.logId===l.id&&f.flaggedBy===me.name);
-    const submittedToday=ts?ts.toDateString()===now.toDateString():true;
-    const isBacklog=l.day<todayDay&&submittedToday;
+    // A log is a backlog when it was WRITTEN on a later calendar day than the
+    // one it's FOR — a property of the log itself, so it holds forever. The old
+    // test ALSO demanded the write happen today, which meant the badge
+    // evaporated at midnight: Shanay typed his 1 Aug and 2 Aug gym sessions
+    // six seconds apart on the evening of the 2nd (AJ6W6B), the "backlog" tag
+    // showed for three hours, and by the next morning the feed read as one
+    // person logging Gym twice at 09:03 PM. Comparing the log against itself
+    // also fixes archived seasons, where todayDay is -1 and nothing could ever
+    // qualify. A pending server timestamp means "this device, moments ago", so
+    // it dates from now — the badge appears the instant a backlog is submitted.
+    const subAt=ts||now;
+    const subY=subAt.getFullYear(), subM=subAt.getMonth()+1, subD=subAt.getDate();
+    const isBacklog = subY>season.year
+      || (subY===season.year && subM>season.month)
+      || (subY===season.year && subM===season.month && subD>l.day);
     const rCount=reactionCounts.get(l.id)||0;
     const iReacted=myReactions.has(l.id);
     const st=(()=>{ try{ return score(l.player).streak||0; }catch(e){ return 0; } })();

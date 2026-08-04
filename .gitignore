@@ -20,6 +20,12 @@ firebase-debug.log
 # the folder itself; nothing here is needed to build or serve the app.
 higgsfield/
 
+# brand/ is the Blender source for the badge set (.blend + .blend1 autosaves,
+# renders, proof sheet). Working files, not build inputs — the shipped badge
+# art is already inlined in the app. Ignored so `git add -A` can never drop
+# binary source into a PUBLIC repo, where history keeps it forever.
+brand/
+
 .forge-ai-context.md
 AUDIT_REPORT_FINAL.md
 AUTH_UPGRADE.md
@@ -49,3 +55,4 @@ WORKLOG.md
 PLAYSTORE_PREP.md
 PROMOTION_RUNBOOK.md
 AUTH_DESIGN_FINAL.md
+scripts/rules-test/
