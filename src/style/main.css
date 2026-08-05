@@ -65,6 +65,27 @@ body::before{content:'';position:fixed;inset:-10%;z-index:-1;pointer-events:none
 .screen{display:none;min-height:100vh}
 .screen.active{display:flex;flex-direction:column}
 
+/* ANDROID SCROLL FIX (4 Aug 2026) — the app was completely unscrollable on
+   every Android device, in the browser and in the installed app.
+   Cause: this screen only had min-height, never a height. An auto-height flex
+   column sizes to its content no matter what flex-basis its items declare, so
+   there was never any free space to distribute — .page rendered at its full
+   content height (882px inside an 812px viewport) instead of being capped.
+   That left .page as a scroll container holding exactly its own content: it
+   could not scroll, and because .page also sets overscroll-behavior:contain,
+   the touch gesture was captured and then refused to chain up to the body.
+   Result: a finger moved nothing, anywhere.
+   Desktop never showed it — a mouse wheel chains out of a non-overflowing box
+   where a touch drag does not, so it scrolled fine on a Mac the whole time.
+   A definite height gives the flex layout real free space, so .page is capped
+   at viewport-minus-nav and its content overflows it as designed.
+   dvh, not vh: on Android vh is the LARGE viewport, so 100vh stays taller than
+   the visible area whenever the URL bar is showing. dvh tracks what is actually
+   on screen. vh is kept first as the fallback for anything predating dvh.
+   Scoped to #screen-app deliberately — onboard/create/super are ordinary
+   body-scrolled documents and must keep growing with their content. */
+#screen-app.screen.active{height:100vh;height:100dvh}
+
 /* ── NAV — frosted glass ── */
 .nav{background:var(--glass);backdrop-filter:blur(28px) saturate(180%);-webkit-backdrop-filter:blur(28px) saturate(180%);border-bottom:1px solid var(--hairline);padding:0 16px;padding-top:env(safe-area-inset-top);display:flex;align-items:center;justify-content:space-between;height:calc(54px + env(safe-area-inset-top));position:sticky;top:0;z-index:100;flex-shrink:0;transition:height .25s cubic-bezier(.32,.72,0,1)}
 .nav.scrolled{height:calc(42px + env(safe-area-inset-top))}
@@ -94,7 +115,10 @@ body::before{content:'';position:fixed;inset:-10%;z-index:-1;pointer-events:none
 .gs-chip.gs-add{border-style:dashed;color:var(--gold);background:transparent}
 
 /* ── PAGES ── */
-.page{display:none;padding:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom));max-width:500px;margin:0 auto;width:100%;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;scrollbar-width:none}
+/* min-height:0 pairs with the definite height on #screen-app below — a flex
+   item defaults to min-height:auto, which would stop it shrinking below its
+   own content even once the container is capped. */
+.page{display:none;padding:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom));max-width:500px;margin:0 auto;width:100%;flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;scrollbar-width:none}
 .page::-webkit-scrollbar{display:none}
 .page.active{display:block;animation:pageIn .42s cubic-bezier(.32,.72,0,1)}
 @keyframes pageIn{from{opacity:0;transform:translateY(16px) scale(.985)}to{opacity:1;transform:none}}
