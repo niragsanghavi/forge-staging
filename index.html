@@ -459,6 +459,10 @@
     <div class="shdr">Link Another Group</div>
     <div class="card">
       <div class="tmuted" style="font-size:12px;margin-bottom:10px">In another Forge group under the same you? Link it so your streak and stats count both — you'll prove it's you with that group's PIN.</div>
+      <!-- Populated by renderProfile. The commonest reason this form appears to
+           do nothing is that there is nothing left to link — every group is
+           already the same account. Say so before they type, not after. -->
+      <div id="linkedGroups"></div>
       <input type="text" id="linkGroupCode" placeholder="Other group code (6 characters)" maxlength="6" style="margin-bottom:8px;text-transform:uppercase">
       <input type="text" id="linkPlayerName" placeholder="Your name in that group" maxlength="24" style="margin-bottom:8px">
       <input type="password" inputmode="numeric" id="linkPin" placeholder="Your PIN in that group" maxlength="4" style="margin-bottom:8px">
@@ -3499,6 +3503,27 @@ async function renderProfile(){
     const uSnap = await db.collection('users').doc(me.userId).get();
     const stats = (uSnap.exists && uSnap.data().stats) || {};
 
+    // ── WHAT'S ALREADY LINKED ──────────────────────────────────────────────
+    // Reported 5 Aug by two people independently: the Link Group button "did
+    // nothing". It was working — both were ALREADY linked (identical userId in
+    // every group), so it correctly refused. But it said so in grey text under
+    // the button, which reads as silence.
+    // The real fix is upstream of the message: show the answer before anyone
+    // types a PIN. Costs nothing — memberships is already on the doc we just
+    // read for stats.
+    try{
+      const linkEl = document.getElementById('linkedGroups');
+      if(linkEl){
+        const m = (uSnap.exists && uSnap.data().memberships) || {};
+        const codes = Object.keys(m);
+        linkEl.innerHTML = codes.length < 2 ? '' :
+          `<div class="linked-note">${mirIco('g-flame','color:var(--green)')}<span>`
+          + `<b>Already linked across ${codes.length} groups</b> — `
+          + esc(codes.map(c => (m[c] && m[c].groupName) || c).join(' · '))
+          + `. Your streak and totals already count all of them together.</span></div>`;
+      }
+    }catch(e){ logErr('renderProfile: linked groups', e); }
+
     // Display-time freshness: a streak only lives in the stored fields as of
     // the LAST submit, so if more than a day has passed since lastLoggedDay,
     // show it as broken NOW rather than waiting for the next log to correct
@@ -3720,7 +3745,12 @@ async function linkAnotherGroup(){
   // ONE generic message for every credential failure (wrong code / name / PIN)
   // so this form can't be used to probe for valid group codes or member names.
   const GENERIC='Could not link — double-check the group code, your name, and PIN, then try again.';
-  const fail=(msg,muted)=>{ resEl.style.color=muted?'var(--muted)':'var(--red)'; resEl.textContent=msg; };
+  // Two tones, not "red or grey". "Already linked" is GOOD NEWS and was being
+  // rendered in the same muted grey as a shrug — two people read that as the
+  // button doing nothing at all. Green and bold, so an answer looks like one.
+  const fail=(msg,good)=>{ resEl.style.color = good ? 'var(--green)' : 'var(--red)';
+                           resEl.style.fontWeight = good ? '700' : '600';
+                           resEl.textContent = msg; };
   resEl.textContent='';
   if(!me||!me.userId){ fail('Your profile is still setting up — try again in a moment.'); return; }
   if(!code||!name||!/^\d{4}$/.test(pin)){ fail(GENERIC); return; }
@@ -3751,9 +3781,9 @@ async function linkAnotherGroup(){
     if(!verified){ fail(GENERIC); return; }
 
     // ── Already-linked guards (no-op instead of a corrupting re-merge) ──
-    if(targetUserId && targetUserId===me.userId){ fail('These two are already linked — nothing to do.',true); return; }
+    if(targetUserId && targetUserId===me.userId){ fail('Already linked — your workouts in both groups already count as one streak.',true); return; }
     const selfSnap=await db.collection('users').doc(me.userId).get();
-    if(selfSnap.exists && (selfSnap.data().memberships||{})[code]){ fail('These two are already linked — nothing to do.',true); return; }
+    if(selfSnap.exists && (selfSnap.data().memberships||{})[code]){ fail('Already linked — your workouts in both groups already count as one streak.',true); return; }
 
     // ── PIN-consistency invariant ──
     // After a merge, every re-pointed roster entry authenticates against the
