@@ -279,7 +279,12 @@
       <div class="mir-right">
         <div class="mir-flame" id="mirFlame"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#g-flame"/></svg><span id="mirStreak">0</span></div>
         <div class="mir-pills" id="mirPills"></div>
-        <div class="gplus" onclick="openLinkGroup()" title="Link another group"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-plus"/></svg></div>
+        <!-- Points at joinAnotherGroup, NOT openLinkGroup. Those are different
+             features and this pill was aimed at the wrong one: "link" merges
+             two identities into one account, "join" puts a group you already
+             belong to onto THIS device. Anyone who cleared their storage needed
+             the second and was being handed the first. -->
+        <div class="gplus" onclick="joinAnotherGroup()" title="Add another group"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-plus"/></svg></div>
       </div>
     </div>
 
@@ -779,7 +784,12 @@ function mondayOfISOWeek(weekStr){
 // Device-local multi-session: localStorage holds a LIST of {code, player, name}
 // plus the active group's code. No cross-device identity (deferred) — each
 // device joins each group independently.
-const MAX_GROUPS = 3;
+// Raised 3 -> 5 on 5 Aug. Three was tight enough that Nirag hit it himself, and
+// someone rebuilding after a storage wipe has to re-add every group they were
+// in — landing exactly on the old ceiling with no headroom. The cost of an
+// extra group is one season read plus a month of logs at log time (the
+// cross-group afterglow), and only for people actually in several.
+const MAX_GROUPS = 5;
 // ── ERROR LOGGING ───────────────────────────────────────────────────────────
 // One place to surface errors: a tagged, searchable console line (DevTools) AND
 // — via ForgeErr — a structured record shipped to errorLogs/ so a failure on a
