@@ -357,6 +357,73 @@ html.locked .rail{display:none}
   .card,.i-line,.i-btn,.rb,.rv,.dots,.congrats,.cue{transition-duration:.01ms;transform:none}
   .card{transform:none}
 }
+/* ══════════════════════════════════════════════════════════════════
+   v4 — DISPLAY FACE + PHYSICAL MARK (6 Aug 2026)
+   ══════════════════════════════════════════════════════════════════ */
+
+/* The page ran entirely on the system stack. That was the loudest
+   "unfinished" signal it had — louder than the absence of imagery,
+   and cheaper to fix than anything else on the page. Archivo at 800
+   is a grotesque with enough width and flat enough sidewalls to read
+   industrial rather than corporate, which is the register a page
+   about a forge wants.
+   Latin subset, ONE weight, 34 KB. Body copy deliberately stays on
+   the system stack: it costs nothing and paints instantly. */
+/* The range on font-weight is the important part. Every display rule on
+   this page asks for 900, and only an 800 file ships — declared as a
+   single weight, the browser would synthesise the difference and smear
+   the stems. Declaring 700–900 tells it this one file serves that whole
+   band, so 900 resolves to real outlines instead of faux-bold. It also
+   means no rule below has to restate a weight, and none of the existing
+   900s need editing. */
+@font-face{
+  font-family:'Archivo';
+  src:url('assets/font/archivo-800.woff2') format('woff2');
+  font-weight:700 900;font-style:normal;font-display:swap;
+}
+/* Every display-scale selector on the page. Family only — the existing
+   weight and size rules are left exactly as they were. */
+.display,.g-title,#i1,.rb-xl,.rb-lg,.j-title,.lead,.congrats,
+.stat-n,.wordmark,.showroom .show-kv .v,h2{
+  font-family:'Archivo',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,sans-serif;
+  letter-spacing:-.03em;
+}
+/* the wordmark is tracked WIDE on purpose — don't let the tightening above
+   collapse it */
+.wordmark{letter-spacing:.3em}
+.stat-n,.showroom .show-kv .v{letter-spacing:.02em}
+
+/* THE MARK. Sized against the viewport so it never crowds the copy on
+   a small phone — it introduces the page, it isn't the subject of it. */
+.hero-mark{
+  width:min(44vw,176px);margin:0 auto 2px;line-height:0;
+  opacity:0;transform:translateY(12px) scale(.94);
+  transition:opacity .7s var(--ease),transform .7s var(--ease);
+}
+.hero-mark.in{opacity:1;transform:none}
+.hero-mark img{
+  width:100%;height:auto;
+  /* Two shadows doing different jobs: one seats the object on the page,
+     one is the heat the ember line would actually throw. */
+  filter:drop-shadow(0 16px 30px rgba(0,0,0,.75))
+         drop-shadow(0 0 24px rgba(212,168,67,.11));
+}
+/* An animation that loops forever is a battery cost and an attention
+   cost. Anyone who has asked their OS to stop moving things gets the
+   still frame instead — same image, no motion. */
+@media (prefers-reduced-motion:reduce){
+  .hero-mark img{content:url('assets/forge-hero-still.webp')}
+}
+
+/* MATERIAL. The image frames were flat fills on a flat page. A hairline
+   of light along the top edge and a shadow beneath is enough to make
+   them sit ON the page rather than in it — the same trick the render
+   uses, done in CSS for free. */
+.ph{
+  background-image:radial-gradient(120% 78% at 50% 0%,rgba(255,255,255,.05),transparent 62%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.055),
+             0 20px 44px -26px rgba(0,0,0,.92);
+}
 </style>
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-ZDZCF0GX91"></script>
@@ -384,6 +451,16 @@ html.locked .rail{display:none}
 
     <!-- intro screen — two sequential fade-ins, then BEGIN -->
     <div class="card on" data-i="0">
+      <!-- The mark, rendered rather than drawn: the hammer-and-anvil lockup from
+           brand/forge-mark.svg extruded, lit and swayed in Blender. Ships as a
+           20-frame animated WebP (113 KB), not a WebGL scene — three.js would
+           have cost ~600 KB before the model, on a page whose readers are on
+           Indian mobile. A sway, not a turntable: this mark is 0.6 units deep
+           against 5.5 wide, so a full rotation would make it vanish edge-on for
+           a third of every loop. -->
+      <figure class="hero-mark" id="heroMark" aria-hidden="true">
+        <img src="assets/forge-hero.webp" width="294" height="251" alt="">
+      </figure>
       <p class="i-line" id="i1">Welcome to <b class="gk">Forge</b>.</p>
       <p class="i-line" id="i2">We&rsquo;ve built <b class="gk">image recognition</b> that can tell what you&rsquo;re looking at. Don&rsquo;t believe us? One round of our memory game &mdash; prove us wrong.</p>
       <button class="btn i-btn" id="beginBtn" data-next>Begin</button>
@@ -622,9 +699,13 @@ docEl.classList.add('locked');
 content.setAttribute('inert','');
 
 /* intro screen — line 1, line 2 (~1s later), then BEGIN */
-setTimeout(function(){ document.getElementById('i1').classList.add('in'); }, 300);
-setTimeout(function(){ document.getElementById('i2').classList.add('in'); }, 1400);
-setTimeout(function(){ document.getElementById('beginBtn').classList.add('in'); }, 2500);
+/* The mark lands first and alone. Giving it a beat to itself before any
+   words appear is what makes it read as a brand arriving rather than an
+   image loading next to a sentence. */
+setTimeout(function(){ var m=document.getElementById('heroMark'); if(m) m.classList.add('in'); }, 120);
+setTimeout(function(){ document.getElementById('i1').classList.add('in'); }, 760);
+setTimeout(function(){ document.getElementById('i2').classList.add('in'); }, 1860);
+setTimeout(function(){ document.getElementById('beginBtn').classList.add('in'); }, 2960);
 
 function show(n){
   cards[idx].classList.remove('on');
