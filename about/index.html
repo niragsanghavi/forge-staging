@@ -250,6 +250,29 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
 .forged.in img:nth-child(6){transition-delay:.45s}
 .forged-cap{color:var(--muted);font-size:13.5px;letter-spacing:.01em;margin-top:14px}
 
+/* ── BACKGROUND FIELD — the same forged glyphs scattered faintly down the
+   whole page so a long dark scroll isn't empty. Purely decorative: aria-hidden,
+   pointer-events:none, and painted under everything.
+
+   Each one sits 60% on the page and 40% off it. That split is exact rather than
+   eyeballed: the overhang is derived from the element's own rendered width
+   (--w * --s), so it holds at every breakpoint instead of drifting as the
+   clamp moves. overflow:hidden on the field does the cropping, which is both
+   the look we want AND what stops the bleed becoming a horizontal scrollbar.
+
+   No drop-shadow here on purpose — at 6% opacity it is invisible, and twelve
+   large filtered images is a real cost on a mid-range Android. */
+#content{position:relative}
+#content > section, #content > footer{position:relative;z-index:1}
+.bgfield{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0;
+  --w:clamp(128px,21vw,286px)}
+.bgfield img{position:absolute;display:block;
+  width:calc(var(--w) * var(--s,1));height:auto;
+  opacity:var(--o,.06);transform:rotate(var(--rot,0deg))}
+.bgfield .l{left:calc(var(--w) * var(--s,1) * -.4)}
+.bgfield .r{right:calc(var(--w) * var(--s,1) * -.4)}
+@media (prefers-reduced-motion:reduce){ .bgfield img{transform:none} }
+
 /* events — one line, nothing more */
 .events{padding-top:72px;padding-bottom:8px}
 
@@ -601,6 +624,24 @@ html.locked .rail{display:none}
 <!-- ════════════════ C · MAIN PAGE ════════════════ -->
 <main id="content">
 
+  <!-- Faint forged glyphs down the whole scroll. Alternating sides, each
+       cropped by the page edge. Decorative only — never announced, never
+       clickable, always behind the content. -->
+  <div class="bgfield" aria-hidden="true">
+    <img class="r" style="top:2.5%;--s:1.15;--rot:-9deg;--o:.065"  src="assets/glyph3d/bg/g-run.webp"    loading="lazy" alt="">
+    <img class="l" style="top:9%;--s:.85;--rot:7deg;--o:.05"       src="assets/glyph3d/bg/g-gym.webp"    loading="lazy" alt="">
+    <img class="r" style="top:16.5%;--s:.95;--rot:12deg;--o:.055"  src="assets/glyph3d/bg/g-swim.webp"   loading="lazy" alt="">
+    <img class="l" style="top:24%;--s:1.2;--rot:-6deg;--o:.06"     src="assets/glyph3d/bg/g-cycle.webp"  loading="lazy" alt="">
+    <img class="r" style="top:32%;--s:.9;--rot:-14deg;--o:.05"     src="assets/glyph3d/bg/g-racket.webp" loading="lazy" alt="">
+    <img class="l" style="top:40%;--s:1.05;--rot:9deg;--o:.058"    src="assets/glyph3d/bg/g-mind.webp"   loading="lazy" alt="">
+    <img class="r" style="top:48%;--s:1.1;--rot:5deg;--o:.055"     src="assets/glyph3d/bg/g-walk.webp"   loading="lazy" alt="">
+    <img class="l" style="top:56%;--s:.9;--rot:-11deg;--o:.06"     src="assets/glyph3d/bg/g-cardio.webp" loading="lazy" alt="">
+    <img class="r" style="top:64.5%;--s:1;--rot:8deg;--o:.05"      src="assets/glyph3d/bg/g-combat.webp" loading="lazy" alt="">
+    <img class="l" style="top:73%;--s:1.15;--rot:-5deg;--o:.055"   src="assets/glyph3d/bg/g-ball.webp"   loading="lazy" alt="">
+    <img class="r" style="top:81.5%;--s:.95;--rot:13deg;--o:.058"  src="assets/glyph3d/bg/g-dance.webp"  loading="lazy" alt="">
+    <img class="l" style="top:90%;--s:1.1;--rot:-8deg;--o:.07"     src="assets/glyph3d/bg/g-flame.webp"  loading="lazy" alt="">
+  </div>
+
   <!-- ════════ SCROLL JOURNEY · 1/4 — WHAT IS FORGE ════════ -->
   <section class="jsec">
     <div class="label">What is Forge</div>
@@ -627,7 +668,7 @@ html.locked .rail{display:none}
 
   <!-- ════════ 2/4 — POINTS ════════ -->
   <section class="jsec">
-    <div class="label">How it works &middot; Points</div>
+    <div class="label">How it works &middot; <b class="gk">Points</b></div>
     <div class="j-img">
       <figure>
         <img src="assets/marketing/feature-points.webp" loading="lazy" alt="Forge points board" onerror="this.style.display='none'">
@@ -639,7 +680,7 @@ html.locked .rail{display:none}
 
   <!-- ════════ 3/4 — STREAKS ════════ -->
   <section class="jsec">
-    <div class="label">How it works &middot; Streaks</div>
+    <div class="label">How it works &middot; <b class="gk">Streaks</b></div>
     <div class="j-img">
       <figure>
         <img src="assets/marketing/feature-streaks.webp" loading="lazy" alt="Forge streak card" onerror="this.style.display='none'">
@@ -650,7 +691,7 @@ html.locked .rail{display:none}
 
   <!-- ════════ 4/4 — LEADERBOARD ════════ -->
   <section class="jsec">
-    <div class="label">How it works &middot; Leaderboard</div>
+    <div class="label">How it works &middot; <b class="gk">Leaderboard</b></div>
     <div class="j-img">
       <figure>
         <img src="assets/marketing/feature-leaderboard.webp" loading="lazy" alt="Forge leaderboard" onerror="this.style.display='none'">
