@@ -229,6 +229,27 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
   font-size:clamp(1.4rem,4.6vw,2.1rem);max-width:24ch}
 .j-sub{color:var(--muted);font-size:15px;max-width:42ch;line-height:1.55}
 
+/* ── FORGED GLYPH STRIP — the workout sprite rendered as gold rod in Blender.
+   All six share one 24x24 cell and one rod thickness, so they keep the same
+   relative sizes and stroke weight as the flat icons. Container carries .rv
+   for the rise; the children ripple in behind it. */
+/* sized so six cells + five gaps still hold one row at 320px, the narrowest
+   phone we care about; a 5+1 wrap reads as broken. */
+.forged{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;
+  gap:clamp(6px,2.2vw,30px);max-width:660px;margin:6px auto 0}
+.forged img{width:clamp(38px,11vw,74px);height:auto;display:block;
+  filter:drop-shadow(0 8px 16px rgba(0,0,0,.6)) drop-shadow(0 0 14px rgba(212,168,67,.10));
+  opacity:0;transform:scale(.86);
+  transition:opacity .5s var(--ease),transform .5s var(--ease)}
+.forged.in img{opacity:1;transform:none}
+.forged.in img:nth-child(1){transition-delay:.05s}
+.forged.in img:nth-child(2){transition-delay:.13s}
+.forged.in img:nth-child(3){transition-delay:.21s}
+.forged.in img:nth-child(4){transition-delay:.29s}
+.forged.in img:nth-child(5){transition-delay:.37s}
+.forged.in img:nth-child(6){transition-delay:.45s}
+.forged-cap{color:var(--muted);font-size:13.5px;letter-spacing:.01em;margin-top:14px}
+
 /* events — one line, nothing more */
 .events{padding-top:72px;padding-bottom:8px}
 
@@ -415,6 +436,52 @@ html.locked .rail{display:none}
   .hero-mark img{content:url('assets/forge-hero-still.webp')}
 }
 
+/* ── EDGE INDICATORS ───────────────────────────────────────────────
+   The chevron points, but it points from the centre of the screen, so
+   the reader has to translate "arrow shape" into "turn my head that
+   way". Lighting the actual edge of the device removes the translation:
+   the side you should look at is the side that is glowing.
+   Fixed to the viewport, not the card, because the edge of the PHONE is
+   the thing being indicated. Pointer-events off throughout — this sits
+   over the buttons. */
+.edge{
+  position:fixed;pointer-events:none;z-index:4;
+  opacity:0;transition:opacity .45s var(--ease);
+}
+.edge.on{opacity:1}
+
+/* The wash: a soft gradient bleeding inward from the edge. Tuned low —
+   at full gold it fought the copy for attention, which is backwards,
+   since the copy is the instruction. */
+.edge-r,.edge-l{top:0;bottom:0;width:min(38vw,190px)}
+.edge-u,.edge-d{left:0;right:0;height:min(30vh,180px)}
+.edge-r{right:0;background:linear-gradient(to left,  rgba(212,168,67,.22),transparent 72%)}
+.edge-l{left:0; background:linear-gradient(to right, rgba(212,168,67,.22),transparent 72%)}
+.edge-u{top:0;  background:linear-gradient(to bottom,rgba(212,168,67,.22),transparent 72%)}
+.edge-d{bottom:0;background:linear-gradient(to top,  rgba(212,168,67,.22),transparent 72%)}
+
+/* The hairline: a hot line sitting exactly on the edge, with a bloom.
+   This is what actually reads as "here" — the wash only gives it depth. */
+.edge::after{
+  content:"";position:absolute;background:var(--gold-hot);
+  box-shadow:0 0 22px 3px rgba(212,168,67,.55);
+}
+.edge-r::after,.edge-l::after{top:12%;bottom:12%;width:2.5px;border-radius:2px}
+.edge-u::after,.edge-d::after{left:12%;right:12%;height:2.5px;border-radius:2px}
+.edge-r::after{right:0} .edge-l::after{left:0}
+.edge-u::after{top:0}   .edge-d::after{bottom:0}
+
+/* Breathing on the same 1.5s cycle as the chevron nudge, so the two read
+   as one signal rather than two things happening at once. */
+.edge.on::after{animation:edgePulse 1.5s var(--ease) infinite}
+@keyframes edgePulse{
+  0%,100%{opacity:.55;transform:scale(1)}
+  50%    {opacity:1;  transform:scale(1.015)}
+}
+@media (prefers-reduced-motion:reduce){
+  .edge.on::after{animation:none;opacity:.9}
+}
+
 /* MATERIAL. The image frames were flat fills on a flat page. A hairline
    of light along the top edge and a shadow beneath is enough to make
    them sit ON the page rather than in it — the same trick the render
@@ -447,6 +514,17 @@ html.locked .rail{display:none}
 
 <!-- ════════════════ A · THE GATE ════════════════ -->
 <section class="gate" id="gate" aria-label="Introduction">
+
+  <!-- EDGE INDICATORS. The chevron alone points, but it points from the middle
+       of the screen — you read it, then work out which way to turn your head.
+       Lighting the actual edge of the phone removes that translation step: the
+       side you're meant to look at is the side that's glowing. Decorative only;
+       the card's own words remain the accessible instruction. -->
+  <div class="edge edge-r" id="edgeR" aria-hidden="true"></div>
+  <div class="edge edge-u" id="edgeU" aria-hidden="true"></div>
+  <div class="edge edge-l" id="edgeL" aria-hidden="true"></div>
+  <div class="edge edge-d" id="edgeD" aria-hidden="true"></div>
+
   <div class="stage">
 
     <!-- intro screen — two sequential fade-ins, then BEGIN -->
@@ -536,6 +614,15 @@ html.locked .rail{display:none}
     </div>
     <h2 class="j-title">Forge turns your friend group&rsquo;s workouts into a monthly <b class="gk">competition</b>.</h2>
     <p class="j-sub">Real people. Real <b class="gk">rivalry</b>. Every workout counts.</p>
+    <div class="forged rv" aria-hidden="true">
+      <img src="assets/glyph3d/g-gym.webp"    width="176" height="176" loading="lazy" alt="">
+      <img src="assets/glyph3d/g-run.webp"    width="176" height="176" loading="lazy" alt="">
+      <img src="assets/glyph3d/g-swim.webp"   width="176" height="176" loading="lazy" alt="">
+      <img src="assets/glyph3d/g-cycle.webp"  width="176" height="176" loading="lazy" alt="">
+      <img src="assets/glyph3d/g-racket.webp" width="176" height="176" loading="lazy" alt="">
+      <img src="assets/glyph3d/g-mind.webp"   width="176" height="176" loading="lazy" alt="">
+    </div>
+    <p class="forged-cap rv">Lift, run, swim, ride, play, sit very still. It all counts.</p>
   </section>
 
   <!-- ════════ 2/4 — POINTS ════════ -->
@@ -707,10 +794,22 @@ setTimeout(function(){ document.getElementById('i1').classList.add('in'); }, 760
 setTimeout(function(){ document.getElementById('i2').classList.add('in'); }, 1860);
 setTimeout(function(){ document.getElementById('beginBtn').classList.add('in'); }, 2960);
 
+/* Cards 1-4 each ask the reader to look a particular way; light that edge of
+   the device while the card is up. Index 0 is the intro and 5+ is the payoff,
+   so both clear every edge. */
+var edgeIds = { 1:'edgeR', 2:'edgeU', 3:'edgeL', 4:'edgeD' };
+function setEdge(n){
+  Object.keys(edgeIds).forEach(function(k){
+    var el = document.getElementById(edgeIds[k]);
+    if(el) el.classList.toggle('on', Number(k) === n);
+  });
+}
+
 function show(n){
   cards[idx].classList.remove('on');
   idx = n;
   cards[idx].classList.add('on');
+  setEdge(n);
   if(n >= 1 && n <= 4){
     dots.classList.add('show');
     dotEls.forEach(function(d,i){ d.classList.toggle('hit', i <= n-1); });
@@ -747,6 +846,10 @@ cards.forEach(function(card, n){
 
 var cue = document.getElementById('cue');
 function releasePage(){
+  /* The edges are position:fixed, so an edge left lit here would follow the
+     reader down the whole page. The skip button reaches this without ever
+     passing through show(), so clear them at the single exit instead. */
+  setEdge(0);
   var sk=document.getElementById('gateSkip'); if(sk) sk.classList.remove('show');
   docEl.classList.remove('locked');
   content.removeAttribute('inert');
