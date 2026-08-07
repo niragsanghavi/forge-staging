@@ -474,6 +474,13 @@
       <button class="btn btn-gold" id="linkBtn" style="margin:0" onclick="linkAnotherGroup()">Link Group</button>
       <div id="linkResult" style="margin-top:10px;font-size:13px"></div>
     </div>
+
+    <!-- ACCOUNT DELETION — a Google Play requirement for a production listing:
+         an in-app path, not only the web page. Deliberately last on the page and
+         behind a typed confirmation, because it is the only irreversible thing a
+         normal user can do to themselves. Populated by renderDeleteAccountCard(). -->
+    <div class="shdr">Account</div>
+    <div class="card" id="deleteAccountCard"><div class="tmuted">Loading…</div></div>
   </div>
 
   <!-- IRON PLEDGE -->
@@ -1319,6 +1326,10 @@ async function submitPinEntry(){
           knownDeviceUids: firebase.firestore.FieldValue.arrayUnion(window.currentUid||null)
         }, {merge:true});
       }
+      // If a previous deletion attempt died mid-sweep, finish it now rather than
+      // letting the account sit half-removed. Piggybacks on this already
+      // fire-and-forget block precisely so it can never fail a login.
+      if(p.userId) await resumeAccountDeletionIfPending(p.userId);
     } catch(e){ logErr('submitPinEntry: identity write failed', e); }
   })();
 
@@ -1560,11 +1571,24 @@ async function loadGroup(code, fromCache){
 
     // Refresh `me` against the freshly loaded roster (team/role/consent may have changed)
     if(me){
-      const fresh = (season.roster||[]).find(p=>p.name===me.name);
+      let fresh = (season.roster||[]).find(p=>p.name===me.name);
+      // SELF-HEAL AFTER A RENAME. The device caches the whole roster row, name
+      // included, so once an admin renames someone the name lookup misses, the
+      // `if(fresh)` guard silently keeps the STALE row, and upsertSession below
+      // re-persists the old name. Every log that device then writes lands under
+      // a name the roster no longer knows — scoring zero, invisibly. That is the
+      // Riya failure mode arriving by a second route.
+      // userId survives a rename, so fall back to it. Fallback ONLY: a lot of
+      // legacy roster rows still carry no userId at all.
+      if(!fresh && me.userId) fresh = (season.roster||[]).find(p=>p && p.userId===me.userId);
       if(fresh) me = fresh;
     }
     // Keep this group's session entry fresh (group name + latest player record).
     upsertSession(code, me, groupData.name);
+
+    // Finish a half-completed account deletion on session restore too (the PIN
+    // login path has its own hook). Fire-and-forget — never blocks boot.
+    if(me && me.userId){ try{ resumeAccountDeletionIfPending(me.userId); }catch(e){} }
 
     // S2 auto-rollover: opportunistic, never awaited — this client keeps
     // booting normally on the (possibly about-to-be-archived) season; if a
@@ -1795,7 +1819,11 @@ function subscribe(){
     if(!s.exists) return; // archived/rollover case is handled by the group listener above
     season = s.data();
     if(me){
-      const fresh = (season.roster||[]).find(p=>p.name===me.name);
+      let fresh = (season.roster||[]).find(p=>p.name===me.name);
+      // Same rename self-heal as loadGroup. This is the LIVE path: an admin
+      // renaming someone whose app is open repairs that device immediately,
+      // instead of the device carrying a stale name until its next cold boot.
+      if(!fresh && me.userId) fresh = (season.roster||[]).find(p=>p && p.userId===me.userId);
       if(fresh) me = fresh;
     }
     refresh();
@@ -3509,6 +3537,7 @@ async function renderProfile(){
   statsEl.innerHTML='<div class="tmuted">Loading…</div>';
   seasonsEl.innerHTML='<div class="tmuted">Loading…</div>';
   renderProfileInsights();   // parallel + independent — an insights failure never blocks stats/seasons
+  renderDeleteAccountCard(); // ditto — never let the delete card break the tab
   try{
     const uSnap = await db.collection('users').doc(me.userId).get();
     const stats = (uSnap.exists && uSnap.data().stats) || {};
@@ -3622,6 +3651,246 @@ function openArchivedRecap(i){
   const d=buildRecapDataFromArchive(s);
   if(window.__recapShowFromData) window.__recapShowFromData(d);
 }
+
+// ── ACCOUNT DELETION ────────────────────────────────────────────────────────
+// Google Play requires an IN-APP deletion path for a production listing, not
+// just the web page at goforge.in/delete-account.html.
+//
+// WHAT THIS CAN AND CANNOT DO, AND WHY.
+// The rules deliberately freeze history: logs are delete:false and their updates
+// are restricted to hasOnly(['voided','voidedBy','voidedAt']), so `player` can
+// never be rewritten by a client; users docs are delete:false. That is the
+// tombstone model and it is load-bearing — it is what stops a malicious client
+// erasing someone else's month. So this flow does everything a client
+// legitimately can: roster entry removed · groups.players entry removed · every
+// log voided · users doc scrubbed to 'Deleted user' with pinHash/devices/
+// memberships cleared and stats zeroed · reactions and flags deleted · device
+// wiped. It leaves exactly one residue: the frozen `player` string on voided log
+// docs, plus bonuses_30day / jackAwards / bets, which no client may touch.
+// scripts/scrub-deleted-user.mjs (Admin SDK, run by hand) finishes those inside
+// the 30-day window the web page promises.
+//
+// ORDERING IS THE WHOLE DESIGN. deletionRequestedAt is stamped FIRST and
+// deletedAt LAST, so a run that dies halfway is detectable ("requested but not
+// finished") and every step is idempotent, letting the boot hook re-run it.
+// Logs are voided BEFORE the roster entry is removed, because the roster entry
+// is where that group's LOCAL name comes from — remove it first and a resumed
+// run can no longer find the logs.
+const DELETED_NAME = 'Deleted user';
+
+function renderDeleteAccountCard(){
+  const el = document.getElementById('deleteAccountCard');
+  if(!el) return;
+  if(!me || !me.userId){
+    el.innerHTML = '<div class="tmuted">Available once your profile finishes setting up.</div>';
+    return;
+  }
+  const n = getSessions().length || 1;
+  el.innerHTML =
+    '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
+    + 'Deleting removes your name, PIN, streaks and stats from '
+    + (n>1 ? ('all <b>'+n+'</b> of your groups') : 'your group')
+    + ', and hides every workout you have logged. Your teammates keep their own history. '
+    + 'Anything still carrying your name is purged within 30 days.</div>'
+    + '<div class="tmuted" style="font-size:12px;margin-bottom:10px"><b>This cannot be undone.</b> '
+    + 'Type <b>DELETE</b> to confirm.</div>'
+    + '<input type="text" id="delConfirmInput" placeholder="Type DELETE" maxlength="6" '
+    + 'autocapitalize="characters" style="margin-bottom:8px" oninput="onDelConfirmInput()">'
+    + '<button class="btn" id="delAccountBtn" disabled style="margin:0;background:var(--red);color:#fff;opacity:.5" '
+    + 'onclick="startAccountDeletion()">Delete my account</button>'
+    + '<div id="delResult" style="margin-top:10px;font-size:13px"></div>'
+    + '<div class="tmuted" style="font-size:11px;margin-top:10px">'
+    + 'Prefer email? <a href="https://goforge.in/delete-account.html" target="_blank" rel="noopener" '
+    + 'style="color:var(--gold)">Request deletion on the web</a>.</div>';
+}
+
+function onDelConfirmInput(){
+  const v=(document.getElementById('delConfirmInput')||{}).value||'';
+  const b=document.getElementById('delAccountBtn'); if(!b) return;
+  const ok = v.trim().toUpperCase()==='DELETE';
+  b.disabled=!ok; b.style.opacity = ok?'1':'.5';
+}
+
+function _delSay(msg){
+  const el=document.getElementById('delResult');
+  if(el){ el.style.color='var(--muted)'; el.textContent=msg; }
+}
+
+async function startAccountDeletion(){
+  if(!me || !me.userId) return;
+  if(!confirm('This permanently deletes your Forge account and hides all your workouts. It cannot be undone. Continue?')) return;
+  const btn=document.getElementById('delAccountBtn');
+  if(btn){ btn.disabled=true; btn.style.opacity='.5'; btn.textContent='Deleting…'; }
+  try{
+    await executeAccountDeletion(me.userId, _delSay);
+    _delSay('Account deleted. Signing you out…');
+    setTimeout(finishAccountDeletionLocally, 1200);
+  }catch(e){
+    logErr('startAccountDeletion', e);
+    const el=document.getElementById('delResult');
+    if(el){ el.style.color='var(--red)';
+      el.textContent='Deletion did not finish — check your connection and try again. Nothing is left half-done: reopening the app resumes it.'; }
+    if(btn){ btn.disabled=false; btn.style.opacity='1'; btn.textContent='Delete my account'; }
+  }
+}
+
+// Idempotent by construction: every step checks whether it already happened, so
+// the boot hook can safely re-run this after a mid-sweep failure.
+async function executeAccountDeletion(userId, say){
+  say = say || function(){};
+  const uRef = db.collection('users').doc(userId);
+  const uSnap = await uRef.get();
+  if(!uSnap.exists) throw new Error('NO_USER_DOC');
+  const u = uSnap.data();
+  const already = !!u.deletedAt;
+
+  // Which groups, and what am I called in each? Names differ per group (that is
+  // exactly the Riya bug), so the log queries need the LOCAL name per group.
+  const sweep = Object.assign({}, u.deletionSweep||{});
+  if(!Object.keys(sweep).length){
+    const codes = Object.keys(u.memberships||{});
+    if(!codes.length && window.groupCode) codes.push(groupCode);
+    for(const gc of codes){
+      try{
+        const gS = await db.collection('groups').doc(gc).get();
+        if(!gS.exists) continue;
+        const sid = gS.data().currentSeasonId; if(!sid) continue;
+        const sS = await db.collection('groups').doc(gc).collection('seasons').doc(sid).get();
+        if(!sS.exists) continue;
+        const entry = (sS.data().roster||[]).find(p =>
+          (p.userId && p.userId===userId) ||
+          (u.nameLower && String(p.name||'').toLowerCase()===u.nameLower));
+        if(entry) sweep[gc] = entry.name;
+      }catch(e){ logErr('deletion:discover:'+gc, e); }
+    }
+  }
+
+  // BEACON FIRST. deletionSweep is the per-group name map the admin scrubber
+  // still needs after this flow has erased `name` from the user doc.
+  if(!already){
+    await uRef.update({
+      deletionRequestedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      deletionSweep: sweep
+    });
+  }
+
+  const codes = Object.keys(sweep);
+  let gi=0;
+  for(const gc of codes){
+    gi++;
+    say('Removing you from group '+gi+' of '+codes.length+'…');
+    await deleteFromOneGroup(gc, sweep[gc], userId);
+  }
+
+  say('Finishing…');
+  await uRef.update({
+    name: DELETED_NAME,
+    nameLower: DELETED_NAME.toLowerCase(),
+    pinHash: null,
+    knownDeviceUids: [],
+    memberships: {},
+    stats: { seasonsPlayed:0, monthsLogged:0, monthsList:[], badgeCounts:{},
+             totalWorkouts:0, currentStreak:0, longestStreak:0, lastLoggedDay:null },
+    deletedAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  if(!already) bumpGlobalStat('totalUsers', -1);   // guarded: only the first completing run
+  return true;
+}
+
+async function deleteFromOneGroup(gc, localName, userId){
+  // 1. Void this person's logs FIRST (see ordering note above). Two queries
+  //    merged by id: never query by player name alone — two real people have
+  //    shared a first name in these groups before.
+  const ids = new Map();
+  try{
+    const byUid = await db.collection('logs').where('groupCode','==',gc).where('userId','==',userId).get();
+    byUid.forEach(d=>ids.set(d.id, d.data()));
+  }catch(e){ logErr('deletion:logsByUid:'+gc, e); }
+  if(localName){
+    try{
+      const byName = await db.collection('logs').where('groupCode','==',gc).where('player','==',localName).get();
+      byName.forEach(d=>{ const v=d.data(); if(!v.userId || v.userId===userId) ids.set(d.id, v); });
+    }catch(e){ logErr('deletion:logsByName:'+gc, e); }
+  }
+  let voided=0;
+  const entries=[...ids.entries()].filter(function(kv){ return !kv[1].voided; });   // idempotent re-run
+  for(let i=0;i<entries.length;i+=400){
+    const batch=db.batch();
+    entries.slice(i,i+400).forEach(function(kv){
+      batch.update(db.collection('logs').doc(kv[0]), {
+        voided:true,
+        voidedBy:'account-deletion',   // NOT the user's name — that would defeat the purpose
+        voidedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      if(kv[1].demo!==true) voided++;  // demo logs never incremented the counters
+    });
+    await batch.commit();
+  }
+  if(voided) bumpGlobalStat('totalLogs', -voided);
+
+  // 2. Best-effort purges the rules DO allow. Never block the flow.
+  try{
+    const rs = await db.collection('reactions').where('groupCode','==',gc).where('player','==',localName).get();
+    for(const d of rs.docs){ try{ await d.ref.delete(); }catch(e){} }
+  }catch(e){}
+  try{
+    const fs = await db.collection('flags').where('groupCode','==',gc).where('player','==',localName).get();
+    for(const d of fs.docs){ try{ await d.ref.delete(); }catch(e){} }
+  }catch(e){}
+
+  // 3. Roster + players, one transaction. The rules allow a roster to shrink by
+  //    at most one entry per write — which is exactly "remove myself".
+  const gRef = db.collection('groups').doc(gc);
+  const gS = await gRef.get(); if(!gS.exists) return;
+  const sid = gS.data().currentSeasonId; if(!sid) return;
+  const sRef = gRef.collection('seasons').doc(sid);
+  await db.runTransaction(async tx=>{
+    const sSnap = await tx.get(sRef); if(!sSnap.exists) return;
+    const gSnap = await tx.get(gRef);
+    const roster = sSnap.data().roster||[];
+    const keep = roster.filter(p => !(
+      (p.userId && p.userId===userId) ||
+      (localName && String(p.name||'').toLowerCase()===String(localName).toLowerCase())));
+    if(keep.length === roster.length) return;               // already gone — clean re-run
+    if(roster.length - keep.length > 1) throw new Error('REFUSING_MULTI_REMOVE');
+    tx.update(sRef, {roster: keep});
+    const players = (gSnap.exists && gSnap.data().players) || [];
+    const keepP = players.filter(p=>{
+      const nm = (typeof p==='string') ? p : (p && p.name);
+      return String(nm||'').toLowerCase() !== String(localName||'').toLowerCase();
+    });
+    if(keepP.length !== players.length) tx.update(gRef, {players: keepP});
+  });
+}
+
+function finishAccountDeletionLocally(){
+  try{ getSessions().forEach(s=>removeSession(s.code)); }catch(e){}
+  try{
+    Object.keys(localStorage).filter(k=>k.indexOf('forge_')===0).forEach(k=>localStorage.removeItem(k));
+  }catch(e){}
+  try{
+    if(typeof window.hardResetDevice==='function'){ window.hardResetDevice('account-deleted'); return; }
+  }catch(e){}
+  location.reload();
+}
+
+// RESUME HOOK. A sweep that died halfway leaves deletionRequestedAt set and
+// deletedAt unset; finish it silently on the next app open. Wrapped so a throw
+// here can never block boot — this sits on the login path, the highest
+// blast-radius code in the app.
+async function resumeAccountDeletionIfPending(userId){
+  try{
+    if(!userId) return false;
+    const s = await db.collection('users').doc(userId).get();
+    if(!s.exists) return false;
+    const d = s.data();
+    if(!d.deletionRequestedAt || d.deletedAt) return false;
+    await executeAccountDeletion(userId, function(){});
+    finishAccountDeletionLocally();
+    return true;
+  }catch(e){ logErr('resumeAccountDeletion', e); return false; }
+}
+window.resumeAccountDeletionIfPending = resumeAccountDeletionIfPending;
 
 // ── PROFILE INSIGHTS (direct user request: "in the last 50 workouts, you've
 // done strength 10 times, cardio 10 times") ────────────────────────────────
