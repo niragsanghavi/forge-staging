@@ -87,7 +87,14 @@ function _ctxEntry(ctx){
   // Team-streak qualifying days, resolved once per team instead of per player.
   const thrFactor=cfg.teamStreakThreshold ?? 0.6;
   const teamCount=new Map();
-  roster.forEach(p=>teamCount.set(p.team,(teamCount.get(p.team)||0)+1));
+  // Departed players (deleted accounts, kept on the roster under a Hall of the
+  // Departed name so the group's history survives) must NOT count toward the
+  // threshold denominator. They can never log again, so leaving them in would
+  // permanently raise the bar for everyone still playing — one person quitting
+  // would quietly break their team's streak. Their PAST logs still score; only
+  // the forward-looking headcount changes.
+  roster.forEach(p=>{ if(p && p.departed===true) return;
+                      teamCount.set(p.team,(teamCount.get(p.team)||0)+1); });
   const qualByTeam=new Map();
   for(const [t,count] of teamCount){
     const td=teamDayLog.get(t);

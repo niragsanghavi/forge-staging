@@ -167,6 +167,33 @@ window.seasonIdOf = function(month, year){
   return `${year}-${String(month).padStart(2,'0')}`;
 };
 
+// ── THE HALL OF THE DEPARTED ──────────────────────────────────────────────
+// Locked decision, 25 Jul 2026 (AUTH_DESIGN_FINAL Q4). A deleted player is not
+// erased from a group's history — their league record is the GROUP's shared
+// record, not only theirs. They are replaced by a punny departure name, taken
+// in order, skipping any already used in that group. Bank exhausted -> "Gone
+// Player #N".
+//
+// It also happens to be the right engineering answer. A single generic
+// "Deleted user" would collide the moment two people left the same group, and
+// this app keys identity on the name string in a dozen places — two identical
+// roster names is undefined behaviour, not a cosmetic problem.
+window.DEPARTED_NAMES = [
+  'Sheera Naway', 'Simran Bhaag', 'Ranaway Rana', 'Gayab Singh',
+  'Nikhil Gayaa', 'Farrar Khan',  'Rafu Chakkar', 'Bhaagi Mehta',
+  'Gul Hogayaa',  'U-Turn Uday',  'Tata B. Bai',  'Chhod K. Gaya'
+];
+
+// Pick the next unused departure name for a roster. Deterministic and
+// collision-free within a group, which is what the name-keyed lookups need.
+window.pickDepartedName = function(roster){
+  const taken = new Set((roster||[]).map(p => p && p.name).filter(Boolean));
+  for(const n of window.DEPARTED_NAMES){ if(!taken.has(n)) return n; }
+  let i = 1;
+  while(taken.has('Gone Player #' + i)) i++;
+  return 'Gone Player #' + i;
+};
+
 // ── SOLO / SMALL-GROUP MODE ───────────────────────────────────────────────
 // numTeams === 1 means "the team is the whole group": no team standings, no
 // rivalry UI, one shared GROUP streak, one podium. It is the single change that

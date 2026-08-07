@@ -3815,17 +3815,23 @@ async function executeAccountDeletion(userId, say){
   }
 
   const codes = Object.keys(sweep);
-  let gi=0;
+  let gi=0, firstDeparted=null;
   for(const gc of codes){
     gi++;
     say('Removing you from group '+gi+' of '+codes.length+'…');
-    await deleteFromOneGroup(gc, sweep[gc], userId);
+    const nm = await deleteFromOneGroup(gc, sweep[gc], userId);
+    if(nm && !firstDeparted) firstDeparted = nm;
   }
 
   say('Finishing…');
+  // The account carries the FIRST departure name it was given. Per-group names
+  // can differ (each group assigns from its own unused pool), and the account
+  // needs exactly one label.
+  const acctName = firstDeparted || DELETED_NAME;
   await uRef.update({
-    name: DELETED_NAME,
-    nameLower: DELETED_NAME.toLowerCase(),
+    name: acctName,
+    nameLower: acctName.toLowerCase(),
+    deleted: true,
     pinHash: null,
     knownDeviceUids: [],
     memberships: {},
@@ -3878,29 +3884,44 @@ async function deleteFromOneGroup(gc, localName, userId){
     for(const d of fs.docs){ try{ await d.ref.delete(); }catch(e){} }
   }catch(e){}
 
-  // 3. Roster + players, one transaction. The rules allow a roster to shrink by
-  //    at most one entry per write — which is exactly "remove myself".
+  // 3. THE HALL OF THE DEPARTED (locked decision, AUTH_DESIGN_FINAL Q4).
+  //    The roster row is NOT removed — it is renamed to a departure name and
+  //    stripped of every identifying field. A group's league history is the
+  //    GROUP's shared record: deleting the row would silently rewrite past
+  //    standings for everyone who competed against them. Keeping a pseudonymous
+  //    row preserves the season; `departed:true` is what stops it counting
+  //    toward the team-streak threshold going forward (scoringEngine).
   const gRef = db.collection('groups').doc(gc);
-  const gS = await gRef.get(); if(!gS.exists) return;
-  const sid = gS.data().currentSeasonId; if(!sid) return;
+  const gS = await gRef.get(); if(!gS.exists) return null;
+  const sid = gS.data().currentSeasonId; if(!sid) return null;
   const sRef = gRef.collection('seasons').doc(sid);
+  let assigned = null;
   await db.runTransaction(async tx=>{
     const sSnap = await tx.get(sRef); if(!sSnap.exists) return;
     const gSnap = await tx.get(gRef);
     const roster = sSnap.data().roster||[];
-    const keep = roster.filter(p => !(
+    const i = roster.findIndex(p => p && (
       (p.userId && p.userId===userId) ||
       (localName && String(p.name||'').toLowerCase()===String(localName).toLowerCase())));
-    if(keep.length === roster.length) return;               // already gone — clean re-run
-    if(roster.length - keep.length > 1) throw new Error('REFUSING_MULTI_REMOVE');
-    tx.update(sRef, {roster: keep});
+    if(i < 0) return;                                  // already done — clean re-run
+    if(roster[i].departed === true){ assigned = roster[i].name; return; }   // idempotent
+    const departedName = pickDepartedName(roster);
+    // Rebuilt, not spread: every identity-bearing field (userId, uid, pinHash,
+    // pin, globalConsent, isAdmin) must be GONE, not merely overwritten.
+    roster[i] = { name: departedName, team: roster[i].team || 'A',
+                  role: 'Player', departed: true };
+    assigned = departedName;
+    tx.update(sRef, {roster});
     const players = (gSnap.exists && gSnap.data().players) || [];
-    const keepP = players.filter(p=>{
-      const nm = (typeof p==='string') ? p : (p && p.name);
-      return String(nm||'').toLowerCase() !== String(localName||'').toLowerCase();
+    let touched = false;
+    players.forEach(p=>{
+      if(p && typeof p==='object' && String(p.name||'').toLowerCase()===String(localName||'').toLowerCase()){
+        p.name = departedName; touched = true;
+      }
     });
-    if(keepP.length !== players.length) tx.update(gRef, {players: keepP});
+    if(touched) tx.update(gRef, {players});
   });
+  return assigned;
 }
 
 function finishAccountDeletionLocally(){
