@@ -5100,7 +5100,7 @@ function renderAdminRoles(){
   const teamCol=solo?'':' 70px';
   // S3 §4.1: Admin checkbox + Reset PIN button, independent of whether the
   // Captain/VC roles feature is on for this season.
-  const cols=rolesOn?`1fr${teamCol} 120px 46px 70px`:`1fr${teamCol} 46px 70px`;
+  const cols=rolesOn?`1fr${teamCol} 120px 46px 70px 70px`:`1fr${teamCol} 46px 70px 70px`;
   document.getElementById('adminRoles').innerHTML=players.map(p=>`
     <div style="display:grid;grid-template-columns:${cols};gap:6px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
       <span style="font-size:13px;font-weight:600">${esc(p.name)}</span>
@@ -5112,6 +5112,7 @@ function renderAdminRoles(){
       </select>`:''}
       <input type="checkbox" id="admin_${esc(p.name)}" title="Admin" style="width:auto;margin:0;justify-self:center" ${p.isAdmin?'checked':''}>
       <button class="btn btn-surface btn-sm" style="margin:0;padding:6px 4px;font-size:11px" onclick="resetPlayerPin('${escForInlineJsAttr(p.name)}')">Reset PIN</button>
+      <button class="btn btn-surface btn-sm" style="margin:0;padding:6px 4px;font-size:11px" onclick="renamePlayer('${escForInlineJsAttr(p.name)}')">Rename</button>
     </div>`).join('');
 }
 
@@ -5174,6 +5175,93 @@ async function saveRoles(){
   } catch(e){
     if(e.message==='LAST_ADMIN'){ toast('A group must have at least one admin — promote someone else before removing the last one.','error'); }
     else { logErr('saveRoles', e); toast('Save failed — check connection: '+e.message,'error'); }
+  }
+}
+
+// ── PLAYER RENAME ─────────────────────────────────────────────────────────
+// Until now there was NO rename anywhere in the app, so every mismatch meant
+// hand-editing Firestore. It has happened twice (Rishil in July, Riya on 6 Aug),
+// and each time the person silently scored zero until a human noticed.
+//
+// THE DIRECTION MATTERS AND IS NOT SYMMETRIC. score() joins roster -> logs by
+// exact name string, and log `player` is FROZEN by the rules (updates are
+// restricted to hasOnly(['voided','voidedBy','voidedAt'])), so the app can never
+// rewrite it. Renaming the ROSTER to match existing logs re-attaches them.
+// Renaming AWAY from the logs orphans the whole month. The dialog says which
+// way it is going and how many current-season logs are at stake.
+//
+// It sweeps every group the person belongs to, because a name can differ per
+// group and only this group's roster is being changed — the others keep theirs.
+async function renamePlayer(oldName){
+  const raw = prompt(`Rename "${oldName}" to what?\n\nUse the EXACT spelling their workouts are logged under — the app matches logs to people by name.`, oldName);
+  if(raw===null) return;
+  const newName = String(raw).trim().replace(/\s+/g,' ');
+  if(!newName || newName===oldName) return;
+  if(newName.length>24){ toast('Names are limited to 24 characters.','error'); return; }
+  if((season.roster||[]).some(p=>p.name.toLowerCase()===newName.toLowerCase() && p.name!==oldName)){
+    toast(`"${newName}" is already taken in this group.`,'error'); return;
+  }
+  // How many of THIS season's logs currently match each spelling? This is the
+  // number that tells the admin whether they are fixing or breaking scoring.
+  let oldLogs=0, newLogs=0;
+  try{
+    const snap = await db.collection('logs')
+      .where('groupCode','==',groupCode).where('month','==',season.month).where('year','==',season.year).get();
+    snap.forEach(d=>{ const p=d.data(); if(p.voided) return;
+      if(p.player===oldName) oldLogs++; else if(p.player===newName) newLogs++; });
+  }catch(e){ logErr('renamePlayer:count', e); }
+
+  const warn = newLogs>0
+    ? `\n\n✅ ${newLogs} log(s) this month are already under "${newName}" and will START counting.`
+    : (oldLogs>0
+        ? `\n\n⚠️ ${oldLogs} log(s) this month are under "${oldName}". Log names cannot be changed, so those will STOP counting until they log again under the new name.`
+        : '');
+  if(!confirm(`Rename "${oldName}" to "${newName}" in this group?${warn}`)) return;
+
+  const gRef = db.collection('groups').doc(groupCode);
+  const sRef = gRef.collection('seasons').doc(seasonId);
+  try{
+    let written=null, userId=null;
+    await db.runTransaction(async tx=>{
+      const sSnap=await tx.get(sRef); if(!sSnap.exists) throw new Error('SEASON_MISSING');
+      const gSnap=await tx.get(gRef);
+      const roster=sSnap.data().roster||[];
+      const entry=roster.find(p=>p.name===oldName);
+      if(!entry) throw new Error('NO_RECORD');
+      entry.name=newName;
+      userId=entry.userId||null;
+      tx.update(sRef,{roster});
+      // groups.players is the names-only mirror; leaving it stale makes the
+      // super-admin player count and the picker disagree with the roster.
+      const players=(gSnap.exists && gSnap.data().players)||[];
+      let touched=false;
+      players.forEach(p=>{ if(p && typeof p==='object' && p.name===oldName){ p.name=newName; touched=true; } });
+      if(touched) tx.update(gRef,{players});
+      written=roster;
+    });
+    // The account's display name follows only when it still matched the old
+    // spelling — a per-group alias must not overwrite the canonical account name.
+    if(userId){
+      try{
+        const uRef=db.collection('users').doc(userId);
+        const u=await uRef.get();
+        if(u.exists && String(u.data().name||'').toLowerCase()===oldName.toLowerCase()){
+          await uRef.update({ name:newName, nameLower:newName.toLowerCase() });
+        }
+      }catch(e){ logErr('renamePlayer:userDoc', e); }
+    }
+    if(written){
+      season.roster=written;
+      const fresh=written.find(p=>p.name===newName);
+      if(fresh && me && (me.name===oldName || (me.userId && me.userId===fresh.userId))){
+        me=fresh; upsertSession(groupCode, me, groupData?.name);
+      }
+    }
+    renderAdminRoles(); refresh();
+    toast(`Renamed to ${newName}.`,'success');
+  }catch(e){
+    logErr('renamePlayer', e);
+    toast(e.message==='NO_RECORD' ? 'That player is no longer on the roster.' : 'Rename failed — check connection.','error');
   }
 }
 
