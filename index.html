@@ -5710,6 +5710,13 @@ async function performRollover(code){
       capTarget: cur2.capTarget ?? 16, vcTarget: cur2.vcTarget ?? 20, minWorkouts: cur2.minWorkouts ?? 12,
       numTeams: cur2.numTeams ?? 3, teamStreakThreshold: cur2.teamStreakThreshold ?? 0.6,
       rolesEnabled: cur2.rolesEnabled !== false,
+      // kmTarget is a FEATURE TOGGLE, not just a number: scoringEngine treats
+      // "unset" as "the distance goal does not exist for this season". Omitting
+      // it here silently switched the whole feature off at every month boundary
+      // with no UI signal to the admin. Carried forward like every other target.
+      // (foundryGoal is deliberately NOT carried — it's a manual override of an
+      // auto-computed goal, and a stale number is worse than re-computing.)
+      kmTarget: cur2.kmTarget ?? null,
       roster: newRoster, status:'active',
       startedAt: firebase.firestore.FieldValue.serverTimestamp(), endedAt: null
     });
