@@ -357,7 +357,7 @@
     <div id="weeklyMover"></div>
     <!-- Team distance goal. Renders nothing at all unless season.kmTarget is set. -->
     <div id="kmGoalCard"></div>
-    <div class="shdr">Team Standings</div>
+    <div class="shdr" id="teamStandHdr">Team Standings</div>
     <div id="teamStand"></div>
     <div class="shdr">Individual Rankings</div>
     <div class="card" id="indLb"></div>
@@ -421,7 +421,7 @@
       <div class="tmuted" style="margin-bottom:12px">Update at the start of each month</div>
       <div id="adminRoles"></div>
       <button class="btn btn-gold" style="margin-top:12px" onclick="saveRoles()">Save All Changes</button>
-      <button class="btn btn-surface" style="margin-top:8px" onclick="openRebalancePreview()">⚖️ Auto-balance teams</button>
+      <button class="btn btn-surface" id="rebalanceBtn" style="margin-top:8px" onclick="openRebalancePreview()">⚖️ Auto-balance teams</button>
     </div>
     <div class="card">
       <div class="card-title">Monthly Twists</div>
@@ -561,8 +561,8 @@
         <label>Minimum workouts before penalty</label>
         <input id="editMinWO" type="number">
         <label>Number of teams (2 or 3)</label>
-        <input id="editNumTeams" type="number" min="2" max="3">
-        <label>Team streak threshold (% of team needed for bonus)</label>
+        <input id="editNumTeams" type="number" min="1" max="3">
+        <label>Streak threshold (% of the team — or of the whole group at 1 team)</label>
         <input id="editThreshold" type="number" min="30" max="100">
         <label>Team distance target (km) — blank or 0 turns the whole feature off</label>
         <input id="editKmTarget" type="number" min="0" max="10000" placeholder="off">
@@ -642,8 +642,8 @@
             <label>Minimum workouts before penalty</label>
             <input id="newGroupMinWO" type="number" value="12">
             <label>Number of teams (2 or 3)</label>
-            <input id="newGroupNumTeams" type="number" min="2" max="3" value="3">
-            <label>Team streak threshold (% of team needed for bonus)</label>
+            <input id="newGroupNumTeams" type="number" min="1" max="3" value="3">
+            <label>Streak threshold (% of the team — or of the whole group at 1 team)</label>
             <input id="newGroupThreshold" type="number" min="30" max="100" value="60">
             <label style="display:flex;align-items:center;gap:8px;margin-top:4px">
               <input type="checkbox" id="newGroupRoles" checked style="width:auto;margin:0">
@@ -1385,8 +1385,7 @@ async function registerAndJoin(){
   // Name must be unique within this group's roster (case-insensitive)
   const existing = (season.roster||[]).find(p=>p.name.toLowerCase()===formattedName.toLowerCase());
   if(existing){ toast(`The name "${formattedName}" is already taken in this group. Please use a different name (e.g. add your surname or initial).`,'error'); return; }
-  const numTeams = season.numTeams === 2 ? 2 : 3;
-  const teams = numTeams === 2 ? ['A','B'] : ['A','B','C'];
+  const teams = teamLettersOf(season);
   const assignedTeam = teams[(season.roster||[]).length % teams.length];
 
   // Stage the new player and route to PIN-setting. Nothing is written until the
@@ -4792,13 +4791,23 @@ function renderLB(){
   if(!season) return;
   const players=season.roster||[];
   const teams=[...new Set(players.map(p=>p.team))];
+  // SOLO / SMALL-GROUP: with one team there is no contest to stand. Hide the
+  // whole block — header included — rather than render a single card that
+  // reads "Team A · Leading · 100%" against nobody. Individual Rankings below
+  // is untouched and becomes the only board, which is the point.
+  const _solo = (typeof isSoloMode==='function' && isSoloMode()) || teams.length<=1;
+  const _tsHdr=document.getElementById('teamStandHdr'), _tsBox=document.getElementById('teamStand');
+  if(_tsHdr) _tsHdr.style.display=_solo?'none':'';
+  if(_solo){
+    if(_tsBox) _tsBox.innerHTML='';
+  }
   const tcol=t=>t==='A'?'var(--A)':t==='B'?'var(--B)':'var(--C)';
   const ts=teams.map(t=>({t,s:teamTotal(t),count:players.filter(p=>p.team===t).length})).sort((a,b)=>b.s-a.s);
   // Ranked standings cards: medal rank, team name, members, avg pts,
   // and a relative bar showing each team's score vs the leader.
   const firstS = ts[0]?.s || 1;
   const medalCols = ['#FFD700','#C0C0C0','#CD7F32'];   // gold, silver, bronze
-  document.getElementById('teamStand').innerHTML=ts.map((t,i)=>{
+  if(!_solo) document.getElementById('teamStand').innerHTML=ts.map((t,i)=>{
     const col = tcol(t.t);
     const names = players.filter(p=>p.team===t.t).map(p=>esc(p.name)).join(' · ');
     const pct = Math.max(6, Math.round((t.s/firstS)*100));
@@ -4846,7 +4855,7 @@ function renderLB(){
     ${[
       ['Base points',my.base,`${my.wo} workouts × 5 — Boss Week doubles days inside its window`],
       ['Perfect week',my.wb,'+10 per any 7 consecutive days'],
-      ['Team streak',my.tb,'Cumulative +1/+2/+3 (proportional threshold)'],
+      [isSoloMode()?'Group streak':'Team streak',my.tb,'Cumulative +1/+2/+3 (proportional threshold)'],
       ['Role bonus',my.rb,pl.role+' — applied on last day'],
       ['30-day bonus',my.b30,'All days logged'],
       ...(my.dayBonuses?[['Day bonuses',my.dayBonuses,'Freaky Fridays / Monday Motivation']]:[] ),
@@ -4908,15 +4917,18 @@ function renderFeed(){
       <div style="font-size:11px;color:var(--muted)">Assignments were balanced from last season's final scores.</div></div>
     </div>`;
   }
-  let statsHTML=bannerHTML+`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+  // SOLO: one team means "Leading today" is a constant. Drop the tile and let
+  // "Logged today" take the full width rather than sit orphaned in a 2-col grid.
+  const _feedSolo = (typeof isSoloMode==='function' && isSoloMode());
+  let statsHTML=bannerHTML+`<div style="display:grid;grid-template-columns:${_feedSolo?'1fr':'1fr 1fr'};gap:8px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
     <div style="background:var(--green-l);border-radius:10px;padding:12px;text-align:center">
       <div style="font-size:26px;font-weight:900;color:var(--green)">${todayCount}<span style="font-size:13px;font-weight:500;color:var(--green)">/${total}</span></div>
       <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Logged today</div>
     </div>
-    <div style="background:${topTeam?tbg(topTeam):'var(--surface)'};border-radius:10px;padding:12px;text-align:center">
+    ${_feedSolo?'':`<div style="background:${topTeam?tbg(topTeam):'var(--surface)'};border-radius:10px;padding:12px;text-align:center">
       <div style="font-size:26px;font-weight:900;color:${topTeam?tcol(topTeam):'var(--muted)'}">${topTeam?'Team '+topTeam:'—'}</div>
       <div style="font-size:10px;font-weight:700;color:${topTeam?tcol(topTeam):'var(--muted)'};text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Leading today</div>
-    </div>
+    </div>`}
     ${topStreakers.length>0?`<div style="background:var(--gold-l);border-radius:10px;padding:12px;text-align:center;grid-column:1/-1">
       <div style="font-size:16px;font-weight:800;color:var(--orange)">${(function(){const d=topStreak+(topStreak===1?' day ':' days ')+flameIco('flk-m');return topStreakers.length<=3?topStreakers.map(p=>p.name).join(' · ')+' · '+d:'Multiple players · '+d;})()}</div>
       <div style="font-size:10px;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">${topStreakers.length<=3?'Longest active streak':topStreakers.length+' players tied — check the board'}</div>
@@ -5079,16 +5091,20 @@ async function resolveFlag(logId,action){
 // ── ADMIN ─────────────────────────────────────────────────────────────────
 function renderAdminRoles(){
   const players=season.roster||[];
-  const numTeams=season.numTeams===2?2:3;
-  const teamOpts=numTeams===2?['A','B']:['A','B','C'];
+  const teamOpts=teamLettersOf(season);
   const rolesOn=season.rolesEnabled!==false;
+  // SOLO: a one-option team picker is noise. The <select> STAYS IN THE DOM
+  // (display:none) because saveRoles() reads it by id — removing it outright
+  // would make every Save All Changes throw. Only the grid track goes.
+  const solo=(typeof isSoloMode==='function' && isSoloMode());
+  const teamCol=solo?'':' 70px';
   // S3 §4.1: Admin checkbox + Reset PIN button, independent of whether the
   // Captain/VC roles feature is on for this season.
-  const cols=rolesOn?'1fr 70px 120px 46px 70px':'1fr 70px 46px 70px';
+  const cols=rolesOn?`1fr${teamCol} 120px 46px 70px`:`1fr${teamCol} 46px 70px`;
   document.getElementById('adminRoles').innerHTML=players.map(p=>`
     <div style="display:grid;grid-template-columns:${cols};gap:6px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
       <span style="font-size:13px;font-weight:600">${esc(p.name)}</span>
-      <select id="team_${esc(p.name)}" style="padding:6px;font-size:12px;margin-bottom:0">
+      <select id="team_${esc(p.name)}" style="padding:6px;font-size:12px;margin-bottom:0${solo?';display:none':''}">
         ${teamOpts.map(t=>`<option value="${t}"${p.team===t?' selected':''}>Team ${t}</option>`).join('')}
       </select>
       ${rolesOn?`<select id="role_${esc(p.name)}" style="padding:6px;font-size:12px;margin-bottom:0">
@@ -5262,7 +5278,10 @@ function renderTwistToggles(){
   const WINDOW=new Set(['boss_week','underdog_week']);
   const DAY1=new Set(['freaky_fridays','monday_motivation']);
   const pick = t => WINDOW.has(t.id)?renderWindowRow(t):DAY1.has(t.id)?renderDay1Row(t):renderRow(t);
-  const standard = TWIST_LIBRARY.filter(t=>t.id!=='double_or_nothing');
+  // stakes_mode is "losing team covers next month" — unplayable when there is
+  // only one team, so it is not offered rather than offered and broken.
+  const standard = TWIST_LIBRARY.filter(t=>t.id!=='double_or_nothing')
+    .filter(t=>!(t.id==='stakes_mode' && typeof isSoloMode==='function' && isSoloMode()));
   const highStakes = TWIST_LIBRARY.find(t=>t.id==='double_or_nothing');
   let html = standard.map(pick).join('');
   if(highStakes){
@@ -5404,8 +5423,7 @@ async function fetchPrevSnapshot(){
 // median rank before dealing. Snake order: A,B,B,A (2 teams) / A,B,C,C,B,A (3).
 function computeSnakeDraft(standings){
   const roster = season.roster || [];
-  const numTeams = season.numTeams === 2 ? 2 : 3;
-  const teamLetters = numTeams === 2 ? ['A','B'] : ['A','B','C'];
+  const teamLetters = teamLettersOf(season);
   const totalByName = {};
   (standings||[]).forEach(s=>{ totalByName[String(s.name).trim().toLowerCase()] = Number(s.total)||0; });
 
@@ -5440,6 +5458,13 @@ async function maybeShowRebalanceCard(){
   if(!host) return;
   host.innerHTML = '';
   if(!season || !seasonId) return;
+  // SOLO: there is nothing to balance between. Hide the prompt AND the standing
+  // "⚖️ Auto-balance teams" button — a snake draft across one team is a no-op
+  // that only invites confusion.
+  const _soloRb = (typeof isSoloMode==='function' && isSoloMode());
+  const _rbBtn = document.getElementById('rebalanceBtn');
+  if(_rbBtn) _rbBtn.style.display = _soloRb ? 'none' : '';
+  if(_soloRb) return;
   if(season.rebalancedAt || season.rebalanceDismissed) return;    // already handled this season
   const startedMs = season.startedAt?.toMillis ? season.startedAt.toMillis() : ((season.startedAt?.seconds||0)*1000);
   if(!startedMs) return;                                          // legacy season w/o startedAt — permanent button still works
@@ -5743,7 +5768,7 @@ async function saveEditGroup(){
   const capTarget=parseInt(document.getElementById('editCapTarget').value)||16;
   const vcTarget=parseInt(document.getElementById('editVCTarget').value)||20;
   const minWorkouts=parseInt(document.getElementById('editMinWO').value)||12;
-  const numTeams=Math.min(3,Math.max(2,parseInt(document.getElementById('editNumTeams').value)||3));
+  const numTeams=Math.min(3,Math.max(1,parseInt(document.getElementById('editNumTeams').value)||3));
   const thresholdPct=Math.min(100,Math.max(30,parseInt(document.getElementById('editThreshold').value)||60));
   // null (not 0, not absent) is the explicit "off" value — every km surface tests
   // Number(kmTarget)>0, and writing null lets an admin switch the feature back off
@@ -5755,16 +5780,45 @@ async function saveEditGroup(){
   const isDemo=document.getElementById('editDemo').checked;
 
   // ── Guard: reducing team count while players sit on a vanishing team ──
-  if(numTeams===2){
-    const orphans=(window._editRoster||[]).filter(p=>p.team==='C').map(p=>p.name);
-    if(orphans.length>0){
-      const ok=confirm(`⚠️ Reducing to 2 teams, but these players are on Team C:\n\n${orphans.join(', ')}\n\nThey will stay on Team C in the data (not lost), but the app will only offer Teams A and B. You'll need to reassign them via that group's Admin → Team & Role Assignment.\n\nProceed anyway?`);
+  // Generalised from the old numTeams===2-only check. Dropping to 1 strands
+  // everyone on B AND C, and that case cannot merely warn: the scoring engine
+  // derives teams from the roster's `team` values, never from numTeams, so a
+  // "1 team" season with leftover B/C players would keep scoring them as
+  // SEPARATE teams — each with its own ceil(n x threshold) — while the UI
+  // insisted there was one group. So at 1 team we migrate the roster instead.
+  const _validLetters = teamLettersOf({numTeams});
+  const _orphans = (window._editRoster||[]).filter(p=>p.team && _validLetters.indexOf(p.team)<0);
+  let _migrateToA = false;
+  if(_orphans.length>0){
+    const names=_orphans.map(p=>p.name).join(', ');
+    if(numTeams===1){
+      const ok=confirm(`Switching to a single group team.\n\n${_orphans.length} player(s) are on Team B or C:\n\n${names}\n\nThey will be moved to Team A so the whole group shares one streak. Nothing else changes — points, logs and history are untouched.\n\nProceed?`);
+      if(!ok){ status.textContent='Cancelled — no changes saved.'; return; }
+      _migrateToA = true;
+    } else {
+      const ok=confirm(`⚠️ Reducing to ${numTeams} teams, but these players are on a team that will no longer be offered:\n\n${names}\n\nThey stay on that team in the data (not lost), but the app will only offer ${_validLetters.join(' and ')}. You'll need to reassign them via that group's Admin → Team & Role Assignment.\n\nProceed anyway?`);
       if(!ok){ status.textContent='Cancelled — no changes saved.'; return; }
     }
   }
 
   status.textContent='Saving…';
   try{
+    // Roster migration to Team A runs in its own transaction FIRST, so a failure
+    // here leaves the season on its old numTeams rather than switching the count
+    // and stranding the players the guard just promised to move.
+    if(_migrateToA){
+      const _sRef = db.collection('groups').doc(code).collection('seasons').doc(sid);
+      await db.runTransaction(async tx=>{
+        const snap = await tx.get(_sRef);
+        if(!snap.exists) throw new Error('SEASON_MISSING');
+        const roster = (snap.data().roster||[]).map(p=>Object.assign({}, p, {team:'A'}));
+        tx.update(_sRef, {roster});
+      });
+      if(window._editRoster) window._editRoster.forEach(p=>{ p.team='A'; });
+      if(window.season && window.seasonId===sid && window.groupCode===code && Array.isArray(window.season.roster)){
+        window.season.roster.forEach(p=>{ p.team='A'; });
+      }
+    }
     await Promise.all([
       db.collection('groups').doc(code).update({ name: newGroupName, demo: isDemo }),
       db.collection('groups').doc(code).collection('seasons').doc(sid).update({
@@ -5861,7 +5915,15 @@ async function writeSeasonSnapshot(code){
   // ── Badges (§2.5: no shared #1 — a genuine tie at the top awards nobody) ──
   const top = finalStandings[0], secondTotal = finalStandings[1]?.total;
   const seasonWinnerName = (top && top.total>0 && (secondTotal===undefined || top.total>secondTotal)) ? top.name : null;
-  const teamTop = teamStandings[0], teamSecondAvg = teamStandings[1]?.avg;
+  // A one-team season has no team contest, so nobody can win it. Without this
+  // guard `teamStandings[1]` is undefined, `teamSecondAvg===undefined` is true,
+  // and the expression below declares Team A the winner — handing a PERMANENT
+  // 🏆 Team Winner badge to every single member, written into their user doc
+  // and counted in stats.badgeCounts forever. Gated on the standings themselves
+  // rather than on numTeams so it also protects any season whose roster
+  // happened to collapse to one team.
+  const teamTop = teamStandings.length > 1 ? teamStandings[0] : null;
+  const teamSecondAvg = teamStandings[1]?.avg;
   const teamWinner = (teamTop && (teamSecondAvg===undefined || teamTop.avg>teamSecondAvg)) ? teamTop.team : null;
 
   const badgesAwarded = [];
@@ -6603,7 +6665,7 @@ async function createGroup(){
   const capTarget=parseInt(document.getElementById('newGroupCapTarget').value);
   const vcTarget=parseInt(document.getElementById('newGroupVCTarget').value);
   const minWorkouts=parseInt(document.getElementById('newGroupMinWO').value);
-  const numTeams=Math.min(3, Math.max(2, parseInt(document.getElementById('newGroupNumTeams').value)||3));
+  const numTeams=Math.min(3, Math.max(1, parseInt(document.getElementById('newGroupNumTeams').value)||3));
   const thresholdPct=Math.min(100, Math.max(30, parseInt(document.getElementById('newGroupThreshold').value)||60));
   const rolesEnabled=document.getElementById('newGroupRoles').checked;
   const isDemo=document.getElementById('newGroupDemo').checked;
@@ -6640,7 +6702,7 @@ async function createGroup(){
   batch.set(seasonRef, {
     month, year, days,
     capTarget, vcTarget, minWorkouts,
-    numTeams,                          // 2 or 3 — how many teams this season uses
+    numTeams,                          // 1, 2 or 3 (1 = whole group is one team)
     teamStreakThreshold: thresholdPct/100,  // fraction (0.6 = 60%)
     rolesEnabled,                      // Captain/VC on or off for this season
     roster: [],             // populated as players register
@@ -7646,7 +7708,11 @@ if('serviceWorker' in navigator){
     var myEntry = roster.filter(function(p){ return p.name===me.name; })[0] || null;
     var myTeam = myEntry ? myEntry.team : null;
     var myTeamResult = null;
-    if(myTeam && teamScores.length){
+    // Same one-team guard as the badge writer: with a single team `idx` is
+    // always 0, so every member's recap would announce "Your team won!" and
+    // print the TEAM A TOOK THE SEASON tile. A one-team season has no team
+    // result at all — leaving this null makes the whole block render nothing.
+    if(myTeam && teamScores.length > 1){
       var idx = -1;
       for(var ti=0; ti<teamScores.length; ti++){ if(teamScores[ti].team===myTeam){ idx=ti; break; } }
       if(idx>=0){

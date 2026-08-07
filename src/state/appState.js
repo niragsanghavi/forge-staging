@@ -167,6 +167,34 @@ window.seasonIdOf = function(month, year){
   return `${year}-${String(month).padStart(2,'0')}`;
 };
 
+// ── SOLO / SMALL-GROUP MODE ───────────────────────────────────────────────
+// numTeams === 1 means "the team is the whole group": no team standings, no
+// rivalry UI, one shared GROUP streak, one podium. It is the single change that
+// serves every group below 6 AND solo (a group of 1).
+//
+// Why groups under 6 needed this: the team streak threshold is
+// ceil(teamSize x teamStreakThreshold). Split 4 people into 2 teams at the 0.6
+// default and each team of 2 needs BOTH people EVERY day — zero slack, so the
+// streak never starts and those groups never see the mechanic Forge is built
+// around. They were not being fussy; 2v2 is mechanically impossible.
+//
+// This is a DATA gate, not a build flag: it reads the season's own numTeams, so
+// every existing 2- and 3-team group is untouched.
+window.isSoloMode = function(){
+  return Number(window.season && window.season.numTeams) === 1;
+};
+
+// The team letters a season actually uses. Replaces three separate hand-rolled
+// `season.numTeams === 2 ? 2 : 3` coercions, each of which silently turned a
+// numTeams of 1 into 3 — which is why writing numTeams:1 to Firestore used to
+// do nothing at all. Unknown/absent values still fall back to 3, as before.
+window.teamLettersOf = function(season){
+  const n = Number(season && season.numTeams);
+  if(n === 1) return ['A'];
+  if(n === 2) return ['A','B'];
+  return ['A','B','C'];
+};
+
 // Look up a player's team+role from the current season's roster.
 // Returns null if player not on roster.
 window.rosterEntry = function(name){
