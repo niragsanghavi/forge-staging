@@ -288,6 +288,14 @@
       </div>
     </div>
 
+    <!-- PERSONAL MONTHLY GOAL. renderGoalRing() / openGoalInput() / _loadMyGoals()
+         have been complete and callable for weeks with no div to paint into, so
+         the whole feature was dead on arrival — every render was a silent
+         `if(!el) return`. Restored rather than deleted: it is the "personal
+         monthly goal" the solo/small-group plan calls for, and it already
+         persists to users/{id}.monthlyGoals with a localStorage migration. -->
+    <div id="goalRingCard"></div>
+
     <div class="card mir-calcard">
       <div class="mir-calnav">
         <div class="left"><div class="m"><span id="mirCalMonth"></span><span class="ro" id="mirCalRO"></span></div><div class="c" id="mirCalCount"></div></div>
@@ -688,6 +696,33 @@
 <script src="src/services/scoringEngine.js"></script>
 
 <script>
+// ── VERSION-SKEW GUARD ────────────────────────────────────────────────────
+// index.html carries its JS inline; appState.js is a separate cached file. A
+// browser can therefore hold a FRESH index.html and a STALE appState.js — which
+// is exactly what happens in the window around a deploy, and what happened on
+// this machine during QA on 7 Aug. When it does, the first call to a helper
+// that only exists in the new appState.js throws inside loadGroup(), boot never
+// completes, and the app is BRICKED on a blank shell. No error the user can act
+// on, no recovery but clearing storage.
+//
+// The service worker is network-first so this should be rare, but "rare" on a
+// login path is still someone's morning. These fallbacks are byte-identical in
+// behaviour to the appState.js originals and are only installed if missing, so
+// the moment the fresh file lands they are simply never consulted.
+if(typeof window.teamLettersOf !== 'function'){
+  window.teamLettersOf = function(season){
+    const n = Number(season && season.numTeams);
+    if(n === 1) return ['A'];
+    if(n === 2) return ['A','B'];
+    return ['A','B','C'];
+  };
+}
+if(typeof window.isSoloMode !== 'function'){
+  window.isSoloMode = function(){
+    return Number(window.season && window.season.numTeams) === 1;
+  };
+}
+
 // ── CONTENT ───────────────────────────────────────────────────────────────
 const DAILY_FACTS = [
   "Your heart pumps 5 litres of blood per minute at rest. During exercise, that jumps to 20.",
@@ -1904,6 +1939,12 @@ function renderHome(){
   if(!groupData||!me) return;
   try { renderMirrorHome(); }
   catch(e){ logErr('renderMirrorHome', e); }
+  // Restoring the div was only half of it — renderGoalRing() was never called
+  // from the render loop either, only from its own lazy loader and the Cancel
+  // button, so nothing would have painted it. Isolated: a goal-ring failure
+  // must never take Home down with it.
+  try { renderGoalRing(); }
+  catch(e){ logErr('renderGoalRing', e); }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
