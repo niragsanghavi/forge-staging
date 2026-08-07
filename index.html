@@ -4320,7 +4320,10 @@ function writeGlobalStats(){
     roster.forEach(p=>{
       const t = score(p.name).total;
       total += t;
-      if(p.globalConsent===true) players.push({ name:p.name, points:t });
+      // userId rides along so the Global board can tell "the same person in
+      // three groups" from "three different people". Name alone cannot: two
+      // pairs of real players in these groups share a first name.
+      if(p.globalConsent===true) players.push({ name:p.name, points:t, userId:p.userId||null });
     });
     const count = roster.length;
     const avg = count ? Math.round(total/count) : 0;
@@ -6993,22 +6996,46 @@ function renderGlobalFromCache({groups,todayByGroup}){
   // globalStats (only when it matches the group's CURRENT season, so a
   // just-rolled-over group doesn't show last season's numbers until recompute).
   const groupAgg=[];
-  const playerEntries=[];
+  let playerEntries=[];
   for(const g of groups){
     if(g.demo===true) continue;   // demo groups: never on the Global boards
     const gs=g.globalStats; if(!gs || gs.seasonId!==g.currentSeasonId || !gs.count) continue;
     groupAgg.push({name:g.name,total:gs.total,count:gs.count,avg:gs.avg});
-    (gs.players||[]).forEach(p=>{ if(p&&p.name!=null) playerEntries.push({name:p.name,group:g.name,points:p.points}); });
+    (gs.players||[]).forEach(p=>{ if(p&&p.name!=null) playerEntries.push({name:p.name,group:g.name,code:g.code,points:p.points,userId:p.userId||null}); });
   }
   const grpRanked=groupAgg.sort((a,b)=>b.avg-a.avg).slice(0,5);
   grpEl.innerHTML=grpRanked.length===0
     ?'<div class="tmuted">No groups yet.</div>'
     :grpRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(g.name)}</div><div class="lbmeta">${g.count} players · ${g.total} total pts</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${g.avg}</div><div style="font-size:10px;color:var(--muted)">avg/player</div></div></div>`).join('');
+  // ── ONE ROW PER PERSON, NOT PER MEMBERSHIP ──────────────────────────────
+  // This board used to push one entry per (person, group), so anyone in three
+  // groups occupied three of the five slots and competed against themselves —
+  // Nirag sat at ranks 2, 4 and 6 with 28/25/25, pushing real rivals down the
+  // board for no reason. Only a person's BEST group counts now.
+  //
+  // Keyed on userId, NOT name. Name would be wrong in a way that matters: two
+  // pairs of real players across these groups share a first name and are
+  // different people, and merging them would silently delete someone from the
+  // board. When userId is absent (older globalStats docs, pre-userId roster
+  // rows) the key stays group-scoped, so those entries never merge with
+  // anything — the safe direction, at the cost of a duplicate until the writer
+  // next refreshes that group.
+  const _bestByPerson=new Map();
+  playerEntries.forEach(e=>{
+    const k = e.userId ? ('u:'+e.userId) : ('n:'+e.code+'|'+String(e.name).toLowerCase());
+    const prev=_bestByPerson.get(k);
+    if(!prev){ _bestByPerson.set(k, Object.assign({groups:1}, e)); }
+    else {
+      prev.groups++;
+      if(e.points>prev.points){ prev.points=e.points; prev.group=e.group; prev.name=e.name; }
+    }
+  });
+  playerEntries=[..._bestByPerson.values()];
   playerEntries.sort((a,b)=>b.points-a.points);
   const top=playerEntries.slice(0,5);
   ptsEl.innerHTML=top.length===0
     ?'<div class="tmuted">No one has opted in yet. Turn on "Show me on the global leaderboard" on your Home screen to appear here.</div>'
-    :top.map((e,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(e.name)}</div><div class="lbmeta">${esc(e.group)}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${e.points}</div><div style="font-size:10px;color:var(--muted)">pts</div></div></div>`).join('');
+    :top.map((e,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(e.name)}</div><div class="lbmeta">${esc(e.group)}${e.groups>1?` · best of ${e.groups}`:''}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${e.points}</div><div style="font-size:10px;color:var(--muted)">pts</div></div></div>`).join('');
 }
 
 // R3 BACKFILL — one-time seed of the denormalized rollups from live data using
@@ -7047,7 +7074,7 @@ async function backfillGlobalStats(){
     const roster=sData.roster||[];
     const ctx={ season:sData, groupCode:g.code, logs:logs.filter(l=>l.groupCode===g.code&&l.month===sData.month&&l.year===sData.year), twists, twistWindows:(twistWindows||[]).filter(w=>w.month===sData.month&&w.year===sData.year), bonuses:bonuses.filter(b=>b.groupCode===g.code&&b.month===sData.month&&b.year===sData.year) };
     let total=0; const players=[];
-    roster.forEach(p=>{ const t=score(p.name,ctx).total; total+=t; if(p.globalConsent===true) players.push({name:p.name,points:t}); });
+    roster.forEach(p=>{ const t=score(p.name,ctx).total; total+=t; if(p.globalConsent===true) players.push({name:p.name,points:t,userId:p.userId||null}); });
     const count=roster.length; const avg=count?Math.round(total/count):0;
     await db.collection('groups').doc(g.code).set({ globalStats:{ seasonId:sid, total, avg, count, players, computedAt:firebase.firestore.FieldValue.serverTimestamp() } },{merge:true});
     wrote++;
