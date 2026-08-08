@@ -249,6 +249,76 @@ window.ensureAuth = function(){
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   GOOGLE SIGN-IN — AUTH PHASE 1 (coexistence)
+   Contract: AUTH_DESIGN_FINAL.md, Option A, locked 25 Jul 2026.
+
+   PHASE 1 CHANGES NOTHING FOR ANYONE. Anonymous boot above is untouched, PIN
+   login is untouched, and every surface below is behind FEATURE_GOOGLE_AUTH,
+   which stays FALSE until two console steps are done that no agent can do:
+     1. Blaze enabled on the project
+     2. Authentication -> Sign-in method -> Google ENABLED, OAuth client created
+   With the flag false these functions are inert and the UI never appears, so
+   this can sit on staging safely until those are ready.
+
+   WHY REDIRECT, NOT POPUP. signInWithPopup is blocked or silently broken inside
+   the Android TWA and in iOS standalone PWAs — the two places most Forge users
+   will be. Redirect works everywhere, at the cost of needing the result picked
+   up on the next page load (consumeGoogleRedirect below).
+
+   WHY LINK BEFORE SIGN-IN. The device already has an anonymous uid that appears
+   in knownDeviceUids and on logs. linkWithCredential UPGRADES that same uid to a
+   Google identity, so nothing already written is orphaned. Only when that
+   Google account is already attached to another Forge identity do we fall back
+   to a plain sign-in, because linking would be a lie about who this is.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+window.googleProvider = function(){
+  const p = new firebase.auth.GoogleAuthProvider();
+  p.setCustomParameters({ prompt: 'select_account' });   // never silently reuse a stale account
+  return p;
+};
+
+// Start the flow. Returns a promise that rejects if the provider is not enabled
+// yet, so the caller can show a real message instead of a dead button.
+window.startGoogleSignIn = function(){
+  if(!window.FEATURE_GOOGLE_AUTH) return Promise.reject(new Error('FEATURE_OFF'));
+  try{ sessionStorage.setItem('forge_google_pending','1'); }catch(e){}
+  const cur = auth.currentUser;
+  if(cur && cur.isAnonymous){
+    return cur.linkWithRedirect(window.googleProvider());
+  }
+  return auth.signInWithRedirect(window.googleProvider());
+};
+
+// Call once on boot. Resolves to {linked:false} on a normal load — this must be
+// cheap and silent when no redirect happened, because it runs on every launch.
+window.consumeGoogleRedirect = async function(){
+  if(!window.FEATURE_GOOGLE_AUTH) return {linked:false};
+  let pending=false;
+  try{ pending = sessionStorage.getItem('forge_google_pending')==='1'; }catch(e){}
+  try{
+    const res = await auth.getRedirectResult();
+    if(!res || !res.user) return {linked:false};
+    try{ sessionStorage.removeItem('forge_google_pending'); }catch(e){}
+    return { linked:true, uid:res.user.uid, email:res.user.email||null,
+             displayName:res.user.displayName||null, isNewUser: !!(res.additionalUserInfo||{}).isNewUser };
+  }catch(err){
+    try{ sessionStorage.removeItem('forge_google_pending'); }catch(e){}
+    // The Google account is already attached to a different Forge identity.
+    // Linking is refused on purpose (one Google account = one identity, Q2),
+    // so sign in as that identity instead of pretending the link worked.
+    if(err && err.code === 'auth/credential-already-in-use'){
+      return { linked:false, error:'ALREADY_IN_USE', pending };
+    }
+    if(err && err.code === 'auth/operation-not-allowed'){
+      return { linked:false, error:'PROVIDER_DISABLED', pending };
+    }
+    console.error('Google redirect failed:', err);
+    return { linked:false, error: (err&&err.code)||'UNKNOWN', pending };
+  }
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════
    SELF-HEAL — device-local-corruption recovery (July 18 incident)
    Failure mode: Firestore offline cache serves READS (app looks healthy,
    roster renders) while every WRITE silently dies — stale anon-auth session +

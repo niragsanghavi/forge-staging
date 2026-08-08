@@ -167,6 +167,17 @@ window.seasonIdOf = function(month, year){
   return `${year}-${String(month).padStart(2,'0')}`;
 };
 
+// ── FEATURE FLAGS ─────────────────────────────────────────────────────────
+// AUTH PHASE 1. Stays FALSE until two Firebase-console steps are done, neither
+// of which can be automated:
+//   1. Blaze enabled on the project (needed later for claimIdentity(); free)
+//   2. Authentication -> Sign-in method -> Google ENABLED + OAuth client created
+// Flipping this to true is the ONLY code change needed to switch the feature on,
+// and flipping it back to false is a complete, instant rollback — every Google
+// surface is gated on it and the anonymous + PIN paths are untouched underneath.
+// Turn it on for STAGING first; prod stays false until warm-user QA passes.
+window.FEATURE_GOOGLE_AUTH = false;
+
 // ── THE HALL OF THE DEPARTED ──────────────────────────────────────────────
 // Locked decision, 25 Jul 2026 (AUTH_DESIGN_FINAL Q4). A deleted player is not
 // erased from a group's history — their league record is the GROUP's shared

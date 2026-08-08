@@ -483,6 +483,12 @@
       <div id="linkResult" style="margin-top:10px;font-size:13px"></div>
     </div>
 
+    <!-- GOOGLE SIGN-IN — Auth Phase 1. Renders NOTHING unless
+         FEATURE_GOOGLE_AUTH is on, so this is inert until the console work is
+         done. Sits above Account so the last thing on the page stays deletion. -->
+    <div id="googleAuthShdr" class="shdr" style="display:none">Account security</div>
+    <div class="card" id="googleAuthCard" style="display:none"></div>
+
     <!-- ACCOUNT DELETION — a Google Play requirement for a production listing:
          an in-app path, not only the web page. Deliberately last on the page and
          behind a typed confirmation, because it is the only irreversible thing a
@@ -1623,6 +1629,8 @@ async function loadGroup(code, fromCache){
     // Finish a half-completed account deletion on session restore too (the PIN
     // login path has its own hook). Fire-and-forget — never blocks boot.
     if(me && me.userId){ try{ resumeAccountDeletionIfPending(me.userId); }catch(e){} }
+    // Same treatment for a returning Google redirect. Inert while the flag is off.
+    try{ finishGoogleLinkIfReturning(); }catch(e){}
 
     // S2 auto-rollover: opportunistic, never awaited — this client keeps
     // booting normally on the (possibly about-to-be-archived) season; if a
@@ -3578,6 +3586,8 @@ async function renderProfile(){
   seasonsEl.innerHTML='<div class="tmuted">Loading…</div>';
   renderProfileInsights();   // parallel + independent — an insights failure never blocks stats/seasons
   renderDeleteAccountCard(); // ditto — never let the delete card break the tab
+  renderGoogleAuthCard();    // inert while FEATURE_GOOGLE_AUTH is off
+  loadMyAuthState();         // one doc read, only when the flag is on
   try{
     const uSnap = await db.collection('users').doc(me.userId).get();
     const stats = (uSnap.exists && uSnap.data().stats) || {};
@@ -3690,6 +3700,94 @@ function openArchivedRecap(i){
   const s=_profileSeasonsCache[i]; if(!s) return;
   const d=buildRecapDataFromArchive(s);
   if(window.__recapShowFromData) window.__recapShowFromData(d);
+}
+
+// ── GOOGLE SIGN-IN — AUTH PHASE 1 ──────────────────────────────────────────
+// Contract: AUTH_DESIGN_FINAL.md Option A, locked 25 Jul 2026.
+// Phase 1 is COEXISTENCE ONLY: linking a Google account records authUid on the
+// users doc and changes nothing else. PIN login still works, anonymous boot
+// still works, and no rule reads authUid yet — that lands in Phase 2 with the
+// claim Function. So the worst case of a bug here is a user who linked and saw
+// no benefit, never a user who cannot get in.
+//
+// EVERY surface is gated on FEATURE_GOOGLE_AUTH. With it false, renderGoogleAuthCard
+// hides both elements and returns, and consumeGoogleRedirect resolves {linked:false}
+// without touching the network.
+function renderGoogleAuthCard(){
+  const hdr = document.getElementById('googleAuthShdr');
+  const el  = document.getElementById('googleAuthCard');
+  if(!hdr || !el) return;
+  if(!window.FEATURE_GOOGLE_AUTH || !me || !me.userId){
+    hdr.style.display='none'; el.style.display='none'; return;
+  }
+  hdr.style.display=''; el.style.display='';
+  const linked = !!(window._myAuthUid);
+  el.innerHTML = linked
+    ? '<div class="tmuted" style="font-size:12px">'
+      + mirIco('g-flame','color:var(--green)')
+      + ' <b>Secured with Google</b>' + (window._myAuthEmail ? (' — ' + esc(window._myAuthEmail)) : '')
+      + '<br>You can sign in on any device without a PIN. Your streak and history come with you.</div>'
+    : '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
+      + 'Right now your account lives on <b>this device</b>. Clear your browser data or change '
+      + 'phone and you have to rejoin each group by hand. Link a Google account and it follows you.</div>'
+      + '<button class="btn btn-gold" id="googleLinkBtn" style="margin:0" onclick="linkGoogleAccount()">Secure my account with Google</button>'
+      + '<div id="googleAuthResult" style="margin-top:10px;font-size:13px"></div>';
+}
+
+async function linkGoogleAccount(){
+  const out = document.getElementById('googleAuthResult');
+  const say = (m,bad)=>{ if(out){ out.style.color = bad ? 'var(--red)' : 'var(--muted)'; out.textContent = m; } };
+  try{
+    say('Opening Google…');
+    await startGoogleSignIn();      // navigates away; nothing after this runs
+  }catch(e){
+    if(e && e.message==='FEATURE_OFF'){ say('Google sign-in is not switched on yet.', true); return; }
+    logErr('linkGoogleAccount', e);
+    say('Could not open Google sign-in. Check your connection and try again.', true);
+  }
+}
+
+// Called once on boot, AFTER me/userId are known. Writes the identity link.
+// Fire-and-forget by design: this must never be able to block or fail a launch.
+async function finishGoogleLinkIfReturning(){
+  if(!window.FEATURE_GOOGLE_AUTH) return;
+  try{
+    const r = await consumeGoogleRedirect();
+    if(r.error === 'ALREADY_IN_USE'){
+      toast('That Google account already runs another Forge account.','error');
+      return;
+    }
+    if(r.error === 'PROVIDER_DISABLED'){
+      logErr('googleAuth', new Error('provider not enabled in the Firebase console'));
+      return;
+    }
+    if(!r.linked) return;
+    window._myAuthUid   = r.uid;
+    window._myAuthEmail = r.email;
+    if(me && me.userId){
+      // merge, never overwrite: this doc holds the credential and the stats.
+      // authUid is written here in Phase 1; Phase 2 makes it server-owned so a
+      // client can never point someone else's identity at its own Google uid.
+      await db.collection('users').doc(me.userId).set({
+        authUid: r.uid,
+        email: r.email || null,
+        authLinkedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, {merge:true});
+    }
+    renderGoogleAuthCard();
+    toast('Account secured with Google.','success');
+  }catch(e){ logErr('finishGoogleLinkIfReturning', e); }
+}
+window.finishGoogleLinkIfReturning = finishGoogleLinkIfReturning;
+
+// Load the link state for the card. Cheap: one doc read, only when the flag is on.
+async function loadMyAuthState(){
+  if(!window.FEATURE_GOOGLE_AUTH || !me || !me.userId) return;
+  try{
+    const s = await db.collection('users').doc(me.userId).get();
+    if(s.exists){ const u=s.data(); window._myAuthUid=u.authUid||null; window._myAuthEmail=u.email||null; }
+  }catch(e){ logErr('loadMyAuthState', e); }
+  renderGoogleAuthCard();
 }
 
 // ── ACCOUNT DELETION ────────────────────────────────────────────────────────
