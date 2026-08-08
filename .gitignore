@@ -56,3 +56,11 @@ PLAYSTORE_PREP.md
 PROMOTION_RUNBOOK.md
 AUTH_DESIGN_FINAL.md
 scripts/rules-test/
+
+# Planning + reference docs — NEVER commit (public repo; real names and
+# security findings live in these). Listed one-by-one until 7 Aug 2026, which
+# meant every NEW doc was unprotected by default until someone remembered to
+# add it. IOS_SUBMISSION.md was sitting untracked-but-committable when this was
+# noticed. Blanket rule instead: zero .md files are tracked in this repo, so
+# nothing breaks, and a new doc is safe the moment it is created.
+*.md
