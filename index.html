@@ -288,6 +288,11 @@
       </div>
     </div>
 
+    <!-- MONDAY RECAP — the week that just ended. Renders nothing except on a
+         Monday or Tuesday, and only once per week per group (dismissal is
+         stored per group + per week-start so it can never resurface). -->
+    <div id="mondayRecap"></div>
+
     <!-- PERSONAL MONTHLY GOAL. renderGoalRing() / openGoalInput() / _loadMyGoals()
          have been complete and callable for weeks with no div to paint into, so
          the whole feature was dead on arrival — every render was a silent
@@ -1953,6 +1958,8 @@ function renderHome(){
   // must never take Home down with it.
   try { renderGoalRing(); }
   catch(e){ logErr('renderGoalRing', e); }
+  try { renderMondayRecap(); }
+  catch(e){ logErr('renderMondayRecap', e); }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -4838,6 +4845,134 @@ function computeRewardData(newLogIds){
   }catch(e){}
   return { myCount, pace, teamName:'Team '+(me.team||'—'), teamCount,
            movedTo, rankBefore, board, passed, nextGap, nextName, bestWeek };
+}
+
+// ── MONDAY RECAP ──────────────────────────────────────────────────────────
+// The week that just ENDED, shown on the morning a new one starts.
+//
+// WHY THIS EXISTS AND THE MOVER DOESN'T COVER IT. computeWeeklyMover() is a
+// LIVE mid-week race ("who is climbing right now") and it deliberately returns
+// null on Mon/Tue, because one day into a week there is no race yet. That left
+// Monday — the exact moment a fresh week opens and people most need a reason to
+// re-engage — as the quietest surface in the app. This fills that gap and does
+// the opposite job: it looks backward, closes the week off, and hands you a
+// clean slate.
+//
+// SCOPE HONESTY: allLogs is the CURRENT month only. When last week spilled into
+// the previous month (any Monday in the first week of a month), the numbers here
+// would be silently partial. Rather than quietly under-report, the recap covers
+// only the days it can actually see and says so. No extra reads, same as the
+// Mover — a recap is not worth a query bill.
+const MONDAY_RECAP_KEY = 'forge_wkrecap_';
+
+function lastWeekWindow(now){
+  const dow=(now.getDay()+6)%7;                    // 0=Mon
+  const monThis=new Date(now.getFullYear(),now.getMonth(),now.getDate()-dow);
+  const monLast=new Date(monThis.getFullYear(),monThis.getMonth(),monThis.getDate()-7);
+  const sunLast=new Date(monThis.getFullYear(),monThis.getMonth(),monThis.getDate()-1);
+  return {monLast,sunLast};
+}
+
+function computeMondayRecap(){
+  try{
+    if(!season || !Array.isArray(allLogs) || !me) return null;
+    const now=new Date();
+    const dow=(now.getDay()+6)%7;
+    // Monday and Tuesday only. Monday is the point; Tuesday is grace for anyone
+    // who didn't open the app on Monday. By Wednesday it is stale news and the
+    // Mover has taken over.
+    if(dow>1) return null;
+    // Before 6am Monday the week hasn't turned over yet — same boundary the
+    // season rollover and the Mover both use, so the three can never disagree.
+    if(dow===0 && now.getHours()<6) return null;
+    if(now.getMonth()+1!==season.month || now.getFullYear()!==season.year) return null;
+
+    const {monLast,sunLast}=lastWeekWindow(now);
+    const key=`${MONDAY_RECAP_KEY}${groupCode}_${monLast.getFullYear()}-${monLast.getMonth()+1}-${monLast.getDate()}`;
+    try{ if(localStorage.getItem(key)==='1') return null; }catch(e){}
+
+    // Which of last week's days fall inside the month we actually have logs for?
+    const sameMonth=d=>d.getMonth()+1===season.month && d.getFullYear()===season.year;
+    const days=[]; const cur=new Date(monLast);
+    while(cur<=sunLast){ if(sameMonth(cur)) days.push(cur.getDate()); cur.setDate(cur.getDate()+1); }
+    if(!days.length) return null;                       // whole week was last month
+    const partial = days.length<7;
+
+    const inWeek=new Set(days);
+    const weekLogs=allLogs.filter(l=>l && inWeek.has(l.day));
+    if(!weekLogs.length) return null;                   // a silent week deserves silence
+
+    const roster=(season.roster||[]).filter(p=>p&&p.name);
+    const mine=weekLogs.filter(l=>l.player===me.name);
+    const myDays=new Set(mine.map(l=>l.day)).size;
+    const people=new Set(weekLogs.map(l=>l.player)).size;
+
+    // Rank movement across the week, using the same before/after trick as the
+    // Mover: score everyone with last week's logs removed, then with them in.
+    let climber=null;
+    try{
+      const prior=allLogs.filter(l=>l && l.day < days[0]);
+      if(prior.length){
+        const order=ls=>roster.map(p=>({name:p.name,total:score(p.name,{
+          season, groupCode, logs:ls, twists:activeTwists, bonuses:bonus30,
+          jackAwards, ironPledgeBonuses, twistWindows}).total})).sort((a,b)=>b.total-a.total);
+        const rankOf=rs=>{const m=new Map();rs.forEach((r,i)=>m.set(r.name,i+1));return m;};
+        const upTo=allLogs.filter(l=>l && l.day<=days[days.length-1]);
+        const before=rankOf(order(prior)), after=rankOf(order(upTo));
+        const startTotal=new Map(order(prior).map(r=>[r.name,r.total]));
+        let best=null;
+        roster.forEach(p=>{
+          if((startTotal.get(p.name)||0)<=0) return;    // no rank to climb FROM
+          const up=(before.get(p.name)||0)-(after.get(p.name)||0);
+          if(up>0 && (!best || up>best.up)) best={name:p.name, up};
+        });
+        climber=best;
+      }
+    }catch(e){ logErr('computeMondayRecap:climber', e); }
+
+    // Best individual week in the group, by days shown up — not by points, so
+    // it can't be won by logging six things in one day.
+    const daysByPlayer=new Map();
+    weekLogs.forEach(l=>{ if(!daysByPlayer.has(l.player)) daysByPlayer.set(l.player,new Set());
+                          daysByPlayer.get(l.player).add(l.day); });
+    let topName=null, topDays=0;
+    daysByPlayer.forEach((set,name)=>{ if(set.size>topDays){ topDays=set.size; topName=name; } });
+
+    return { key, monLast, sunLast, partial, windowDays:days.length,
+             workouts:weekLogs.length, people, myDays, myWorkouts:mine.length,
+             climber, topName, topDays, rosterSize:roster.length };
+  }catch(e){ logErr('computeMondayRecap', e); return null; }
+}
+
+function dismissMondayRecap(key){
+  try{ localStorage.setItem(key,'1'); }catch(e){}
+  const el=document.getElementById('mondayRecap'); if(el) el.innerHTML='';
+}
+
+function renderMondayRecap(){
+  const el=document.getElementById('mondayRecap'); if(!el) return;
+  const r=computeMondayRecap();
+  if(!r){ el.innerHTML=''; return; }
+  const fmt=d=>d.toLocaleDateString(undefined,{day:'numeric',month:'short'});
+  const lines=[];
+  lines.push(`<b>${r.workouts}</b> workout${r.workouts===1?'':'s'} from <b>${r.people}</b> of ${r.rosterSize}`);
+  if(r.topName) lines.push(`${esc(r.topName)} showed up <b>${r.topDays}</b> day${r.topDays===1?'':'s'}`);
+  if(r.climber) lines.push(`${esc(r.climber.name)} climbed <b>${r.climber.up}</b> place${r.climber.up===1?'':'s'}`);
+  // Yours last, and stated flatly. A zero week gets no scolding — the number is
+  // the feedback, and a guilt-trip on a Monday morning loses people.
+  const mineLine = r.myDays>0
+    ? `You logged <b>${r.myDays}</b> day${r.myDays===1?'':'s'}.`
+    : `You didn't log last week. New week, clean slate.`;
+  el.innerHTML=`<div class="card" style="border-left:3px solid var(--gold)">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)">Last week</div>
+      <div style="font-size:11px;color:var(--muted)">${fmt(r.monLast)} – ${fmt(r.sunLast)}</div>
+    </div>
+    <div style="margin-top:8px;font-size:14px;line-height:1.6">${lines.join(' · ')}</div>
+    <div style="margin-top:6px;font-size:14px">${mineLine}</div>
+    ${r.partial?`<div style="margin-top:6px;font-size:11px;color:var(--muted)">Counting the ${r.windowDays} day${r.windowDays===1?'':'s'} of that week inside this month.</div>`:''}
+    <button class="btn btn-surface btn-sm" style="margin-top:10px" onclick="dismissMondayRecap('${r.key}')">Got it</button>
+  </div>`;
 }
 
 // ── WEEKLY MOVER ──────────────────────────────────────────────────────────
