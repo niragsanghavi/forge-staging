@@ -488,6 +488,10 @@
       <div id="linkResult" style="margin-top:10px;font-size:13px"></div>
     </div>
 
+    <!-- PUSH NOTIFICATIONS. Renders nothing unless FEATURE_PUSH is on. -->
+    <div id="pushShdr" class="shdr" style="display:none">Notifications</div>
+    <div class="card" id="pushCard" style="display:none"></div>
+
     <!-- GOOGLE SIGN-IN — Auth Phase 1. Renders NOTHING unless
          FEATURE_GOOGLE_AUTH is on, so this is inert until the console work is
          done. Sits above Account so the last thing on the page stays deletion. -->
@@ -1636,6 +1640,9 @@ async function loadGroup(code, fromCache){
     if(me && me.userId){ try{ resumeAccountDeletionIfPending(me.userId); }catch(e){} }
     // Same treatment for a returning Google redirect. Inert while the flag is off.
     try{ finishGoogleLinkIfReturning(); }catch(e){}
+    // And refresh the push token if permission was already granted. Silent:
+    // never prompts, never blocks boot. Inert while FEATURE_PUSH is off.
+    try{ refreshPushTokenQuietly(); }catch(e){}
 
     // S2 auto-rollover: opportunistic, never awaited — this client keeps
     // booting normally on the (possibly about-to-be-archived) season; if a
@@ -3595,6 +3602,7 @@ async function renderProfile(){
   renderDeleteAccountCard(); // ditto — never let the delete card break the tab
   renderGoogleAuthCard();    // inert while FEATURE_GOOGLE_AUTH is off
   loadMyAuthState();         // one doc read, only when the flag is on
+  renderPushCard();          // inert while FEATURE_PUSH is off
   try{
     const uSnap = await db.collection('users').doc(me.userId).get();
     const stats = (uSnap.exists && uSnap.data().stats) || {};
@@ -3708,6 +3716,115 @@ function openArchivedRecap(i){
   const d=buildRecapDataFromArchive(s);
   if(window.__recapShowFromData) window.__recapShowFromData(d);
 }
+
+// ── PUSH NOTIFICATIONS ─────────────────────────────────────────────────────
+// The opt-in surface. The sending side is a Cloud Function (functions/index.js)
+// that needs Blaze; this half only earns the permission and stores the token.
+//
+// TOKENS LIVE ON THE USER DOC, KEYED BY TOKEN STRING, not as a single field —
+// one person legitimately has several devices, and a phone plus a laptop must
+// both ring. Each entry carries a timestamp so the sender can prune tokens that
+// have stopped accepting delivery instead of retrying them forever.
+//
+// PERMISSION IS ASKED FROM A BUTTON, NEVER ON LOAD. A browser only grants the
+// prompt once; spending it on someone's first three seconds is how you get a
+// permanent "blocked" and no second chance.
+function renderPushCard(){
+  const hdr=document.getElementById('pushShdr'), el=document.getElementById('pushCard');
+  if(!hdr||!el) return;
+  if(!window.FEATURE_PUSH || !me || !me.userId || !window.pushSupported()){
+    hdr.style.display='none'; el.style.display='none'; return;
+  }
+  hdr.style.display=''; el.style.display='';
+  const perm=window.pushPermission();
+  const on=!!window._myPushToken;
+
+  if(perm==='denied'){
+    el.innerHTML='<div class="tmuted" style="font-size:12px">'
+      + 'Notifications are blocked for Forge in your browser settings. '
+      + 'You will need to allow them there first — we cannot ask again from here.</div>';
+    return;
+  }
+  el.innerHTML = on
+    ? '<div class="tmuted" style="font-size:12px">'
+      + mirIco('g-flame','color:var(--green)')
+      + ' <b>Notifications on for this device.</b><br>'
+      + 'You will hear from Forge when your team\'s streak is at risk, and when the '
+      + 'week\'s recap is ready. Nothing else — no daily nagging.</div>'
+      + '<button class="btn btn-surface" style="margin:10px 0 0" onclick="disablePushHere()">Turn off on this device</button>'
+    : '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
+      + 'Forge can only reach you when you remember to open it — which is the wrong way round. '
+      + 'Turn this on and we will tell you the two things worth interrupting you for: '
+      + '<b>your team\'s streak is about to break tonight</b>, and <b>last week\'s recap is ready</b>.'
+      + '<br><br>That is all. No "don\'t forget to exercise".</div>'
+      + '<button class="btn btn-gold" id="pushBtn" style="margin:0" onclick="turnOnPush()">Turn on notifications</button>'
+      + '<div id="pushResult" style="margin-top:10px;font-size:13px"></div>';
+}
+
+async function turnOnPush(){
+  const out=document.getElementById('pushResult');
+  const say=(m,bad)=>{ if(out){ out.style.color=bad?'var(--red)':'var(--muted)'; out.textContent=m; } };
+  const btn=document.getElementById('pushBtn');
+  if(btn){ btn.disabled=true; btn.textContent='Asking…'; }
+  try{
+    const token=await enablePush();
+    if(!token){ say('You said no — that is fine. You can turn this on any time.');
+                if(btn){ btn.disabled=false; btn.textContent='Turn on notifications'; }
+                renderPushCard(); return; }
+    await savePushToken(token);
+    window._myPushToken=token;
+    toast('Notifications on.','success');
+    renderPushCard();
+  }catch(e){
+    if(e && e.message==='FEATURE_OFF'){ say('Notifications are not switched on yet.',true); }
+    else if(e && e.message==='UNSUPPORTED'){ say('This browser cannot do notifications. Try the installed app.',true); }
+    else { logErr('turnOnPush', e); say('Could not turn notifications on. Check your connection and try again.',true); }
+    if(btn){ btn.disabled=false; btn.textContent='Turn on notifications'; }
+  }
+}
+
+async function savePushToken(token){
+  if(!me || !me.userId || !token) return;
+  // Dotted path so two devices adding tokens at once cannot clobber each other,
+  // which a whole-map write would.
+  await db.collection('users').doc(me.userId).set({
+    pushTokens: { [token]: { addedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                             ua: (navigator.userAgent||'').slice(0,120) } }
+  }, {merge:true});
+}
+
+async function disablePushHere(){
+  try{
+    const t=window._myPushToken;
+    if(t && me && me.userId){
+      await db.collection('users').doc(me.userId).update({
+        ['pushTokens.'+t]: firebase.firestore.FieldValue.delete()
+      });
+    }
+    // best-effort: only possible if the SDK actually loaded
+    try{ if(firebase.messaging) await firebase.messaging().deleteToken(); }catch(e){}
+    window._myPushToken=null;
+    toast('Notifications off for this device.','success');
+    renderPushCard();
+  }catch(e){ logErr('disablePushHere', e); toast('Could not turn them off — try again.','error'); }
+}
+
+// Silent refresh on boot: if permission is already granted, re-fetch the token
+// (FCM rotates them) and make sure the stored copy is current. No prompt, no UI.
+async function refreshPushTokenQuietly(){
+  try{
+    if(!window.FEATURE_PUSH || !window.pushSupported()) return;
+    if(window.pushPermission()!=='granted') return;
+    if(!me || !me.userId) return;
+    const token=await enablePush();          // already granted, so this won't prompt
+    if(token){ window._myPushToken=token; await savePushToken(token); }
+    startForegroundPush(function(d){
+      // In-app arrival becomes a toast, never a system notification over the app.
+      if(d && d.body) toast(d.body);
+    });
+  }catch(e){ logErr('refreshPushTokenQuietly', e); }
+}
+window.refreshPushTokenQuietly = refreshPushTokenQuietly;
 
 // ── GOOGLE SIGN-IN — AUTH PHASE 1 ──────────────────────────────────────────
 // Contract: AUTH_DESIGN_FINAL.md Option A, locked 25 Jul 2026.

@@ -319,6 +319,105 @@ window.consumeGoogleRedirect = async function(){
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   PUSH NOTIFICATIONS — the one Android feature worth having before launch
+
+   WHY THIS AND NOT A WIDGET OR HEALTH SYNC. Forge's loop is time-sensitive in a
+   way a tracker's isn't: a streak dies at midnight, and a teammate logging at
+   7pm is news nobody learns until they next open the app. Today Forge can only
+   speak to people who remember to open it — precisely the people who don't need
+   reminding.
+
+   WHAT WE WILL AND WON'T SEND. "Don't forget to work out!" is how a wellness app
+   gets muted in a week. The only notifications worth the permission are ones
+   that carry information ANOTHER PERSON generated:
+       "Tanmmay logged. Your team needs one more today."
+   That is news, not nagging, and it is the one push a step-counter cannot send.
+
+   GATED on FEATURE_PUSH, which stays false until a VAPID key exists (Firebase
+   console -> Cloud Messaging -> Web Push certificates). Without the key,
+   getToken() throws, so the flag is not decoration.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+// Browser capability only — deliberately does NOT require the messaging SDK to
+// be loaded, because it isn't: see _loadMessaging below.
+window.pushSupported = function(){
+  return 'Notification' in window
+      && 'serviceWorker' in navigator
+      && 'PushManager' in window;
+};
+
+// The messaging SDK is ~50KB and is loaded ON DEMAND, not in the page's script
+// tags. Every user would otherwise pay for it on every launch to support a
+// feature most of them will never switch on — and one that is currently off for
+// everybody. Injected once, cached by the browser thereafter.
+let _msgSdk = null;
+function _loadMessaging(){
+  if(_msgSdk) return _msgSdk;
+  _msgSdk = new Promise((resolve, reject) => {
+    if(typeof firebase!=='undefined' && firebase.messaging){ resolve(firebase.messaging()); return; }
+    const s=document.createElement('script');
+    s.src='https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js';
+    s.onload=()=>{
+      try{
+        if(firebase.messaging.isSupported && !firebase.messaging.isSupported()){
+          reject(new Error('UNSUPPORTED')); return;
+        }
+        resolve(firebase.messaging());
+      }catch(e){ reject(e); }
+    };
+    s.onerror=()=>reject(new Error('SDK_LOAD_FAILED'));
+    document.head.appendChild(s);
+  });
+  return _msgSdk;
+}
+
+window.pushPermission = function(){
+  try{ return Notification.permission; }catch(e){ return 'unsupported'; }
+};
+
+// Register OUR messaging worker explicitly. Firebase's default is
+// /firebase-messaging-sw.js at the DOMAIN root — right on goforge.in, a 404 on
+// niragsanghavi.github.io/forge-staging/. Relative registration keeps both
+// environments working and keeps this worker off the app shell's scope.
+let _msgSwReg = null;
+async function _messagingSW(){
+  if(_msgSwReg) return _msgSwReg;
+  _msgSwReg = await navigator.serviceWorker.register('firebase-messaging-sw.js',
+    { scope: './firebase-cloud-messaging-push-scope' });
+  return _msgSwReg;
+}
+
+// Ask, then return the device token. Resolves to null on every refusal path so
+// the caller only has to distinguish "have a token" from "don't".
+window.enablePush = async function(){
+  if(!window.FEATURE_PUSH) throw new Error('FEATURE_OFF');
+  if(!window.pushSupported()) throw new Error('UNSUPPORTED');
+  const perm = await Notification.requestPermission();
+  if(perm !== 'granted') return null;                     // includes 'denied'
+  const messaging = await _loadMessaging();      // injects the SDK on first use
+  const reg = await _messagingSW();
+  const token = await messaging.getToken({
+    vapidKey: window.FCM_VAPID_KEY,
+    serviceWorkerRegistration: reg
+  });
+  return token || null;
+};
+
+// Foreground messages arrive here instead of the system tray. Showing an OS
+// notification while someone is literally looking at the app is the fastest way
+// to get switched off, so this becomes an in-app toast.
+window.startForegroundPush = async function(onMessage){
+  if(!window.FEATURE_PUSH || !window.pushSupported()) return;
+  try{
+    const messaging = await _loadMessaging();
+    messaging.onMessage(function(payload){
+      const d=(payload&&payload.data)||{};
+      if(typeof onMessage==='function') onMessage(d);
+    });
+  }catch(e){ console.warn('[Forge] foreground push unavailable', e); }
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════
    SELF-HEAL — device-local-corruption recovery (July 18 incident)
    Failure mode: Firestore offline cache serves READS (app looks healthy,
    roster renders) while every WRITE silently dies — stale anon-auth session +

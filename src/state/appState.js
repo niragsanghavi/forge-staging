@@ -178,6 +178,14 @@ window.seasonIdOf = function(month, year){
 // Turn it on for STAGING first; prod stays false until warm-user QA passes.
 window.FEATURE_GOOGLE_AUTH = false;
 
+// PUSH NOTIFICATIONS. Needs one console step that cannot be automated:
+//   Firebase console -> Project settings -> Cloud Messaging ->
+//   Web Push certificates -> Generate key pair
+// Paste the key below and flip the flag. Without it getToken() throws, so the
+// flag is a real gate, not decoration. Staging first; prod after warm QA.
+window.FEATURE_PUSH = false;
+window.FCM_VAPID_KEY = '';   // <-- paste the Web Push certificate key pair here
+
 // ── THE HALL OF THE DEPARTED ──────────────────────────────────────────────
 // Locked decision, 25 Jul 2026 (AUTH_DESIGN_FINAL Q4). A deleted player is not
 // erased from a group's history — their league record is the GROUP's shared
