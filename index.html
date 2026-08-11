@@ -5285,7 +5285,7 @@ function renderLB(){
   const ind=players.map(p=>({...p,sc:score(p.name)})).sort((a,b)=>b.sc.total-a.sc.total);
   const myName=me.name;
   document.getElementById('indLb').innerHTML=ind.map((p,i)=>`
-    <div class="lbrow" style="${p.name===myName?'background:rgba(201,168,76,0.06);margin:0 -16px;padding:12px 16px;border-radius:8px':''}">
+    <div class="lbrow" style="--i:${i<8?i:8};${p.name===myName?'background:rgba(201,168,76,0.06);margin:0 -16px;padding:12px 16px;border-radius:8px':''}">
       ${_rankBadge(i)}
       <div style="width:34px;height:34px;border-radius:50%;background:${p.team==='A'?'var(--Al)':p.team==='B'?'var(--Bl)':'var(--Cl)'};border:1.5px solid ${tcol(p.team)};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:${tcol(p.team)};flex-shrink:0">${esc(p.name[0])}</div>
       <div class="lbinfo">
@@ -5390,7 +5390,7 @@ function renderFeed(){
   // prominent centre-left with their live streak beside it, and the workout's
   // category glyph on the RIGHT as a solid FILLED icon. No emojis anywhere.
   // Timestamps, reactions, void + flag affordances and day labels unchanged.
-  document.getElementById('feedList').innerHTML=statsHTML+sorted.slice(0,60).map(l=>{
+  document.getElementById('feedList').innerHTML=statsHTML+sorted.slice(0,60).map((l,i)=>{
     const ws=Array.isArray(l.workouts)?l.workouts:(l.workout?[l.workout]:[]);
     const w=ws.join(', ');
     const ts=l.timestamp?.seconds?new Date(l.timestamp.seconds*1000):null;
@@ -5421,7 +5421,7 @@ function renderFeed(){
     const primary=ws[0]||'';
     const ccol=mirColOf(primary);
     const fico=mirIconOf(primary);
-    return `<div class="fi t${ct}">
+    return `<div class="fi t${ct}" style="--i:${i<8?i:8}">
       <div class="fi-main">
         <div class="fi-name" style="color:${tcol(ct)}">${esc(l.player)}${st>0?`<span class="fi-streak">${mirBico('g-flame')}${st}</span>`:''}${flagCount>=2?'<span class="fi-flagged">flagged</span>':''}</div>
         <div class="fi-w">${esc(w)}</div>
@@ -7898,6 +7898,7 @@ function updateTabPill(t){
   pill.style.left=(tabRect.left-tabsRect.left)+'px';
   pill.style.width=tabRect.width+'px';
 }
+let _freshTimer=null;   // clears .page.fresh — see the ARRIVAL block in main.css
 async function showTab(t){
   // PASS-2 FIX 8 — legacy 'log' route: the Log tab no longer exists, so any
   // surviving caller (deep link, post-onboarding redirect, old bookmark)
@@ -7928,7 +7929,16 @@ async function showTab(t){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
   const pg=document.getElementById(`page-${t}`);
-  if(pg) pg.classList.add('active');
+  if(pg){
+    pg.classList.add('active');
+    // Rows stagger in on ARRIVAL only — see .page.fresh in main.css. Cleared on
+    // a timer rather than animationend, because the last row to finish isn't
+    // knowable up front and a missed event would leave the class stuck on,
+    // re-animating the list on every snapshot for the rest of the session.
+    pg.classList.add('fresh');
+    clearTimeout(_freshTimer);
+    _freshTimer=setTimeout(()=>pg.classList.remove('fresh'), 700);
+  }
   document.querySelectorAll('.tab')[TABS.indexOf(t)]?.classList.add('active');
   updateTabPill(t);
   window.scrollTo(0,0);
