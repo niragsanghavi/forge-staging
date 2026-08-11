@@ -4906,6 +4906,44 @@ function countUp(el, to, dur){
   })(performance.now());
 }
 
+// ── NUMBERS THAT MOVED ──────────────────────────────────────────────────────
+// A number that snaps from 41 to 46 is a new fact you have to notice. A number
+// that TRAVELS there is your fact changing, and you cannot miss it. That is the
+// whole competitive mechanic, and until now it was invisible.
+//
+// The rule that keeps this from becoming noise: animate ONLY when the value
+// actually changed since the last render. The board re-renders on every
+// Firestore snapshot, so counting up on every repaint would leave the screen
+// permanently twitching. First sight of a number is never animated either —
+// there is nothing to travel from, and a page that counts every figure up from
+// zero on arrival is a dashboard demo, not an app you use daily.
+//
+// Keyed per element (data-num) rather than per position, so a player moving
+// rank keeps their own number's history instead of inheriting the number of
+// whoever now occupies that row.
+const _numLast=new Map();
+function countFromTo(el,from,to,dur){
+  const start=performance.now(), delta=to-from;
+  (function tick(now){
+    const t=Math.min(1,(now-start)/dur);
+    el.textContent=Math.round(from + delta*(1-Math.pow(1-t,3)));
+    if(t<1) requestAnimationFrame(tick); else el.textContent=to;
+  })(performance.now());
+}
+function tickNumbers(root){
+  if(!root) return;
+  const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  root.querySelectorAll('[data-num]').forEach(el=>{
+    const key=el.getAttribute('data-num');
+    const to=Number(String(el.textContent).trim());
+    if(!isFinite(to)) return;
+    const from=_numLast.get(key);
+    _numLast.set(key,to);
+    if(reduce || from===undefined || from===to) return;
+    countFromTo(el, from, to, 620);
+  });
+}
+
 // Lightweight DOM confetti — no library.
 function fireConfetti(){
   const colors=['#f59e0b','#22c55e','#ffffff','#fb923c','#fbbf24'];
@@ -5268,7 +5306,7 @@ function renderLB(){
         <div class="tstand-top">
           <span class="tstand-name" style="color:${col}">Team ${t.t}</span>
           ${lead?'<span class="tstand-crown">Leading</span>':''}
-          <span class="tstand-pts">${t.s}<i>avg pts</i></span>
+          <span class="tstand-pts"><span data-num="ts:${t.t}">${t.s}</span><i>avg pts</i></span>
         </div>
         <div class="tstand-bar"><div class="tstand-fill" style="width:${pct}%;background:${col}"></div></div>
         <div class="tstand-meta">${t.count} member${t.count===1?'':'s'} · ${names}</div>
@@ -5293,7 +5331,7 @@ function renderLB(){
         <div class="lbmeta" style="color:var(--muted)">${p.sc.wo} workouts · ${p.sc.streak}${flameIco('flk-s')}</div>
       </div>
       <div style="text-align:right">
-        <div style="font-size:18px;font-weight:800;color:var(--gold)">${p.sc.total}</div>
+        <div style="font-size:18px;font-weight:800;color:var(--gold)" data-num="lb:${esc(p.name)}">${p.sc.total}</div>
         <div style="font-size:10px;color:var(--muted)">pts</div>
       </div>
     </div>`).join('');
@@ -5320,8 +5358,12 @@ function renderLB(){
       </div>`).join('')}
     <div class="row" style="padding:14px 0 0;margin-top:6px;border-top:2px solid var(--border)">
       <div style="font-size:15px;font-weight:700">Total</div>
-      <div style="font-size:24px;font-weight:800;color:var(--gold)">${my.total}</div>
+      <div style="font-size:24px;font-weight:800;color:var(--gold)" data-num="me:total">${my.total}</div>
     </div>`;
+
+  // Runs AFTER both innerHTML writes, so every tagged figure on the board is
+  // measured in the same pass. Anything unchanged is left alone.
+  tickNumbers(document.getElementById('page-lb'));
 }
 
 // ── FEED ──────────────────────────────────────────────────────────────────
