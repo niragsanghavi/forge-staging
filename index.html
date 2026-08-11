@@ -2962,6 +2962,38 @@ function mirRenderMix(){
   }).join('') + (more>0?`<div class="tmuted" style="font-size:11px;margin-top:4px">+ ${more} more type${more===1?'':'s'}</div>`:'');
   mirRenderMixRec();
 }
+// ── ONE REAL WORKOUT, ONE ROW ───────────────────────────────────────────────
+// Someone in three groups logs the SAME session three times — three docs with
+// three ids, because a log belongs to a group. The de-dupe below is by doc id,
+// which stops ONE doc being counted twice across the two queries but cannot see
+// that THREE docs are one workout. So every all-time personal stat read 3x for
+// anyone multi-group: one tagged chest day showed as three, while "this month"
+// (single group, one doc) correctly showed one. The toggle disagreed with
+// itself, which is exactly how it was spotted.
+//
+// Real-world identity is the calendar day plus the workout set, never the doc.
+// Two genuinely different sessions on one day (a gym session, then a run) keep
+// different keys and both survive. Where the same session was tagged in one
+// group and logged bare in another, the richer note wins, so a muscle tag is
+// never lost to de-duplication.
+//
+// Group-scoped surfaces (scoring, leaderboards, the feed) must NOT use this —
+// there, three logs in three groups genuinely are three separate entries.
+function _sessionKey(l){
+  const ws=(Array.isArray(l.workouts)?l.workouts:(l.workout?[l.workout]:[]))
+    .map(w=>String(w||'').trim().toLowerCase()).filter(Boolean).sort();
+  return `${l.year||0}-${l.month||0}-${l.day||0}|${ws.join('+')}`;
+}
+function _dedupeSessions(logs){
+  const by=new Map();
+  (logs||[]).forEach(l=>{
+    const k=_sessionKey(l), prev=by.get(k);
+    if(!prev){ by.set(k,l); return; }
+    if(String(l.note||'').trim().length > String(prev.note||'').trim().length) by.set(k,l);
+  });
+  return [...by.values()];
+}
+
 function mirLoadMineAll(){
   if(_mirInflight['mine']) return _mirInflight['mine'];
   const p=(async()=>{
@@ -2992,7 +3024,10 @@ function mirLoadMineAll(){
                        .where('player','==',s.player.name).get());
         }catch(e){ logErr('mirLoadMineAll: name pass '+s.code, e); }
       }
-      _mirMineAll=out;
+      // Collapse the same real workout logged into several groups. Every
+      // consumer of this cache is a PERSONAL all-time stat, so one session
+      // must count once no matter how many leaderboards it fed.
+      _mirMineAll=_dedupeSessions(out);
     }catch(e){ logErr('mirLoadMineAll', e); _mirMineAll=_mirMineAll||[]; }
   })();
   _mirInflight['mine']=p;
