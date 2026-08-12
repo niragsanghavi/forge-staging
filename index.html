@@ -371,9 +371,23 @@
     <!-- Team distance goal. Renders nothing at all unless season.kmTarget is set. -->
     <div id="kmGoalCard"></div>
     <div class="shdr" id="teamStandHdr">Team Standings</div>
-    <div id="teamStand"></div>
+    <!-- Solo groups hide this whole section, but the header above already
+         shows during boot for them too, so the placeholder doesn't introduce a
+         flash that wasn't there — renderLB() clears both on its first pass. -->
+    <div id="teamStand">
+      <div class="sk-bar"><div class="sk sk-bt"></div><div class="sk sk-bf" style="width:100%"></div><div class="sk sk-bm"></div></div>
+      <div class="sk-bar"><div class="sk sk-bt"></div><div class="sk sk-bf" style="width:68%"></div><div class="sk sk-bm"></div></div>
+    </div>
     <div class="shdr">Individual Rankings</div>
-    <div class="card" id="indLb"></div>
+    <!-- Seeded in the MARKUP, not from JS: this is the boot window, before the
+         first Firestore snapshot, and anything script-driven would still leave
+         one empty frame. renderLB() overwrites the lot on its first pass. -->
+    <div class="card" id="indLb">
+      <div class="sk-row"><div class="sk sk-av"></div><div class="sk-body"><div class="sk sk-l1" style="width:46%"></div><div class="sk sk-l2"></div></div><div class="sk sk-num"></div></div>
+      <div class="sk-row"><div class="sk sk-av"></div><div class="sk-body"><div class="sk sk-l1" style="width:62%"></div><div class="sk sk-l2"></div></div><div class="sk sk-num"></div></div>
+      <div class="sk-row"><div class="sk sk-av"></div><div class="sk-body"><div class="sk sk-l1" style="width:38%"></div><div class="sk sk-l2"></div></div><div class="sk sk-num"></div></div>
+      <div class="sk-row"><div class="sk sk-av"></div><div class="sk-body"><div class="sk sk-l1" style="width:54%"></div><div class="sk sk-l2"></div></div><div class="sk sk-num"></div></div>
+    </div>
     <div class="shdr">Your Breakdown</div>
     <div class="card" id="ptsBk"></div>
   </div>
@@ -381,7 +395,11 @@
   <!-- FEED -->
   <div class="page" id="page-feed">
     <div class="page-title">Activity Feed</div>
-    <div class="card" id="feedList"></div>
+    <div class="card" id="feedList">
+      <div class="sk-row"><div class="sk sk-av"></div><div class="sk-body"><div class="sk sk-l1" style="width:44%"></div><div class="sk sk-l2"></div></div><div class="sk sk-num"></div></div>
+      <div class="sk-row"><div class="sk sk-av"></div><div class="sk-body"><div class="sk sk-l1" style="width:58%"></div><div class="sk sk-l2"></div></div><div class="sk sk-num"></div></div>
+      <div class="sk-row"><div class="sk sk-av"></div><div class="sk-body"><div class="sk sk-l1" style="width:40%"></div><div class="sk sk-l2"></div></div><div class="sk sk-num"></div></div>
+    </div>
   </div>
 
   <!-- GLOBAL -->
@@ -2943,7 +2961,7 @@ function mirRenderMix(){
   if(_mirMixMode==='month'){
     logs=(allLogs||[]).filter(l=>l.player===me.name && !l.voided);
   } else {
-    if(!_mirMineAll){ mirLoadMineAll().then(()=>mirRenderMix()); el.innerHTML='<div class="tmuted" style="font-size:12px">Adding it all up…</div>'; if(statEl) statEl.textContent=''; return; }
+    if(!_mirMineAll){ mirLoadMineAll().then(()=>mirRenderMix()); el.innerHTML=skLines(4); if(statEl) statEl.textContent=''; return; }
     logs=_mirMineAll;
   }
   const r=_mixCount(logs);
@@ -3168,7 +3186,7 @@ function mirRenderLift(){
   else {
     if(!_mirMineAll){
       mirLoadMineAll().then(()=>mirRenderLift());
-      body.innerHTML='<div class="tmuted" style="font-size:12px">Adding it all up…</div>';
+      body.innerHTML=skLines(3);
       statEl.textContent=''; nudgeEl.innerHTML=''; return;
     }
     logs=_mirMineAll;
@@ -3631,8 +3649,8 @@ async function renderProfile(){
     seasonsEl.innerHTML='';
     return;
   }
-  statsEl.innerHTML='<div class="tmuted">Loading…</div>';
-  seasonsEl.innerHTML='<div class="tmuted">Loading…</div>';
+  statsEl.innerHTML=skLines(3);
+  seasonsEl.innerHTML=skRows(2);
   renderProfileInsights();   // parallel + independent — an insights failure never blocks stats/seasons
   renderDeleteAccountCard(); // ditto — never let the delete card break the tab
   renderGoogleAuthCard();    // inert while FEATURE_GOOGLE_AUTH is off
@@ -4942,6 +4960,32 @@ function tickNumbers(root){
     if(reduce || from===undefined || from===to) return;
     countFromTo(el, from, to, 620);
   });
+}
+
+// ── SKELETONS ───────────────────────────────────────────────────────────────
+// Shape-matched placeholders for the surfaces that genuinely wait on the
+// network. See the SKELETONS block in main.css for why these exist and why the
+// dimensions are copied from the real rows rather than invented.
+//
+// Widths vary per row on purpose. A column of identical bars reads as a
+// loading graphic; slightly ragged ones read as text that hasn't resolved yet,
+// which is what it actually is.
+const _SK_W=[46,62,38,54,44,58,40,50];
+function skRows(n=5){
+  let h='';
+  for(let i=0;i<n;i++) h+=`<div class="sk-row">
+    <div class="sk sk-av"></div>
+    <div class="sk-body">
+      <div class="sk sk-l1" style="width:${_SK_W[i%_SK_W.length]}%"></div>
+      <div class="sk sk-l2"></div>
+    </div>
+    <div class="sk sk-num"></div></div>`;
+  return h;
+}
+function skLines(n=3){
+  let h='';
+  for(let i=0;i<n;i++) h+=`<div class="sk sk-line" style="width:${_SK_W[i%_SK_W.length]+22}%"></div>`;
+  return h;
 }
 
 // Lightweight DOM confetti — no library.
@@ -7408,7 +7452,8 @@ async function loadGlobal(){
     renderGlobalFromCache(globalDataCache);
     return;
   }
-  actEl.innerHTML=grpEl.innerHTML=ptsEl.innerHTML='<div class="tmuted">Loading…</div>';
+  // Reached only on a real fetch — the cache path above has already returned.
+  actEl.innerHTML=skRows(3); grpEl.innerHTML=skRows(4); ptsEl.innerHTML=skRows(5);
   try{
     const gSnap=await db.collection('groups').get();                       // G reads
     const groups=gSnap.docs.map(d=>({code:d.id,...d.data()}));
