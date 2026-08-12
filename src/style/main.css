@@ -139,14 +139,43 @@ body::before{content:'';position:fixed;inset:-10%;z-index:-1;pointer-events:none
    a phone, and an uncapped cascade on a 20-person board is still playing long
    after you began reading. Transform and opacity only, so the whole thing
    stays on the compositor and never touches Android scroll performance — the
-   one place this app has been bitten before. */
-@keyframes rowIn{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
+   one place this app has been bitten before.
+
+   FIRST ATTEMPT WAS INVISIBLE, and the reason is worth keeping. The stagger was
+   34ms/row over 340ms while .page.active was ALREADY running pageIn — a 420ms
+   opacity+translate+scale on the whole container. Frozen-frame capture showed
+   five of six rows fully up by 160ms, entirely inside the page fade. The
+   animation was firing perfectly and reading as nothing, because a subtle
+   motion underneath a bigger one is just the bigger one.
+
+   So on the two staggering pages the ROWS ARE the entrance: the page itself
+   does a short opacity-only fade and contributes no movement of its own. Every
+   other page keeps pageIn exactly as before — showTab() only marks .fresh on
+   the board and the feed, so nothing else changed. */
+.page.active.fresh{animation:pageFade .16s linear}
+@keyframes pageFade{from{opacity:0}to{opacity:1}}
+
+@keyframes rowIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
 .page.fresh .lbrow,
-.page.fresh .fi{animation:rowIn .34s cubic-bezier(.2,.7,.3,1) both;
-  animation-delay:calc(var(--i,0) * 34ms)}
+.page.fresh .fi{animation:rowIn .40s cubic-bezier(.2,.7,.3,1) both;
+  animation-delay:calc(var(--i,0) * 52ms)}
 @media (prefers-reduced-motion:reduce){
+  .page.active.fresh{animation:none}
   .page.fresh .lbrow,.page.fresh .fi{animation:none}
 }
+
+/* A count-up alone is invisible at the scale this app actually moves. Going
+   from 50 to 53 over 620ms is three increments — technically animated, and
+   nobody sees it. The travel is worth keeping for the big jumps, but the change
+   itself needs a signal that doesn't depend on the size of the delta, so a
+   changed figure also pops and flares gold for half a second.
+   inline-block because the team-standings figure is a span, and transforms do
+   nothing on an inline box. */
+@keyframes numPop{0%{transform:scale(1);filter:none}
+  28%{transform:scale(1.22);filter:brightness(1.5)}
+  100%{transform:scale(1);filter:none}}
+.num-moved{display:inline-block;animation:numPop .55s cubic-bezier(.2,.7,.3,1)}
+@media (prefers-reduced-motion:reduce){ .num-moved{animation:none} }
 
 /* Team bars already slide between values (.tstand-fill has a width
    transition), but on arrival they were simply THERE at full length — the one

@@ -4959,6 +4959,14 @@ function tickNumbers(root){
     _numLast.set(key,to);
     if(reduce || from===undefined || from===to) return;
     countFromTo(el, from, to, 620);
+    // The pop is what you actually notice — a 3-point change counts up in
+    // increments too small to register on their own. Class is removed first so
+    // a second change during the same session restarts the animation instead of
+    // being ignored as already-applied.
+    el.classList.remove('num-moved');
+    void el.offsetWidth;                        // force reflow, restart the run
+    el.classList.add('num-moved');
+    setTimeout(()=>el.classList.remove('num-moved'), 600);
   });
 }
 
@@ -8089,9 +8097,14 @@ async function showTab(t){
     // a timer rather than animationend, because the last row to finish isn't
     // knowable up front and a missed event would leave the class stuck on,
     // re-animating the list on every snapshot for the rest of the session.
-    pg.classList.add('fresh');
-    clearTimeout(_freshTimer);
-    _freshTimer=setTimeout(()=>pg.classList.remove('fresh'), 700);
+    // ONLY the two pages that actually have staggered rows. .fresh also swaps
+    // that page's entrance to a plain fade so the rows carry the movement, and
+    // handing that to Home or Admin would strip their pageIn for nothing.
+    if(t==='lb' || t==='feed'){
+      pg.classList.add('fresh');
+      clearTimeout(_freshTimer);
+      _freshTimer=setTimeout(()=>pg.classList.remove('fresh'), 1000);
+    }
   }
   document.querySelectorAll('.tab')[TABS.indexOf(t)]?.classList.add('active');
   updateTabPill(t);
