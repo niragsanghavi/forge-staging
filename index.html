@@ -755,6 +755,25 @@ if(typeof window.isSoloMode !== 'function'){
     return Number(window.season && window.season.numTeams) === 1;
   };
 }
+// Not a boot path — this one runs inside the account-deletion transaction. A
+// stale appState.js wouldn't brick the app, it would fail the DELETION, and
+// that is the Play Store hard gate: the one operation that must not throw
+// because a cached file is a few minutes old. Same bank, same order, so a
+// device running the fallback picks the identical name the fresh file would.
+if(typeof window.pickDepartedName !== 'function'){
+  window.pickDepartedName = function(roster){
+    const BANK = window.DEPARTED_NAMES || [
+      'Sheera Naway', 'Simran Bhaag', 'Ranaway Rana', 'Gayab Singh',
+      'Nikhil Gayaa', 'Farrar Khan',  'Rafu Chakkar', 'Bhaagi Mehta',
+      'Gul Hogayaa',  'U-Turn Uday',  'Tata B. Bai',  'Chhod K. Gaya'
+    ];
+    const taken = new Set((roster||[]).map(p => p && p.name).filter(Boolean));
+    for(const n of BANK){ if(!taken.has(n)) return n; }
+    let i = 1;
+    while(taken.has('Gone Player #' + i)) i++;
+    return 'Gone Player #' + i;
+  };
+}
 
 // ── CONTENT ───────────────────────────────────────────────────────────────
 const DAILY_FACTS = [
