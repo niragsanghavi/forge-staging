@@ -4962,6 +4962,65 @@ function tickNumbers(root){
   });
 }
 
+// ── RANK SLIDE (FLIP) ───────────────────────────────────────────────────────
+// Overtaking someone is the entire point of this app, and until now it happened
+// silently: the list simply repainted in a new order and you had to remember
+// where you used to be. Rows now travel to their new position, so you SEE the
+// pass happen.
+//
+// FLIP, because innerHTML is replaced wholesale and there are no surviving
+// nodes to transition. Measure each row's offset before the repaint, measure
+// again after, then jump every moved row back to where it was and let it
+// travel forwards. Two frames of work, no layout thrash.
+//
+// Offsets are measured RELATIVE TO THE CONTAINER, never the viewport. If the
+// team standings above grow by a row, a viewport-relative measure would see
+// every row shift by the same amount and slide the whole list for no reason.
+// Container-relative deltas are purely about position WITHIN the ranking, which
+// is the only movement worth showing.
+//
+// Four things it deliberately refuses to do:
+//   · nothing to compare against (first paint, or the skeleton, which carries
+//     no data-row at all) — the empty map guard handles both for free
+//   · a row that didn't move gets no transform, so a snapshot that only changes
+//     points animates the numbers and leaves the rows alone
+//   · never while .page.fresh is set: the arrival stagger already owns these
+//     rows and two animations on one element reads as a glitch
+//   · never under prefers-reduced-motion
+function flipCapture(box){
+  const m=new Map();
+  if(!box) return m;
+  const base=box.getBoundingClientRect().top;
+  box.querySelectorAll('[data-row]').forEach(el=>{
+    m.set(el.getAttribute('data-row'), el.getBoundingClientRect().top - base);
+  });
+  return m;
+}
+function flipPlay(box, before){
+  if(!box || !before || !before.size) return;
+  if(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if(box.closest('.page.fresh')) return;
+  const base=box.getBoundingClientRect().top, moves=[];
+  box.querySelectorAll('[data-row]').forEach(el=>{
+    const k=el.getAttribute('data-row');
+    if(!before.has(k)) return;                       // joined since last paint
+    const dy=before.get(k)-(el.getBoundingClientRect().top-base);
+    if(Math.abs(dy)<1) return;                       // stayed put
+    moves.push([el,dy]);
+  });
+  if(!moves.length) return;
+  moves.forEach(([el,dy])=>{ el.style.transition='none'; el.style.transform=`translateY(${dy}px)`; });
+  requestAnimationFrame(()=>{
+    moves.forEach(([el])=>{
+      el.style.transition='transform .5s cubic-bezier(.2,.7,.3,1)';
+      el.style.transform='';
+    });
+    // Strip the inline styles once it lands. Left behind, the transition would
+    // still be attached the next time anything touched this row's transform.
+    setTimeout(()=>moves.forEach(([el])=>{ el.style.transition=''; el.style.transform=''; }), 560);
+  });
+}
+
 // ── SKELETONS ───────────────────────────────────────────────────────────────
 // Shape-matched placeholders for the surfaces that genuinely wait on the
 // network. See the SKELETONS block in main.css for why these exist and why the
@@ -5366,8 +5425,13 @@ function renderLB(){
   };
   const ind=players.map(p=>({...p,sc:score(p.name)})).sort((a,b)=>b.sc.total-a.sc.total);
   const myName=me.name;
-  document.getElementById('indLb').innerHTML=ind.map((p,i)=>`
-    <div class="lbrow" style="--i:${i<8?i:8};${p.name===myName?'background:rgba(201,168,76,0.06);margin:0 -16px;padding:12px 16px;border-radius:8px':''}">
+  // FLIP: read positions BEFORE the repaint below. On the very first pass this
+  // finds only skeleton rows, which carry no data-row, so it returns an empty
+  // map and flipPlay() no-ops — the boot render is silent for free.
+  const _lbBox=document.getElementById('indLb');
+  const _lbBefore=flipCapture(_lbBox);
+  _lbBox.innerHTML=ind.map((p,i)=>`
+    <div class="lbrow" data-row="${esc(p.name)}" style="--i:${i<8?i:8};${p.name===myName?'background:rgba(201,168,76,0.06);margin:0 -16px;padding:12px 16px;border-radius:8px':''}">
       ${_rankBadge(i)}
       <div style="width:34px;height:34px;border-radius:50%;background:${p.team==='A'?'var(--Al)':p.team==='B'?'var(--Bl)':'var(--Cl)'};border:1.5px solid ${tcol(p.team)};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:${tcol(p.team)};flex-shrink:0">${esc(p.name[0])}</div>
       <div class="lbinfo">
@@ -5379,6 +5443,9 @@ function renderLB(){
         <div style="font-size:10px;color:var(--muted)">pts</div>
       </div>
     </div>`).join('');
+  // Play immediately after the repaint, in the same synchronous block — no
+  // scroll can happen in between, so the captured offsets stay valid.
+  flipPlay(_lbBox, _lbBefore);
 
   const my=score(me.name);
   const pl=(season.roster||[]).find(p=>p.name===me.name)||me;
