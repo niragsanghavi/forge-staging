@@ -174,6 +174,18 @@
       <input class="code-input" id="codeInput" maxlength="10" placeholder="······" autocomplete="off" oninput="this.value=this.value.toUpperCase()">
       <div id="codeError" class="warn-box warn-red hidden">Group not found. Check your code.</div>
       <button class="btn btn-gold" onclick="verifyCode()">Continue</button>
+      <!-- DOOR 2 — funnel activation (NORTHSTAR §5.3). Framing is deliberate:
+           "start your group", never "solo mode" — alone is day zero of a
+           group, not a product of its own. Hidden while joining another group
+           from inside the app (_joinMode), where a create pitch is noise.
+           PROMOTION GATE: this button reaches prod only in the same push that
+           enables App Check (SECURITY_REDTEAM.md rank 4) — creation cannot be
+           rate-limited in rules. -->
+      <div id="founderDoor">
+        <div style="display:flex;align-items:center;gap:10px;margin:14px 0 10px"><div style="flex:1;height:1px;background:var(--border)"></div><span style="font-size:11px;color:var(--muted)">or</span><div style="flex:1;height:1px;background:var(--border)"></div></div>
+        <button class="btn btn-surface" style="margin:0;width:100%" onclick="showScreen('create')">Start your own group</button>
+        <div style="margin-top:6px;font-size:11px;color:var(--muted);text-align:center">Works alone from day one. Teams unlock as friends join.</div>
+      </div>
       <div id="joinCancel" class="hidden" style="margin-top:12px;text-align:center"><span onclick="cancelJoin()" style="font-size:12px;color:var(--gold);cursor:pointer">← Back to my group</span></div>
       <!-- The escape hatch, ON THE FIRST SCREEN. The nav's ↻ only exists once
            you're already inside, which is no use to someone the login is
@@ -201,6 +213,13 @@
       <input class="code-input" id="pinConfirm" type="tel" inputmode="numeric" maxlength="4" placeholder="confirm" autocomplete="off" oninput="this.value=this.value.replace(/[^0-9]/g,'')" style="margin-top:8px">
       <div id="pinError" class="warn-box warn-red hidden" style="margin-top:10px"></div>
       <button class="btn btn-gold" style="margin-top:10px" onclick="submitNewPin()">Set PIN &amp; Continue</button>
+      <!-- Founder-only escape. A stranger thirty seconds in hasn't earned a
+           credential prompt yet. Skip DEFERS, never deletes: identity (userId
+           + users doc) is still established by skipPinForNow(), but pinSet
+           stays absent, so the existing login routing asks again on the next
+           device. Unhidden ONLY by the founder creation path — every other
+           _pinFlow entry re-hides it. -->
+      <div id="pinSkip" class="hidden" style="margin-top:12px;text-align:center"><span onclick="skipPinForNow()" style="font-size:12px;color:var(--gold);cursor:pointer">Skip for now — set it when it matters</span></div>
     </div>
     <div class="ob-step" id="ob-s4">
       <div class="ob-title">Enter your PIN</div>
@@ -217,26 +236,27 @@
   </div>
 </div>
 
-<!-- ══ SELF-SERVE GROUP CREATION (S3 §4.2) — DARK LAUNCH ══
-     Reachable ONLY via ?create in the URL (see bootApp). No button, link, or
-     any other reference to this screen exists anywhere else in this file or
-     updates.html — that is the entire security model for this launch stage.
-     Visible CTAs land later, inside S4's own promotion commit, coupled to
-     the security gate going live in the same push (NORTHSTAR §4.2/§5.3). -->
+<!-- ══ SELF-SERVE GROUP CREATION — FUNNEL ACTIVE (was S3 §4.2 dark launch) ══
+     Now reachable from onboarding step 1 (#founderDoor) as well as ?create.
+     §5.3's gate is honoured at the PROMOTION layer, not here: prod rules are
+     deployed + hostile-console verified (red team, Aug), and the named
+     checklist line for promoting THIS screen's visibility is App Check going
+     live in the same push. Creates a FOUNDER group: numTeams 1, usable alone,
+     teams unlock as the roster grows (see selfServeCreateGroup). -->
 <div class="screen" id="screen-create">
   <div class="ob-logo">FORGE</div>
-  <div class="ob-tag">Start a new group.</div>
+  <div class="ob-tag">Start your own group.</div>
   <div class="ob-card">
     <div class="ob-step active">
-      <div class="ob-title">Create Your Group</div>
-      <div class="ob-sub">Defaults: roles off, 2 teams, 8-workout minimum. You can adjust these later in Admin.</div>
+      <div class="ob-title">Start Your Group</div>
+      <div class="ob-sub">Works alone from day one — log workouts, build a streak, set a monthly goal. Teams and rivalries unlock as friends join with your code.</div>
       <input type="text" id="ssGroupName" placeholder="Group name" maxlength="40" style="margin-bottom:10px">
       <input type="text" id="ssCreatorName" placeholder="Your name" maxlength="24" style="margin-bottom:10px">
       <input type="text" id="ssCustomCode" placeholder="Custom code (optional — 6 letters/numbers)" maxlength="6" autocomplete="off" oninput="this.value=this.value.toUpperCase()">
       <div style="font-size:11px;color:var(--muted);margin-top:2px">Leave blank and we'll forge one for you.</div>
       <div id="ssError" class="warn-box warn-red hidden" style="margin-top:10px"></div>
       <button class="btn btn-gold" style="margin-top:10px" onclick="selfServeCreateGroup()">Create Group</button>
-      <div id="ssResult" class="warn-box warn-green hidden" style="margin-top:14px"></div>
+      <div style="margin-top:14px;text-align:center"><span onclick="showScreen('onboard');showObStep(1)" style="font-size:12px;color:var(--gold);cursor:pointer">← I have a group code</span></div>
     </div>
   </div>
 </div>
@@ -292,6 +312,11 @@
          Monday or Tuesday, and only once per week per group (dismissal is
          stored per group + per week-start so it can never resurface). -->
     <div id="mondayRecap"></div>
+
+    <!-- FOUNDER CARD — solo groups (numTeams 1) only. The invite loop: code,
+         share, countdown to teams; flips to a split-into-teams nudge at 6.
+         renderFounderCard() owns it; renders empty for every other group. -->
+    <div id="founderCard"></div>
 
     <!-- PERSONAL MONTHLY GOAL. renderGoalRing() / openGoalInput() / _loadMyGoals()
          have been complete and callable for weeks with no div to paint into, so
@@ -1185,12 +1210,16 @@ window.onload = () => {
 };
 
 async function bootApp(){
-  // S3 §4.2 dark launch: the ONLY entry point to self-serve group creation.
-  // No link/button to this exists anywhere else — see the screen-create
-  // comment block for the full rationale.
+  // Direct deep-link to group creation (kept from the S3 §4.2 dark-launch
+  // era; the screen is now also reachable from onboarding's #founderDoor —
+  // see the screen-create comment block for the promotion gate).
+  // An EXISTING session outranks the param: without this, a founder who
+  // created via a ?create URL reloads into the create form forever instead
+  // of their group (found live in SOLO QA — the creation flow also strips
+  // the param, this is the belt to that suspender for bookmarked links).
   if(location.search.includes('create')){
-    showScreen('create');
-    return;
+    migrateLegacySession();   // idempotent — the normal path below runs it too
+    if(!getSessions().length){ showScreen('create'); return; }
   }
   if(location.search.includes('superadmin')){
     const pin = prompt('Super admin PIN:');
@@ -1333,6 +1362,7 @@ function choosePlayer(name){
     document.getElementById('pinInput').value = '';
     document.getElementById('pinConfirm').value = '';
     document.getElementById('pinError').classList.add('hidden');
+    document.getElementById('pinSkip')?.classList.add('hidden');   // founder-only affordance
     showObStep(3);
     return;
   }
@@ -1446,6 +1476,7 @@ function gracePinCheckOnResume(){
     document.getElementById('pinInput').value = '';
     document.getElementById('pinConfirm').value = '';
     document.getElementById('pinError').classList.add('hidden');
+    document.getElementById('pinSkip')?.classList.add('hidden');   // founder-only affordance
     showObStep(3);
     return true;
   }
@@ -1482,6 +1513,7 @@ async function registerAndJoin(){
   document.getElementById('pinInput').value = '';
   document.getElementById('pinConfirm').value = '';
   document.getElementById('pinError').classList.add('hidden');
+  document.getElementById('pinSkip')?.classList.add('hidden');   // founder-only affordance
   showObStep(3);
 }
 
@@ -1618,6 +1650,51 @@ async function submitNewPin(){
   }
 }
 
+// Founder-only PIN deferral. Mirrors submitNewPin's grace branch minus the
+// credential: identity IS established now (userId on the roster entry + a
+// users doc with pinHash:null) so day-one logs carry userId, but pinSet
+// stays absent — the existing login routing (choosePlayer /
+// gracePinCheckOnResume) asks again on the next device, and submitNewPin's
+// else-branch merge fills the hash into the SAME users doc then. Skip
+// defers; nothing is lost and no second identity can be minted.
+async function skipPinForNow(){
+  const flow = window._pinFlow;
+  if(!flow || !flow.founder) return;   // never a path for non-founders
+  const err = document.getElementById('pinError');
+  err.classList.add('hidden');
+  if(!season || !seasonId){ err.textContent='Still loading — try again in a second.'; err.classList.remove('hidden'); return; }
+  try {
+    const candidateUserId = db.collection('users').doc().id;
+    const sRef = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
+    let wRoster=null, myEntry=null, createdUserDoc=false;
+    await withWriteWatchdog(db.runTransaction(async tx=>{
+      createdUserDoc=false;   // reset per attempt — tx retries must not overcount
+      const sSnap=await tx.get(sRef);
+      if(!sSnap.exists) throw new Error('SEASON_MISSING');
+      const roster=sSnap.data().roster||[];
+      const entry=roster.find(p=>p.name===flow.name);
+      if(!entry) throw new Error('NO_RECORD');
+      entry.uid=(window.currentUid||null);
+      if(!entry.userId){ entry.userId=candidateUserId; createdUserDoc=true; }
+      tx.update(sRef,{roster});
+      if(createdUserDoc){
+        tx.set(db.collection('users').doc(entry.userId), newUserDocFields(entry.name, null, groupCode, groupData?.name, window.currentUid, 'founder-skip'));
+      }
+      wRoster=roster; myEntry=entry;
+    }), 'skipPinForNow');
+    if(createdUserDoc) bumpGlobalStat('totalUsers', 1);   // fire-and-forget
+    season.roster=wRoster;
+    me=myEntry;
+    upsertSession(groupCode, myEntry, groupData?.name);
+    window._pinFlow = null;
+    launchApp();
+  } catch(e){
+    logErr('skipPinForNow', e);
+    err.textContent = (e.message==='NO_RECORD') ? 'Could not find your record. Please refresh.' : 'Could not finish setup — check connection.';
+    err.classList.remove('hidden');
+  }
+}
+
 function promptSwitch(){
   const sessions = getSessions();
   if(sessions.length > 1){
@@ -1715,6 +1792,7 @@ function launchApp(){
   try { localStorage.setItem('forge_seen','1'); } catch(e){}  // durable-ish "has launched before" marker for the session_lost breadcrumb
   window._joinMode = false;
   document.getElementById('joinCancel')?.classList.add('hidden');
+  document.getElementById('founderDoor')?.classList.remove('hidden');   // reset for the next fresh onboarding
   showScreen('app');
   document.getElementById('navAv').textContent = me.name[0];
   document.getElementById('navNm').textContent = me.name;
@@ -1855,6 +1933,7 @@ function joinAnotherGroup(){
   document.getElementById('codeInput').value='';
   document.getElementById('codeError').classList.add('hidden');
   document.getElementById('joinCancel')?.classList.remove('hidden');
+  document.getElementById('founderDoor')?.classList.add('hidden');   // joining ≠ founding
   showScreen('onboard');
   showObStep(1);
 }
@@ -1863,6 +1942,7 @@ function joinAnotherGroup(){
 function cancelJoin(){
   window._joinMode = false;
   document.getElementById('joinCancel')?.classList.add('hidden');
+  document.getElementById('founderDoor')?.classList.remove('hidden');
   const sessions = getSessions();
   if(!sessions.length) return;
   const active = sessions.find(s=>s.code===getActiveCode()) || sessions[0];
@@ -2004,6 +2084,8 @@ function renderHome(){
   catch(e){ logErr('renderGoalRing', e); }
   try { renderMondayRecap(); }
   catch(e){ logErr('renderMondayRecap', e); }
+  try { renderFounderCard(); }
+  catch(e){ logErr('renderFounderCard', e); }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -7276,20 +7358,31 @@ function downloadJSON(obj, filename){
 }
 
 // ── S3 §4.2 SELF-SERVE GROUP CREATION — DARK LAUNCH ─────────────────────────
-// Reachable only from screen-create, itself reachable only via ?create (see
-// bootApp). Fixed defaults, no config UI — self-serve means dead simple:
-// roles off, 2 teams, minWorkouts 8, days auto-computed (never prompted,
-// same pattern as the auto-rollover fix). Creator becomes the first roster
-// entry AND isAdmin:true — the entire point of self-serve is that nobody
-// needs Nirag to grant admin access to their own new group. Routes into the
-// EXISTING grace-flow PIN step afterward — same machinery every other
-// first-PIN-set uses, including S1's self-heal (the entry has no userId yet,
-// so submitNewPin's grace branch creates one automatically).
+// FOUNDER-GROUP creation, reachable from onboarding's #founderDoor and the
+// legacy ?create deep link. Fixed defaults, no config UI — self-serve means
+// dead simple: roles off, numTeams 1 (a founder group works alone from day
+// one; isSoloMode() gates all team UI until Admin splits it at ~6), a
+// minWorkouts pro-rated to the days remaining, days auto-computed (never
+// prompted, same pattern as the auto-rollover fix). Creator becomes the
+// first roster entry AND isAdmin:true — nobody needs Nirag to grant admin
+// on their own new group. Routes into the EXISTING grace-flow PIN step
+// afterward (founder:true unlocks the skip affordance) — same machinery
+// every other first-PIN-set uses, including S1's self-heal (the entry has
+// no userId yet, so submitNewPin's grace branch creates one automatically).
 async function selfServeCreateGroup(){
   const groupNameInput = document.getElementById('ssGroupName');
   const creatorNameInput = document.getElementById('ssCreatorName');
   const err = document.getElementById('ssError');
   err.classList.add('hidden');
+
+  // Per-device sanity throttle — NOT a security control (scripted abuse is
+  // App Check's job, gated at promotion); this catches double-taps and
+  // casual junk. Two creations per rolling 24h.
+  try {
+    const hist = JSON.parse(localStorage.getItem('forge_created_groups')||'[]').filter(t=>Date.now()-t < 86400000);
+    localStorage.setItem('forge_created_groups', JSON.stringify(hist));
+    if(hist.length >= 2){ err.textContent='Two groups in one day is plenty. The forge reopens tomorrow.'; err.classList.remove('hidden'); return; }
+  } catch(e){}
 
   const groupName = groupNameInput.value.trim();
   if(!groupName || groupName.length>40){ err.textContent='Enter a group name (up to 40 characters).'; err.classList.remove('hidden'); return; }
@@ -7319,6 +7412,11 @@ async function selfServeCreateGroup(){
   const month = now.getMonth()+1, year = now.getFullYear();
   const sid = seasonIdOf(month, year);
   const days = new Date(year, month, 0).getDate(); // auto-computed, never prompted
+  // Pro-rate the month-end minimum to the days actually left: a founder
+  // arriving on the 25th must not inherit a penalty sized for people who had
+  // all 31 days. Full month ⇒ the standard 8; floor 1; never above 8.
+  const daysLeft = days - now.getDate() + 1;
+  const minW = Math.max(1, Math.min(8, Math.round(8 * daysLeft / days)));
 
   const creatorEntry = { name: formattedName, team:'A', role:'Player', uid:(window.currentUid||null), isAdmin:true };  // R2: no plaintext pin field; pinHash set via grace-flow
   const serverNow = firebase.firestore.FieldValue.serverTimestamp();
@@ -7329,8 +7427,8 @@ async function selfServeCreateGroup(){
     const seasonRef = groupRef.collection('seasons').doc(sid);
     batch.set(seasonRef, {
       month, year, days,
-      capTarget: 16, vcTarget: 20, minWorkouts: 8,
-      numTeams: 2, teamStreakThreshold: 0.6,
+      capTarget: 16, vcTarget: 20, minWorkouts: minW,
+      numTeams: 1, teamStreakThreshold: 0.6,
       rolesEnabled: false,
       roster: [creatorEntry],
       status: 'active', startedAt: serverNow, endedAt: null
@@ -7338,26 +7436,105 @@ async function selfServeCreateGroup(){
     await batch.commit();
 
     groupCode = code;
-    groupData = { name: groupName, players:[{name:formattedName}], currentSeasonId: sid };
-    season = { month, year, days, capTarget:16, vcTarget:20, minWorkouts:8, numTeams:2, teamStreakThreshold:0.6, rolesEnabled:false, roster:[creatorEntry], status:'active' };
+    groupData = { name: groupName, players:[{name:formattedName}], currentSeasonId: sid, createdAt: new Date() };
+    season = { month, year, days, capTarget:16, vcTarget:20, minWorkouts:minW, numTeams:1, teamStreakThreshold:0.6, rolesEnabled:false, roster:[creatorEntry], status:'active' };
     seasonId = sid;
 
-    const waText = encodeURIComponent(`Join my Forge group "${groupName}"! Code: ${code}\nhttps://goforge.in/`);
-    const waLink = `https://wa.me/?text=${waText}`;
-    document.getElementById('ssResult').innerHTML = `✅ Group created! Code: <strong style="font-size:20px;letter-spacing:3px">${esc(code)}</strong><br><a href="${waLink}" target="_blank" rel="noopener" style="color:var(--green)">📱 Share on WhatsApp</a>`;
-    document.getElementById('ssResult').classList.remove('hidden');
+    try { const hist=JSON.parse(localStorage.getItem('forge_created_groups')||'[]'); hist.push(Date.now()); localStorage.setItem('forge_created_groups', JSON.stringify(hist)); } catch(e){}
+    // Strip a ?create deep-link param so reloads boot into the group, not
+    // back into this form.
+    try { if(location.search.includes('create')) history.replaceState(null, '', location.pathname); } catch(e){}
 
-    window._pinFlow = { mode:'grace', name: formattedName };
+    // The old flow rendered the code + a share link into ssResult and then
+    // switched screens on the same tick — the founder never actually saw
+    // their code. It now rides the PIN step's subtitle and lives permanently
+    // on the Home founder card (renderFounderCard), where the share loop is.
+    window._pinFlow = { mode:'grace', name: formattedName, founder:true };
     showScreen('onboard');
-    document.getElementById('ob-s3-sub').textContent = `Welcome, ${formattedName}. Pick a 4-digit PIN to secure your account.`;
+    document.getElementById('ob-s3-sub').innerHTML = `“${esc(groupName)}” is live — code <strong style="letter-spacing:2px;color:var(--gold)">${esc(code)}</strong> (it'll be on your home screen too).<br>Pick a 4-digit PIN so the name ${esc(formattedName)} stays yours once the code is shared.`;
     document.getElementById('pinInput').value=''; document.getElementById('pinConfirm').value='';
     document.getElementById('pinError').classList.add('hidden');
+    document.getElementById('pinSkip').classList.remove('hidden');
     showObStep(3);
   } catch(e){
     logErr('selfServeCreateGroup', e);
     err.textContent='Failed to create group — check connection.';
     err.classList.remove('hidden');
   }
+}
+
+// ── FOUNDER CARD (Home) ──────────────────────────────────────────────────
+// The invite loop for solo groups (numTeams 1). Framing rule — the reason
+// this card exists at all: alone is day zero of a group, not a destination.
+// Its whole job is the code, the share, and the countdown to teams. Data-
+// gated on the season's own numTeams; every 2/3-team group renders nothing.
+function renderFounderCard(){
+  const el=document.getElementById('founderCard'); if(!el) return;
+  const solo=(typeof isSoloMode==='function' && isSoloMode());
+  if(!solo || !groupCode || !season){ el.innerHTML=''; return; }
+  const roster=season.roster||[];
+  const n=roster.length;
+  const mine=roster.find(p=>p && me && p.name===me.name) || me || {};
+  if(n>=6){
+    // Six is the first fair split (3v3). The card's job is done — hand the
+    // moment to the admin and get out of the way.
+    el.innerHTML = mine.isAdmin ? `
+      <div class="card" style="border:1px solid var(--gold)">
+        <div class="card-title" style="color:var(--gold)">Six strong. The solo era is over.</div>
+        <div class="tmuted" style="margin-bottom:10px">Split into teams and let the streak pressure do its work — set teams to 2 in Admin, then balance the rosters.</div>
+        <button class="btn btn-surface btn-sm" style="margin:0;width:100%" onclick="showTab('admin')">Open Admin</button>
+      </div>` : '';
+    return;
+  }
+  const noCred = !mine.pin && !mine.pinSet;
+  let young=false;
+  try { const c=groupData && groupData.createdAt; const d=c && (c.toDate ? c.toDate() : new Date(c)); young=!!d && (Date.now()-d.getTime()) < 8*86400000; } catch(e){}
+  el.innerHTML = `
+    <div class="card" style="border:1px solid var(--gold)">
+      <div class="card-title" style="color:var(--gold)">${n===1?'A forge of one':esc(String(n))+' strong'}</div>
+      <div class="tmuted" style="margin-bottom:10px">${n===1?'Your points count from the first log. Rivals are what make them mean something.':'The fire spreads. Keep it moving.'}</div>
+      <div onclick="founderCopyCode()" title="Tap to copy" style="cursor:pointer;text-align:center;padding:12px;border:1px dashed var(--border);border-radius:8px;margin-bottom:10px">
+        <div style="font-size:10px;color:var(--muted);letter-spacing:1px">GROUP CODE — TAP TO COPY</div>
+        <div style="font-size:26px;font-weight:800;letter-spacing:6px;color:var(--gold)">${esc(groupCode)}</div>
+      </div>
+      <button class="btn btn-gold btn-sm" style="margin:0;width:100%" onclick="founderShare()">Share the code</button>
+      <div style="margin-top:8px;font-size:11px;color:var(--muted);text-align:center">${n} of 6 — teams unlock at 6</div>
+      ${noCred?`<div style="margin-top:8px;font-size:11px;text-align:center"><span onclick="founderSetPin()" style="color:var(--gold);cursor:pointer">Set a PIN first — it keeps your name yours once the code is out.</span></div>`:''}
+      ${young?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--muted)">Week one: try three different workout types. The people who do almost never quit.</div>`:''}
+    </div>`;
+}
+
+function founderCopyCode(){
+  try {
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(groupCode).then(()=>toast('Code copied — go start something.'), ()=>toast('Code: '+groupCode));
+      return;
+    }
+  } catch(e){}
+  toast('Code: '+groupCode);
+}
+
+async function founderShare(){
+  const msg=`Join my Forge group "${groupData?.name||groupCode}" — code ${groupCode}. https://goforge.in/`;
+  // Native share where it exists; WhatsApp (where every Forge group already
+  // lives) as the fallback. AbortError = user closed the sheet, not an error.
+  try { if(navigator.share){ await navigator.share({text:msg}); return; } }
+  catch(e){ if(e && e.name==='AbortError') return; }
+  window.open('https://wa.me/?text='+encodeURIComponent(msg), '_blank', 'noopener');
+}
+
+// Re-enter the existing grace PIN flow from the founder card. submitNewPin's
+// grace branch already handles an entry that has a userId (merge-writes the
+// hash onto the same users doc) — no new machinery, no second identity.
+function founderSetPin(){
+  if(!me) return;
+  window._pinFlow = { mode:'grace', name: me.name };
+  document.getElementById('ob-s3-sub').textContent = `Pick a 4-digit PIN so the name ${me.name} stays yours once the code is shared.`;
+  document.getElementById('pinInput').value=''; document.getElementById('pinConfirm').value='';
+  document.getElementById('pinError').classList.add('hidden');
+  document.getElementById('pinSkip')?.classList.add('hidden');
+  showScreen('onboard');
+  showObStep(3);
 }
 
 // Helper: YYYY-MM-DD stamp for filenames.

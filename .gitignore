@@ -64,3 +64,4 @@ scripts/rules-test/
 # noticed. Blanket rule instead: zero .md files are tracked in this repo, so
 # nothing breaks, and a new doc is safe the moment it is created.
 *.md
+SOLO_ROADMAP.md
