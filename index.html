@@ -169,6 +169,15 @@
   <div class="ob-tag">Forged by the group.</div>
   <div class="ob-card">
     <div class="ob-step active" id="ob-s1">
+      <!-- Returning-user door. Hidden unless FEATURE_GOOGLE_AUTH is on (see
+           renderGoogleLoginDoor) — the whole Google surface stays invisible
+           until the console work is done. Above the code path on purpose:
+           someone who already has an account should never have to hunt for
+           their group code on a new phone (AUTH_DESIGN_FINAL Phase 1). -->
+      <div id="googleLoginDoor" style="display:none">
+        <button class="btn btn-surface" style="margin:0 0 10px;width:100%" onclick="loginWithGoogle()">Continue with Google</button>
+        <div style="display:flex;align-items:center;gap:10px;margin:0 0 14px"><div style="flex:1;height:1px;background:var(--border)"></div><span style="font-size:11px;color:var(--muted)">or</span><div style="flex:1;height:1px;background:var(--border)"></div></div>
+      </div>
       <div class="ob-title">Enter your group code</div>
       <div class="ob-sub">Your organiser will have shared a short code</div>
       <input class="code-input" id="codeInput" maxlength="10" placeholder="······" autocomplete="off" oninput="this.value=this.value.toUpperCase()">
@@ -1214,6 +1223,7 @@ window.onload = () => {
 };
 
 async function bootApp(){
+  try{ renderGoogleLoginDoor(); }catch(e){}   // before any screen shows
   // Direct deep-link to group creation (kept from the S3 §4.2 dark-launch
   // era; the screen is now also reachable from onboarding's #founderDoor —
   // see the screen-create comment block for the promotion gate).
@@ -1260,6 +1270,10 @@ async function bootApp(){
       }
     } catch(e){}
     showScreen('onboard');
+    // A Google LOGIN redirect lands here, not in loadGroup's restore hook —
+    // by definition this device has no session yet. Same call, no session
+    // required; inert while the flag is off.
+    try{ finishGoogleLinkIfReturning(); }catch(e){}
   }
 }
 
@@ -3984,13 +3998,23 @@ async function refreshPushTokenQuietly(){
 }
 window.refreshPushTokenQuietly = refreshPushTokenQuietly;
 
-// ── GOOGLE SIGN-IN — AUTH PHASE 1 ──────────────────────────────────────────
-// Contract: AUTH_DESIGN_FINAL.md Option A, locked 25 Jul 2026.
-// Phase 1 is COEXISTENCE ONLY: linking a Google account records authUid on the
-// users doc and changes nothing else. PIN login still works, anonymous boot
-// still works, and no rule reads authUid yet — that lands in Phase 2 with the
-// claim Function. So the worst case of a bug here is a user who linked and saw
-// no benefit, never a user who cannot get in.
+// ── GOOGLE SIGN-IN — AUTH PHASE 2 ──────────────────────────────────────────
+// Contract: AUTH_DESIGN_FINAL.md Option A + AUTH_PHASE2_NOTES.md.
+//
+// WHAT CHANGED FROM PHASE 1, AND WHY IT HAD TO. Phase 1 wrote `authUid` onto
+// the users doc straight from the client. The ownership rule now FORBIDS that
+// (a client may never set or change authUid at all) — because a client-side
+// write means anyone could point an unclaimed identity at their own Google
+// account with no proof of ownership, which is the takeover the whole design
+// exists to close. So the write moves to the claimIdentity Function, which
+// verifies the PIN server-side first. The PIN prompt below is not friction for
+// its own sake: it is the proof.
+//
+// TWO ENTRY POINTS, one redirect handler:
+//   • LINK  — from Profile, already in the app. Google → PIN → claimIdentity.
+//   • LOGIN — from the first screen, fresh device. Google → look up the
+//             identity by authUid → rebuild sessions → straight in, no PIN.
+// The pending intent is stashed in sessionStorage before the redirect leaves.
 //
 // EVERY surface is gated on FEATURE_GOOGLE_AUTH. With it false, renderGoogleAuthCard
 // hides both elements and returns, and consumeGoogleRedirect resolves {linked:false}
@@ -4004,22 +4028,35 @@ function renderGoogleAuthCard(){
   }
   hdr.style.display=''; el.style.display='';
   const linked = !!(window._myAuthUid);
-  el.innerHTML = linked
-    ? '<div class="tmuted" style="font-size:12px">'
+  if(linked){
+    el.innerHTML = '<div class="tmuted" style="font-size:12px">'
       + mirIco('g-flame','color:var(--green)')
       + ' <b>Secured with Google</b>' + (window._myAuthEmail ? (' — ' + esc(window._myAuthEmail)) : '')
-      + '<br>You can sign in on any device without a PIN. Your streak and history come with you.</div>'
-    : '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
-      + 'Right now your account lives on <b>this device</b>. Clear your browser data or change '
-      + 'phone and you have to rejoin each group by hand. Link a Google account and it follows you.</div>'
-      + '<button class="btn btn-gold" id="googleLinkBtn" style="margin:0" onclick="linkGoogleAccount()">Secure my account with Google</button>'
+      + '<br>You can sign in on any device without a PIN. Your streak and history come with you.</div>';
+    return;
+  }
+  // Returned from Google and waiting on the PIN proof.
+  if(window._claimPending){
+    el.innerHTML = '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
+      + 'Signed in as <b>' + esc(window._claimPending.email || 'your Google account') + '</b>. '
+      + 'Enter your 4-digit Forge PIN to prove this account is yours.</div>'
+      + '<input class="code-input" id="claimPinInput" type="tel" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off" style="margin-bottom:8px" oninput="this.value=this.value.replace(/[^0-9]/g,\'\')">'
+      + '<button class="btn btn-gold" style="margin:0" onclick="submitGoogleClaim()">Confirm and secure</button>'
       + '<div id="googleAuthResult" style="margin-top:10px;font-size:13px"></div>';
+    return;
+  }
+  el.innerHTML = '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
+    + 'Right now your account lives on <b>this device</b>. Clear your browser data or change '
+    + 'phone and you have to rejoin each group by hand. Link a Google account and it follows you.</div>'
+    + '<button class="btn btn-gold" id="googleLinkBtn" style="margin:0" onclick="linkGoogleAccount()">Secure my account with Google</button>'
+    + '<div id="googleAuthResult" style="margin-top:10px;font-size:13px"></div>';
 }
 
 async function linkGoogleAccount(){
   const out = document.getElementById('googleAuthResult');
   const say = (m,bad)=>{ if(out){ out.style.color = bad ? 'var(--red)' : 'var(--muted)'; out.textContent = m; } };
   try{
+    try{ sessionStorage.setItem('forge_google_intent','link'); }catch(e){}
     say('Opening Google…');
     await startGoogleSignIn();      // navigates away; nothing after this runs
   }catch(e){
@@ -4029,13 +4066,32 @@ async function linkGoogleAccount(){
   }
 }
 
-// Called once on boot, AFTER me/userId are known. Writes the identity link.
-// Fire-and-forget by design: this must never be able to block or fail a launch.
+// From the FIRST screen (no session): sign in and restore whatever identity
+// this Google account already owns. No PIN — the claim already happened once.
+async function loginWithGoogle(){
+  try{
+    try{ sessionStorage.setItem('forge_google_intent','login'); }catch(e){}
+    await startGoogleSignIn();
+  }catch(e){
+    if(e && e.message==='FEATURE_OFF'){ toast('Google sign-in is not switched on yet.','error'); return; }
+    logErr('loginWithGoogle', e);
+    toast('Could not open Google sign-in.','error');
+  }
+}
+
+// Called once on boot. Handles BOTH redirect intents. Fire-and-forget by
+// design: it must never be able to block or fail a launch.
 async function finishGoogleLinkIfReturning(){
   if(!window.FEATURE_GOOGLE_AUTH) return;
+  let intent='link';
+  try{ intent = sessionStorage.getItem('forge_google_intent') || 'link'; }catch(e){}
   try{
     const r = await consumeGoogleRedirect();
     if(r.error === 'ALREADY_IN_USE'){
+      // Linking was refused because this Google account already runs another
+      // identity — which is exactly the 1:1 rule, not a failure. Nothing to do
+      // here; the person should use "Continue with Google" from the first
+      // screen to reach the identity they already own.
       toast('That Google account already runs another Forge account.','error');
       return;
     }
@@ -4044,23 +4100,109 @@ async function finishGoogleLinkIfReturning(){
       return;
     }
     if(!r.linked) return;
-    window._myAuthUid   = r.uid;
-    window._myAuthEmail = r.email;
-    if(me && me.userId){
-      // merge, never overwrite: this doc holds the credential and the stats.
-      // authUid is written here in Phase 1; Phase 2 makes it server-owned so a
-      // client can never point someone else's identity at its own Google uid.
-      await db.collection('users').doc(me.userId).set({
-        authUid: r.uid,
-        email: r.email || null,
-        authLinkedAt: firebase.firestore.FieldValue.serverTimestamp()
-      }, {merge:true});
-    }
+    try{ sessionStorage.removeItem('forge_google_intent'); }catch(e){}
+
+    if(intent === 'login'){ await restoreIdentityFromGoogle(r); return; }
+
+    // LINK intent: the identity is not bound until claimIdentity verifies the
+    // PIN server-side. Stash the pending state and let the card collect it —
+    // no client write of authUid is possible or attempted (rules forbid it).
+    window._claimPending = { uid:r.uid, email:r.email };
     renderGoogleAuthCard();
-    toast('Account secured with Google.','success');
+    showTab('profile');
+    toast('Signed in with Google — confirm your PIN to finish.','default');
   }catch(e){ logErr('finishGoogleLinkIfReturning', e); }
 }
 window.finishGoogleLinkIfReturning = finishGoogleLinkIfReturning;
+
+// The PIN proof. claimIdentity is the ONLY writer of authUid; a wrong PIN
+// writes nothing and costs one of five hourly attempts.
+async function submitGoogleClaim(){
+  const out = document.getElementById('googleAuthResult');
+  const say = (m,bad)=>{ if(out){ out.style.color = bad ? 'var(--red)' : 'var(--muted)'; out.textContent = m; } };
+  const pin = (document.getElementById('claimPinInput')||{}).value || '';
+  if(!/^\d{4}$/.test(pin)){ say('Enter your 4-digit PIN.', true); return; }
+  if(!me || !groupCode){ say('Still loading — try again in a second.', true); return; }
+  try{
+    say('Checking…');
+    await callFunction('claimIdentity', { groupCode, name: me.name, pin });
+    window._claimPending = null;
+    // Re-read rather than trust local state — the function is the authority
+    // on what was actually bound, and it also refreshes the card.
+    await loadMyAuthState();
+    toast('Account secured with Google.','success');
+  }catch(e){
+    const msg = (e && e.message) || '';
+    // Callable errors arrive with the server's message intact — surface it,
+    // since every one of them is actionable by the person reading it.
+    if(/No PIN is set/i.test(msg)){
+      say('This account has no PIN yet. Set one first (Profile → PIN), then secure it with Google.', true);
+    } else if(/already secured/i.test(msg)){
+      say('This player is already secured by a different Google account.', true);
+    } else if(/already runs/i.test(msg)){
+      say(msg, true);
+    } else if(/Too many attempts/i.test(msg)){
+      say(msg, true);
+    } else if(/doesn.t match/i.test(msg) || /PIN/i.test(msg)){
+      say('That PIN doesn’t match. Try again, or ask your group admin to reset it.', true);
+    } else if(msg === 'FUNCTIONS_SDK_MISSING'){
+      say('Could not reach the server. Reload and try again.', true);
+    } else {
+      logErr('submitGoogleClaim', e);
+      say('Could not secure the account — check your connection.', true);
+    }
+  }
+}
+
+// Fresh device: find the identity this Google account owns and rebuild its
+// sessions. Reads users-by-authUid (one indexed query), then each membership's
+// current-season roster to recover the player entry the app expects.
+async function restoreIdentityFromGoogle(r){
+  try{
+    const q = await db.collection('users').where('authUid','==',r.uid).limit(1).get();
+    if(q.empty){
+      toast('No Forge account is linked to that Google sign-in yet. Join with your group code first, then secure it.','error');
+      return;
+    }
+    const uDoc = q.docs[0], u = uDoc.data();
+    if(u.deletedAt){ toast('That account was deleted.','error'); return; }
+    const codes = Object.keys(u.memberships || {});
+    if(!codes.length){ toast('That account is not in any group yet.','error'); return; }
+    let restored = 0, firstCode = null;
+    for(const code of codes.slice(0, MAX_GROUPS)){
+      try{
+        const gS = await db.collection('groups').doc(code).get();
+        if(!gS.exists) continue;
+        const sid = gS.data().currentSeasonId;
+        if(!sid) continue;
+        const sS = await db.collection('groups').doc(code).collection('seasons').doc(sid).get();
+        if(!sS.exists) continue;
+        const entry = (sS.data().roster||[]).find(p => p && (p.userId === uDoc.id || (u.name && p.name === u.name)));
+        if(!entry) continue;
+        upsertSession(code, entry, gS.data().name);
+        if(!firstCode) firstCode = code;
+        restored++;
+      }catch(e){ logErr('restoreIdentityFromGoogle:'+code, e); }
+    }
+    if(!restored){ toast('Could not find your place in those groups — ask your admin.','error'); return; }
+    setActiveCode(firstCode);
+    groupCode = firstCode;
+    me = getSessions().find(s=>s.code===firstCode).player;
+    toast('Welcome back, '+me.name+'.','success');
+    loadGroup(groupCode, true);
+  }catch(e){
+    logErr('restoreIdentityFromGoogle', e);
+    toast('Could not restore your account — check your connection.','error');
+  }
+}
+
+// Show the first-screen Google door only when the feature is on. Called at
+// boot (before any screen is shown) so the door never flashes into view on a
+// build where Google isn't configured.
+function renderGoogleLoginDoor(){
+  const el = document.getElementById('googleLoginDoor');
+  if(el) el.style.display = window.FEATURE_GOOGLE_AUTH ? '' : 'none';
+}
 
 // Load the link state for the card. Cheap: one doc read, only when the flag is on.
 async function loadMyAuthState(){
