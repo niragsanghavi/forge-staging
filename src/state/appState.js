@@ -178,6 +178,15 @@ window.seasonIdOf = function(month, year){
 // Turn it on for STAGING first; prod stays false until warm-user QA passes.
 window.FEATURE_GOOGLE_AUTH = false;
 
+// SERVER-SIDE PRIVILEGED WRITES (AUTH_PHASE2_NOTES.md). When true, the rollover
+// snapshot hands its foreign user-doc stat increments to the awardSeasonBadges
+// Cloud Function instead of writing them from the client — the prerequisite
+// for the users-doc ownership rule (a client can't write a LINKED player's doc
+// once that rule is live, and rollover writes to every player). Ships in the
+// SAME promotion as the Function deploy + the ownership-rule deploy; false
+// keeps the legacy in-batch client write (unchanged behaviour). Staging-first.
+window.FEATURE_SERVER_WRITES = false;
+
 // PUSH NOTIFICATIONS. Needs one console step that cannot be automated:
 //   Firebase console -> Project settings -> Cloud Messaging ->
 //   Web Push certificates -> Generate key pair

@@ -319,6 +319,20 @@ window.consumeGoogleRedirect = async function(){
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   CALLABLE CLOUD FUNCTIONS — AUTH PHASE 2 (claimIdentity, awardSeasonBadges,
+   adminResetPin). Region asia-south1, matching Firestore + the deployed
+   functions. Rejects with FUNCTIONS_SDK_MISSING if the compat SDK didn't load,
+   so callers surface a real error instead of a silent no-op. Returns the
+   function's `data` payload directly.
+   ═══════════════════════════════════════════════════════════════════════════ */
+window.callFunction = function(name, data){
+  if(typeof firebase === 'undefined' || !firebase.functions){
+    return Promise.reject(new Error('FUNCTIONS_SDK_MISSING'));
+  }
+  return firebase.app().functions('asia-south1').httpsCallable(name)(data || {}).then(r => r.data);
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════
    PUSH NOTIFICATIONS — the one Android feature worth having before launch
 
    WHY THIS AND NOT A WIDGET OR HEALTH SYNC. Forge's loop is time-sensitive in a

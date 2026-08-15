@@ -748,6 +748,10 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<!-- Callable Cloud Functions (AUTH_DESIGN_FINAL Phase 2): claimIdentity,
+     awardSeasonBadges, adminResetPin. Region asia-south1 (matches Firestore
+     + the deployed functions). Inert until a caller invokes it. -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" integrity="sha384-9nhczxUqK87bcKHh20fSQcTGD4qq5GhayNYSYWqwBkINBhOfQLg/P5HG5lF1urn4" crossorigin="anonymous"></script>
 <script src="src/config/firebase.js"></script>
 <script src="src/state/appState.js"></script>
@@ -6747,6 +6751,15 @@ async function writeSeasonSnapshot(code){
   const _dim = sData.days || new Date(year, month, 0).getDate();
   const _dcByPlayer = {};
   logs.forEach(l=>{ if(!l.player || !l.day || l.day<1 || l.day>_dim) return; const arr=_dcByPlayer[l.player]||(_dcByPlayer[l.player]=new Array(_dim).fill(0)); arr[l.day-1]+=(Array.isArray(l.workouts)?l.workouts.length:1); });
+  // FEATURE_SERVER_WRITES splits this loop (AUTH_PHASE2_NOTES.md). The archive
+  // subcollection doc is ALWAYS a client write — its rule is create-only and
+  // owner-agnostic, so the ownership rule never touches it. The parent-doc
+  // stat/badge INCREMENT is the one write that fails against a linked player
+  // under `request.auth.uid == authUid`; when server-writes are on it moves to
+  // the awardSeasonBadges Function (called after commit), which reads the same
+  // badges from this very season doc. When off, the legacy in-batch increment
+  // runs exactly as before.
+  const _serverWrites = !!window.FEATURE_SERVER_WRITES;
   finalStandings.forEach(e=>{
     if(!e.userId) return; // unmigrated entry — nothing to archive against yet
     const badges = (badgesAwarded.find(b=>b.name===e.name)||{}).badges||[];
@@ -6756,16 +6769,28 @@ async function writeSeasonSnapshot(code){
       rank:e.rank, total:e.total, wo:e.wo, streak:e.streak, team:e.team, teamRank, rosterSize:roster.length,
       badges, dayCounts: _dcByPlayer[e.name] || new Array(_dim).fill(0)
     });
-    const badgeCountFields = {};
-    badges.forEach(b=>{ badgeCountFields[`stats.badgeCounts.${b}`] = firebase.firestore.FieldValue.increment(1); });
-    batch.update(db.collection('users').doc(e.userId), {
-      'stats.seasonsPlayed': firebase.firestore.FieldValue.increment(1),
-      ...badgeCountFields
-    });
+    if(!_serverWrites){
+      const badgeCountFields = {};
+      badges.forEach(b=>{ badgeCountFields[`stats.badgeCounts.${b}`] = firebase.firestore.FieldValue.increment(1); });
+      batch.update(db.collection('users').doc(e.userId), {
+        'stats.seasonsPlayed': firebase.firestore.FieldValue.increment(1),
+        ...badgeCountFields
+      });
+    }
     archivesWritten++;
   });
 
   await batch.commit();
+
+  // Server-side increments: the snapshot (snapshotAt, finalStandings,
+  // badgesAwarded) is now committed, so awardSeasonBadges has its source of
+  // truth. Idempotent + resumable — a failure here leaves standings intact and
+  // the next call (or the stats backfill) reconciles; it must never throw the
+  // rollover itself, which has already succeeded.
+  if(_serverWrites){
+    try { await callFunction('awardSeasonBadges', { groupCode: code, sid }); }
+    catch(e){ logErr('awardSeasonBadges', e); }
+  }
   return { skipped:false, finalStandings, teamStandings, badgesAwarded, archivesWritten };
 }
 

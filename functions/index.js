@@ -295,3 +295,72 @@ exports.claimIdentity = onCall({ region: REGION }, async (request) => {
   logger.info(`claimIdentity: ${authUid} → ${userId} (${entry.name} in ${groupCode})`);
   return { ok:true, userId };
 });
+
+/**
+ * awardSeasonBadges — write the per-user stat/badge increments at rollover.
+ *
+ * This is the ONE write that forces the ownership rule to move server-side
+ * (AUTH_PHASE2_NOTES.md): at rollover the snapshot writer increments
+ * stats.seasonsPlayed + stats.badgeCounts on EVERY roster member's user doc,
+ * and under `request.auth.uid == authUid` those writes fail for every player
+ * who has linked Google. So the client keeps computing + writing the season
+ * snapshot and the archive subcollection docs (create-only rule, unaffected),
+ * and hands ONLY the foreign parent-doc increments to this callable.
+ *
+ * Source of truth is the SEASON DOC, never the caller's payload: the badges
+ * are read from season.badgesAwarded (which the client also writes as the
+ * VISIBLE standings), so farming a badge would mean writing a false public
+ * leaderboard for the whole group — loud and once-per-season, not silent. The
+ * increments are hardened anyway: only roster userIds, only the two known
+ * badge types, +1 seasonsPlayed per player, idempotent via statsAwardedAt.
+ *
+ * data: { groupCode, sid? }  (sid defaults to the group's current season)
+ */
+exports.awardSeasonBadges = onCall({ region: REGION }, async (request) => {
+  if(!request.auth || !request.auth.uid) throw new HttpsError('unauthenticated', 'Sign in first.');
+  const groupCode = String((request.data && request.data.groupCode) || '').trim().toUpperCase();
+  if(!groupCode) throw new HttpsError('invalid-argument', 'groupCode is required.');
+
+  const gSnap = await db.collection('groups').doc(groupCode).get();
+  if(!gSnap.exists) throw new HttpsError('not-found', 'No group with that code.');
+  const sid = String((request.data && request.data.sid) || gSnap.data().currentSeasonId || '');
+  if(!sid) throw new HttpsError('not-found', 'No season to award.');
+
+  const sRef = db.collection('groups').doc(groupCode).collection('seasons').doc(sid);
+  const KNOWN_BADGES = new Set(['season_winner', 'team_winner']);
+
+  const result = await db.runTransaction(async tx => {
+    const sSnap = await tx.get(sRef);
+    if(!sSnap.exists) throw new HttpsError('not-found', 'Season not found.');
+    const s = sSnap.data();
+    // Only after standings are finalized, and only once.
+    if(!s.snapshotAt) throw new HttpsError('failed-precondition', 'Season is not snapshotted yet.');
+    if(s.statsAwardedAt) return { already:true, awarded:0 };
+
+    const roster = s.roster || [];
+    const rosterUserIds = new Set(roster.filter(p => p && p.userId).map(p => p.userId));
+    const finalStandings = Array.isArray(s.finalStandings) ? s.finalStandings : [];
+    const badgesByUser = {};
+    (Array.isArray(s.badgesAwarded) ? s.badgesAwarded : []).forEach(b => {
+      if(b && b.userId) badgesByUser[b.userId] = Array.isArray(b.badges) ? b.badges.filter(x => KNOWN_BADGES.has(x)) : [];
+    });
+
+    // Read each target user doc up front (transaction: all reads before writes).
+    const targets = finalStandings.filter(e => e && e.userId && rosterUserIds.has(e.userId));
+    const uSnaps = await Promise.all(targets.map(e => tx.get(db.collection('users').doc(e.userId))));
+
+    let awarded = 0;
+    targets.forEach((e, i) => {
+      if(!uSnaps[i].exists) return;        // no user doc → nothing to increment
+      const inc = { 'stats.seasonsPlayed': FieldValue.increment(1) };
+      (badgesByUser[e.userId] || []).forEach(bd => { inc[`stats.badgeCounts.${bd}`] = FieldValue.increment(1); });
+      tx.update(db.collection('users').doc(e.userId), inc);
+      awarded++;
+    });
+    tx.update(sRef, { statsAwardedAt: FieldValue.serverTimestamp() });
+    return { already:false, awarded };
+  });
+
+  logger.info(`awardSeasonBadges: ${groupCode}/${sid} — ${result.awarded} awarded${result.already?' (already)':''}`);
+  return { ok:true, ...result };
+});
