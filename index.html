@@ -761,6 +761,12 @@
      awardSeasonBadges, adminResetPin. Region asia-south1 (matches Firestore
      + the deployed functions). Inert until a caller invokes it. -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
+<!-- App Check (SECURITY_REDTEAM rank 4). Loaded BEFORE firebase.js so
+     activate() can run before the first Firestore call — attestation has to
+     be in place before requests go out, not after. It is ~30KB that only
+     matters once a reCAPTCHA site key exists; firebase.js no-ops without one,
+     so this is inert weight until the console step is done. -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-check-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" integrity="sha384-9nhczxUqK87bcKHh20fSQcTGD4qq5GhayNYSYWqwBkINBhOfQLg/P5HG5lF1urn4" crossorigin="anonymous"></script>
 <script src="src/config/firebase.js"></script>
 <script src="src/state/appState.js"></script>

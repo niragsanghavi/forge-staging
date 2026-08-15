@@ -30,6 +30,58 @@ window.IS_STAGING = IS_STAGING;
 const FB_CFG = IS_STAGING ? STAGING_CFG : PROD_CFG;
 
 firebase.initializeApp(FB_CFG);
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   APP CHECK — SECURITY_REDTEAM.md rank 4, "the single highest-value security
+   change available right now" (AUTH_PHASE2_NOTES).
+
+   WHAT IT STOPS. Every attack the red team actually landed was a plain fetch
+   carrying the public API key, with no browser and no app: reading all 66
+   names, creating 25 errorLogs docs in 376 ms, scripted mass-delete attempts.
+   App Check attests that a request comes from THIS app on a real device, so
+   all of that stops working. WHAT IT DOES NOT STOP: a determined person
+   driving the real app in a real browser — App Check attests the app, not the
+   user. That is the identity layer's job (claimIdentity + ownership rules).
+
+   INERT UNTIL CONFIGURED. Needs one console step per project that no agent
+   can do: App Check → register the web app → reCAPTCHA v3 → site key. With
+   RECAPTCHA_SITE_KEY empty this whole block no-ops, so it ships safely ahead
+   of the console work. Enforcement is a SEPARATE console toggle: register
+   first, watch the App Check dashboard for unverified traffic, and only then
+   enforce — flipping both at once can lock out a client you forgot about.
+
+   ⚠️ SCRIPTS: gcloud OWNER_TOKEN scripts (manual-log, scrub-*, seed-*,
+   ranking-cards) use Google Cloud IAM credentials and BYPASS App Check
+   entirely — they need nothing. But scripts/forge-daily.mjs signs in
+   anonymously with the PUBLIC API KEY, which is exactly the shape App Check
+   blocks: enforcing App Check WILL break the daily brief + backups until it
+   either moves to an OWNER_TOKEN or gets a registered debug token. Decide
+   before flipping enforcement, not after.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const RECAPTCHA_SITE_KEY = {
+  'forge-staging-865ff': '',   // ⬅️ paste the staging reCAPTCHA v3 site key
+  'forge-25c8c':         ''    // ⬅️ prod key — set only at the prod promotion
+}[FB_CFG.projectId] || '';
+
+window.APP_CHECK_READY = false;
+if(RECAPTCHA_SITE_KEY && typeof firebase !== 'undefined' && firebase.appCheck){
+  try{
+    // Debug provider for local dev: prints a token to the console to register
+    // under App Check → Manage debug tokens. Without this, localhost cannot
+    // pass attestation and every read fails once enforcement is on.
+    if(location.hostname === 'localhost' || location.hostname === '127.0.0.1'){
+      self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+    }
+    firebase.appCheck().activate(RECAPTCHA_SITE_KEY, true);   // true = auto-refresh
+    window.APP_CHECK_READY = true;
+  }catch(e){
+    // Never let attestation setup break boot — an unattested client still
+    // works until enforcement is switched on, and a hard failure here would
+    // take the whole app down for everyone.
+    console.warn('[Forge] App Check activation failed:', e && e.message);
+  }
+}
+
 const db = firebase.firestore();
 // Cache reads in IndexedDB so a returning session gets a resume-token delta
 // sync instead of re-billing the whole result set (~85-90% fewer reads on the
