@@ -5991,22 +5991,35 @@ async function resetPlayerPin(name){
   if(!confirm(`Reset ${name}'s PIN? They'll set a new one next time they log in.`)) return;
   const sRef = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
   try {
-    let written=null, clearedUserId=null;
+    let written=null, clearedUserId=null, wasLinked=false;
     await db.runTransaction(async tx=>{
       const snap=await tx.get(sRef);
       if(!snap.exists) throw new Error('SEASON_MISSING');
       const roster=snap.data().roster||[];
       const entry=roster.find(p=>p.name===name);
       if(!entry) throw new Error('NO_RECORD');
+      clearedUserId=entry.userId||null;
+      // A player who secured their account with Google has no PIN to reset —
+      // and once the users-doc ownership rule is live (AUTH_PHASE2_NOTES),
+      // writing pinHash:null on their doc from an admin's client is BLOCKED.
+      // So detect the link inside the transaction and skip the user-doc write;
+      // there is nothing to clear and attempting it would just error.
+      let linkedDoc=null;
+      if(clearedUserId){
+        const uSnap=await tx.get(db.collection('users').doc(clearedUserId));   // all reads first
+        linkedDoc = uSnap.exists && uSnap.data().authUid ? uSnap : null;
+      }
+      wasLinked = !!linkedDoc;
+      if(wasLinked) return;   // Google account — no PIN exists; leave roster + user doc untouched
       entry.pin=null;
       entry.pinSet=false;   // clear the credential sentinel → next login routes to grace
-      clearedUserId=entry.userId||null;
       tx.update(sRef,{roster});
       if(clearedUserId){
         tx.update(db.collection('users').doc(clearedUserId), {pinHash:null});
       }
       written=roster;
     });
+    if(wasLinked){ toast(`${name} signs in with Google — there's no PIN to reset.`,'default'); return; }
     if(written){ season.roster=written; }
     renderAdminRoles();
     toast(`${name}'s PIN has been reset.`,'success');
@@ -7076,6 +7089,11 @@ async function runUserMigration(dryRun){
   const log = (msg) => { console.log('[Migration] '+msg); if(statusEl) statusEl.textContent = msg; };
 
   if(!dryRun){
+    // Once the users-doc ownership rule is live (FEATURE_SERVER_WRITES era),
+    // a browser client can no longer write a LINKED user's doc, so this bulk
+    // pass would half-fail across the collection. Dry-run/preview stays open;
+    // the live write must run from scripts/ with owner credentials.
+    if(window.FEATURE_SERVER_WRITES){ log('Ownership rule is live — run this from scripts/ with owner credentials, not the browser.'); return; }
     if(!window._migrationDryRunDone){ log('Run a dry-run first — see console for the plan.'); return; }
     if(!confirm('This WRITES real users/{userId} docs and updates roster entries across ALL groups. You have reviewed a dry run. Continue?')){ log('Cancelled — nothing written.'); return; }
   }
@@ -7288,6 +7306,9 @@ async function runStatsBackfill(dryRun){
   const statusEl = document.getElementById('backfillStatus');
   const log = (msg) => { console.log('[Backfill] '+msg); if(statusEl) statusEl.textContent = msg; };
   if(!dryRun){
+    // See runUserMigration: the ownership rule blocks client writes to linked
+    // user docs, so the live bulk backfill moves to scripts/ with owner creds.
+    if(window.FEATURE_SERVER_WRITES){ log('Ownership rule is live — run this from scripts/ with owner credentials, not the browser.'); return; }
     if(!window._backfillDryRunDone){ log('Run a dry-run first — see console for the plan.'); return; }
     if(!confirm('This OVERWRITES stats (totalWorkouts, longest/currentStreak, lastLoggedDay, seasonsPlayed, monthsLogged/monthsList) on ALL users docs, recomputed from real logs. Badges untouched. Idempotent — safe to re-run. Continue?')){ log('Cancelled — nothing written.'); return; }
   }
