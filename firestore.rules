@@ -119,10 +119,34 @@ service cloud.firestore {
     // checked client-side, same posture as the roster today — narrower than
     // before since pinHash replaces plaintext, not wider). Real enforcement
     // needs custom-token auth (AUTH_UPGRADE.md); not this sprint.
+    // OWNERSHIP, phased in as people link Google (AUTH_DESIGN_FINAL Phase 2 +
+    // AUTH_PHASE2_NOTES). This is the rule that closes the account-takeover
+    // hole proven live 1 + 7 Aug: today ANY anonymous client can overwrite ANY
+    // users doc — including pinHash — and log in as that person.
+    //
+    //   • A doc with NO authUid stays open to any authed client — the legacy
+    //     window that keeps rollover self-heal / grace-PIN / stats writes
+    //     working for everyone who hasn't linked yet. It shrinks with every
+    //     link and never grows.
+    //   • Once a doc carries authUid, ONLY that Google account may write it.
+    //   • authUid is FULLY SERVER-OWNED: a client can never set or change it,
+    //     at create or update. The ONLY writer is the claimIdentity Function
+    //     (admin SDK bypasses rules), which sets it only after verifying the
+    //     PIN server-side. Without this, a client could point an unlinked
+    //     identity at its own Google account with no PIN check — the same
+    //     takeover wearing a link instead of a password.
+    //
+    // The privileged foreign-doc writes that used to run from a client
+    // (rollover badge/stat increments) now go through awardSeasonBadges;
+    // bulk backfill/merge move to owner-cred scripts. See AUTH_PHASE2_NOTES.
     match /users/{userId} {
       allow read:   if isAuthed();
-      allow create: if isAuthed();
-      allow update: if isAuthed();
+      allow create: if isAuthed()
+        && !('authUid' in request.resource.data);       // client may never mint an authUid
+      allow update: if isAuthed()
+        && ( resource.data.get('authUid', null) == null
+             || request.auth.uid == resource.data.authUid )                       // owner-gated once linked
+        && request.resource.data.get('authUid', null) == resource.data.get('authUid', null);  // authUid immutable from a client
       allow delete: if false;
 
       // Path reserved for the future S2 snapshot writer — not built yet.
@@ -133,6 +157,13 @@ service cloud.firestore {
         allow update: if false;
         allow delete: if false;
       }
+    }
+
+    // PIN-claim rate limiter (claimIdentity). Written only by the Function via
+    // the admin SDK, which bypasses rules — so no client, signed in or not,
+    // can read the attempt history or reset its own budget.
+    match /authRateLimits/{uid} {
+      allow read, write: if false;
     }
 
     // ── TOP-LEVEL LOG COLLECTIONS ─────────────────────────────────────────
