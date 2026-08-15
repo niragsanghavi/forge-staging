@@ -65,3 +65,14 @@ scripts/rules-test/
 # nothing breaks, and a new doc is safe the moment it is created.
 *.md
 SOLO_ROADMAP.md
+AUTH_WEEKEND_ROADMAP.md
+
+# Firebase Functions deps (installed via npm, never committed)
+functions/node_modules/
+node_modules/
+
+# Firebase emulator debug logs
+*-debug.log
+firestore-debug.log
+ui-debug.log
+firebase-debug.log
