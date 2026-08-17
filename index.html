@@ -9025,7 +9025,15 @@ document.addEventListener('click',e=>{ if(!e.target.classList.contains('cd')) do
 </script>
 <script>
 // Register the service worker (makes Forge installable + offline-capable).
-if('serviceWorker' in navigator){
+// Web only. The native shell serves this bundle from disk, so a worker would
+// only layer a second, staler cache over files that are already local — which
+// is why ios/build-www.mjs leaves sw.js out of the bundle. Without this guard
+// register() 404s on every native launch: harmless, since it is caught, but it
+// puts a red herring at the top of every crash report we would ever read.
+// The guard lives here rather than only on the ios-app branch so the next
+// staging → prod → ios-app promotion cannot quietly undo it. On the web
+// isNative() is false and behaviour is unchanged.
+if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative())){
   window.addEventListener('load', ()=>{
     navigator.serviceWorker.register('sw.js').catch(e=>console.warn('[Forge] SW registration failed', e));
   });
