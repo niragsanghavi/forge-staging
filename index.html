@@ -4245,7 +4245,7 @@ async function linkGoogleAccount(){
   try{
     try{ sessionStorage.setItem('forge_google_intent','link'); }catch(e){}
     say('Opening Google…');
-    await startGoogleSignIn();      // navigates away; nothing after this runs
+    await startGoogleSignIn('link');   // navigates away; nothing after this runs
   }catch(e){
     if(e && e.message==='FEATURE_OFF'){ say('Google sign-in is not switched on yet.', true); return; }
     logErr('linkGoogleAccount', e);
@@ -4258,7 +4258,7 @@ async function linkGoogleAccount(){
 async function loginWithGoogle(){
   try{
     try{ sessionStorage.setItem('forge_google_intent','login'); }catch(e){}
-    await startGoogleSignIn();
+    await startGoogleSignIn('login');   // sign IN, never link — see firebase.js
   }catch(e){
     if(e && e.message==='FEATURE_OFF'){ toast('Google sign-in is not switched on yet.','error'); return; }
     logErr('loginWithGoogle', e);
@@ -4273,13 +4273,22 @@ async function finishGoogleLinkIfReturning(){
   let intent='link';
   try{ intent = sessionStorage.getItem('forge_google_intent') || 'link'; }catch(e){}
   try{
-    const r = await consumeGoogleRedirect();
+    let r = await consumeGoogleRedirect();
     if(r.error === 'ALREADY_IN_USE'){
-      // Linking was refused because this Google account already runs another
-      // identity — which is exactly the 1:1 rule, not a failure. Nothing to do
-      // here; the person should use "Continue with Google" from the first
-      // screen to reach the identity they already own.
-      toast('That Google account already runs another Forge account.','error');
+      // NOT a failure — it means this Google account already owns a Forge
+      // identity, which is the 1:1 rule working. Previously this dead-ended
+      // with "that account already runs another Forge account", which to the
+      // person reading it says their own account belongs to a stranger.
+      // Finish the journey instead: sign in AS that account and restore it.
+      if(r.credential){
+        try {
+          const signed = await signInAsGoogle(r.credential);
+          try{ sessionStorage.removeItem('forge_google_intent'); }catch(e){}
+          await restoreIdentityFromGoogle(signed);
+          return;
+        } catch(e){ logErr('finishGoogleLinkIfReturning: signInWithCredential', e); }
+      }
+      toast('That Google account is already linked to a Forge account. Use “Continue with Google” on the first screen to sign back in.','error');
       return;
     }
     if(r.error === 'PROVIDER_DISABLED'){

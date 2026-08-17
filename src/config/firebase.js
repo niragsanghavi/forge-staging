@@ -355,13 +355,28 @@ window.googleProvider = function(){
 
 // Start the flow. Returns a promise that rejects if the provider is not enabled
 // yet, so the caller can show a real message instead of a dead button.
-window.startGoogleSignIn = function(){
+// intent: 'link'  — securing the identity you are already using on this device
+//         'login' — arriving on a NEW device to reclaim an identity you own
+//
+// The intent has to be passed in, because the two need OPPOSITE calls and the
+// old code could only ever make one of them. ensureAuth() establishes an
+// anonymous session before any screen paints, so `currentUser.isAnonymous` is
+// ALWAYS true by the time either button is tappable — meaning login took the
+// link branch too. On a second device that Google credential is already bound
+// to the first device's uid, so linking fails with credential-already-in-use
+// and the user is told their own account belongs to someone else. "Continue
+// with Google" could never once have succeeded.
+window.startGoogleSignIn = function(intent){
   if(!window.FEATURE_GOOGLE_AUTH) return Promise.reject(new Error('FEATURE_OFF'));
   try{ sessionStorage.setItem('forge_google_pending','1'); }catch(e){}
   const cur = auth.currentUser;
-  if(cur && cur.isAnonymous){
-    return cur.linkWithRedirect(window.googleProvider());
-  }
+  // LOGIN: sign in AS the Google account outright. Discarding this device's
+  // throwaway anonymous uid is the whole point — the identity being reclaimed
+  // lives on the server, keyed by authUid.
+  if(intent === 'login') return auth.signInWithRedirect(window.googleProvider());
+  // LINK: upgrade this device's existing anonymous uid in place, so anything
+  // already written under it (knownDeviceUids, logs) stays attached.
+  if(cur && cur.isAnonymous) return cur.linkWithRedirect(window.googleProvider());
   return auth.signInWithRedirect(window.googleProvider());
 };
 
@@ -383,7 +398,13 @@ window.consumeGoogleRedirect = async function(){
     // Linking is refused on purpose (one Google account = one identity, Q2),
     // so sign in as that identity instead of pretending the link worked.
     if(err && err.code === 'auth/credential-already-in-use'){
-      return { linked:false, error:'ALREADY_IN_USE', pending };
+      // Hand the credential BACK. This is not really a failure: it means the
+      // Google account already owns a Forge identity, which is precisely the
+      // 1:1 rule working. The old code threw err.credential away and left the
+      // caller with nothing but an error string, so the only possible outcome
+      // was telling the user their own account belonged to someone else.
+      // With the credential, signInAsGoogle() below completes the journey.
+      return { linked:false, error:'ALREADY_IN_USE', pending, credential: (err.credential || null) };
     }
     if(err && err.code === 'auth/operation-not-allowed'){
       return { linked:false, error:'PROVIDER_DISABLED', pending };
@@ -391,6 +412,14 @@ window.consumeGoogleRedirect = async function(){
     console.error('Google redirect failed:', err);
     return { linked:false, error: (err&&err.code)||'UNKNOWN', pending };
   }
+};
+
+// Complete a sign-in from a credential handed back by a refused link. Resolves
+// to the signed-in uid so the caller can look the identity up by authUid.
+window.signInAsGoogle = async function(credential){
+  if(!credential) throw new Error('NO_CREDENTIAL');
+  const res = await auth.signInWithCredential(credential);
+  return { uid: res.user.uid, email: res.user.email || null };
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
