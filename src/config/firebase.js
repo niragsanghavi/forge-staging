@@ -22,10 +22,33 @@ const STAGING_CFG = {
 };
 // ⬆️⬆️ -------------------------------------------------------------- ⬆️⬆️
 
-const IS_STAGING =
+// NATIVE FIRST — this check has to come before the hostname one, and the
+// reason is a live footgun found the first time the iOS app booted.
+//
+// Capacitor serves the BUNDLED app from https://localhost. The hostname test
+// below reads that as "a developer's machine" and hands back the STAGING
+// config, so every iOS user would have been reading and writing the test
+// database while the orange STAGING banner sat at the bottom of the screen.
+// It fails silently and it fails for everyone.
+//
+// A native build is always production. If a staging build of the app is ever
+// wanted, it needs its own bundle id and an explicit flag — never an accident
+// of which URL scheme Capacitor happened to choose.
+//
+// No-op on the web: window.Capacitor is undefined in every browser, so the
+// hostname logic below is reached unchanged.
+const IS_NATIVE = !!(window.Capacitor && (
+  (typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform())
+  || window.Capacitor.platform === 'ios'
+  || window.Capacitor.platform === 'android'
+));
+window.IS_NATIVE = IS_NATIVE;
+
+const IS_STAGING = !IS_NATIVE && (
   location.hostname === 'localhost' ||
   location.hostname === '127.0.0.1' ||
-  location.pathname.includes('forge-staging');
+  location.pathname.includes('forge-staging')
+);
 window.IS_STAGING = IS_STAGING;
 const FB_CFG = IS_STAGING ? STAGING_CFG : PROD_CFG;
 

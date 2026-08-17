@@ -351,6 +351,12 @@
          stored per group + per week-start so it can never resurface). -->
     <div id="mondayRecap"></div>
 
+    <!-- HEALTH SUGGESTIONS (native only). A workout your phone already knows
+         about, offered for one-tap logging. Renders nothing on the web, when
+         Health isn't connected, or when there's nothing new to suggest.
+         Painted by renderHealthSuggestions(). D2: nothing here has left the
+         phone; confirming creates a normal Forge log via submitLog(). -->
+    <div id="healthSuggest"></div>
     <!-- FOUNDER CARD — solo groups (numTeams 1) only. The invite loop: code,
          share, countdown to teams; flips to a split-into-teams nudge at 6.
          renderFounderCard() owns it; renders empty for every other group. -->
@@ -585,6 +591,53 @@
          normal user can do to themselves. Populated by renderDeleteAccountCard(). -->
     <div class="shdr">Account</div>
     <div class="card" id="deleteAccountCard"><div class="tmuted">Loading…</div></div>
+
+    <!-- PRIVACY & CONTACT — two separate store requirements met by one card.
+         App Store 5.1.1(i) wants the privacy policy reachable "within the app",
+         not only from a website; the iOS bundle excludes about/, which is where
+         the web app's only policy link lived, so inside the app it was
+         unreachable. Guideline 1.2 separately wants published contact details
+         for anyone who needs to report something.
+
+         The href is RELATIVE on purpose, and that is the whole trick: on the
+         web it resolves to goforge.in/privacy.html, and inside the iOS bundle
+         to the copy shipped by scripts/build-www.mjs. One link, correct in both
+         places, and it still works with no network — which an absolute URL
+         would not, since the app is bundled precisely so it survives offline.
+         Also avoids limitsNavigationsToAppBoundDomains blocking an outbound
+         navigation in the webview. -->
+    <!-- BLOCKED PEOPLE (Guideline 1.2) — the manage/undo half of blocking.
+         Hidden entirely when the list is empty, so it costs nothing to the
+         overwhelming majority who never block anyone. -->
+    <div id="blockedShdr" class="shdr" style="display:none">Hidden people</div>
+    <div class="card" id="blockedCard" style="display:none"></div>
+
+    <!-- WEEKLY RECAP REMINDER — native only. Renders nothing in a browser,
+         because a local notification is a phone capability and pretending
+         otherwise on the web would be a dead switch. Populated by
+         renderRecapNotifCard(). -->
+    <div id="recapNotifShdr" class="shdr" style="display:none">Weekly recap</div>
+    <div class="card" id="recapNotifCard" style="display:none"></div>
+
+    <!-- APPLE HEALTH / HEALTH CONNECT (native only). Opt-in; permission is
+         requested when the user asks, never at boot. Read-only by design —
+         see the HEALTH block in appState.js. Painted by renderHealthCard(). -->
+    <div id="healthShdr" class="shdr" style="display:none">Health</div>
+    <div class="card" id="healthCard" style="display:none"></div>
+
+    <div class="shdr">Privacy &amp; support</div>
+    <div class="card">
+      <div class="tmuted" style="font-size:12px;margin-bottom:10px">
+        What Forge stores, why, how long, and how to get it deleted.
+      </div>
+      <a href="privacy.html" target="_blank" rel="noopener"
+         style="color:var(--gold);font-size:14px;font-weight:600;text-decoration:none">
+        Read the privacy policy</a>
+      <div class="tmuted" style="font-size:12px;margin-top:12px">
+        Something wrong, or someone behaving badly? Email a real person:
+        <a href="mailto:team@goforge.in" style="color:var(--gold)">team@goforge.in</a>
+      </div>
+    </div>
   </div>
 
   <!-- IRON PLEDGE -->
@@ -826,6 +879,22 @@ if(typeof window.teamLettersOf !== 'function'){
 if(typeof window.isSoloMode !== 'function'){
   window.isSoloMode = function(){
     return Number(window.season && window.season.numTeams) === 1;
+  };
+}
+// tap() is called from five hot paths including log submission, so a stale
+// appState.js would throw on the most common action in the app. The fallback is
+// the exact pre-native behaviour: navigator.vibrate on the platforms that have
+// it, silence on the ones that do not.
+if(typeof window.tap !== 'function'){
+  window.tap = function(style){
+    try{ if(navigator.vibrate) navigator.vibrate(style === 'heavy' ? 18 : 8); }catch(e){}
+  };
+}
+if(typeof window.isNative !== 'function'){
+  window.isNative = function(){
+    const C = window.Capacitor;
+    return !!(C && ((typeof C.isNativePlatform === 'function' && C.isNativePlatform())
+                     || C.platform === 'ios' || C.platform === 'android'));
   };
 }
 // Not a boot path — this one runs inside the account-deletion transaction. A
@@ -2150,6 +2219,11 @@ function renderHome(){
   if(!groupData||!me) return;
   try { renderMirrorHome(); }
   catch(e){ logErr('renderMirrorHome', e); }
+  // Its own guard, like every other renderer here. Sharing renderMirrorHome's
+  // try meant a Health failure was logged under the wrong name AND a Mirror
+  // failure silently took the Health card with it.
+  try { renderHealthSuggestions(); }
+  catch(e){ logErr('renderHealthSuggestions', e); }
   // Restoring the div was only half of it — renderGoalRing() was never called
   // from the render loop either, only from its own lazy loader and the Cancel
   // button, so nothing would have painted it. Isolated: a goal-ring failure
@@ -2660,7 +2734,7 @@ function mirLogQuick(w){
   // vibrate() throws on some embedded webviews.
   // NOTE: iOS Safari has no Vibration API at all, so this is a no-op on iPhone
   // by design of the platform. It works on Android Chrome and in the TWA.
-  try{ if(navigator.vibrate) navigator.vibrate(18); }catch(e){}
+  tap('heavy');
   // DISTANCE STEP — only when this season has opted into a team distance goal
   // AND the tapped workout is one a distance belongs on. Otherwise the original
   // one-tap path runs completely unchanged, which is the whole point of Mirror.
@@ -2721,9 +2795,19 @@ function mirLiftToggle(el, m){
   const i=_liftPicked.indexOf(m);
   if(i>=0){ _liftPicked.splice(i,1); el.classList.remove('on'); }
   else { _liftPicked.push(m); el.classList.add('on'); }
-  try{ if(navigator.vibrate) navigator.vibrate(8); }catch(e){}
+  tap();
 }
 function _mirLiftGo(w, note){
+  // Guideline 1.2 tripwire. Free text on a log is visible to the whole group,
+  // so it is checked before it can be written. Caught here rather than at the
+  // Firestore layer so the person sees why and can fix it.
+  if(typeof offensiveTerm === 'function'){
+    const bad = offensiveTerm(note) || offensiveTerm(w);
+    if(bad){
+      toast('That wording will not post. Everyone in your group sees this.', 'error');
+      return;
+    }
+  }
   mirCloseSheet();
   selDay=_mirPendingDay; selW=[w]; selKm=null;
   selNote = note || null;
@@ -2848,6 +2932,11 @@ function mirLogCustom(){
   const v=(inp.value||'').trim().slice(0,30);
   if(!v) return;
   if(/[<>"'\\]/.test(v)){ toast('Workout name can\'t contain these characters: < > " \' \\','error'); return; }
+  // Guideline 1.2 tripwire — a custom workout name goes straight into
+  // the shared feed, so it is checked on the way in.
+  if(typeof offensiveTerm === 'function' && offensiveTerm(v)){
+    toast('That wording will not post. Everyone in your group sees this.', 'error'); return;
+  }
   mirLogQuick(v);
 }
 
@@ -3492,7 +3581,7 @@ function mirShowReport(rw){
   try{ mirFillCrossGroup(activeShowed, !!(rw && rw.movedTo), isToday); }
   catch(e){ logErr('mirFillCrossGroup', e); }
   window._mirLast={day:_mirPendingDay};
-  if(navigator.vibrate) navigator.vibrate([25,30,60]);
+  tap('success');
   const rep=document.getElementById('mirReport');
   rep.classList.add('on'); rep.style.transform='';
 }
@@ -3648,7 +3737,7 @@ async function mirFillCrossGroup(activeShowed, activeMoved, isToday){
   // case that used to get silence — so it gets the celebration instead.
   if(anyMove && !activeMoved && !matchMedia('(prefers-reduced-motion: reduce)').matches){
     try{ fireConfetti(); }catch(e){}
-    try{ if(navigator.vibrate) navigator.vibrate([18,40,28]); }catch(e){}
+    tap('success');
   }
 }
 
@@ -3828,6 +3917,9 @@ async function renderProfile(){
   seasonsEl.innerHTML=skRows(2);
   renderProfileInsights();   // parallel + independent — an insights failure never blocks stats/seasons
   renderDeleteAccountCard(); // ditto — never let the delete card break the tab
+  try{ renderRecapNotifCard(); }catch(e){ logErr('renderRecapNotifCard', e); } // native-only, inert on web
+  try{ renderHealthCard(); }catch(e){ logErr('renderHealthCard', e); }           // native-only, inert on web
+  try{ renderBlockedCard(); }catch(e){ logErr('renderBlockedCard', e); }      // hidden when nobody is blocked
   renderGoogleAuthCard();    // inert while FEATURE_GOOGLE_AUTH is off
   loadMyAuthState();         // one doc read, only when the flag is on
   renderPushCard();          // inert while FEATURE_PUSH is off
@@ -4295,6 +4387,161 @@ async function loadMyAuthState(){
 // is where that group's LOCAL name comes from — remove it first and a resumed
 // run can no longer find the logs.
 const DELETED_NAME = 'Deleted user';
+
+// ── HEALTH (Apple Health / Health Connect) ──────────────────────────────────
+// The connect card in Profile and the suggestion cards on Home. All of it is
+// native-only and renders nothing on the web. Read-only; suggestions become
+// ordinary Forge logs only when the user confirms (D2 in appState.js).
+function renderHealthCard(){
+  const hdr = document.getElementById('healthShdr');
+  const el  = document.getElementById('healthCard');
+  if(!el || !hdr) return;
+  if(typeof isNative !== 'function' || !isNative()){ hdr.style.display='none'; el.style.display='none'; return; }
+  hdr.style.display=''; el.style.display='';
+  const on = healthEnabled();
+  el.innerHTML =
+    '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
+    + (on
+      ? 'Connected. Workouts recorded on this phone (or your watch) show up on '
+        + 'Home for one-tap logging. Nothing is logged without your say-so, and '
+        + 'your health data never leaves this phone.'
+      : 'See workouts recorded on this phone (or your watch) on your Home screen, '
+        + 'and log them to your group with one tap. Read-only. Your health data '
+        + 'never leaves this phone.')
+    + '</div>'
+    + '<button class="btn' + (on ? '' : ' btn-gold') + '" id="healthBtn" style="margin:0;'
+    + (on ? 'background:var(--bg-card-2);color:var(--text)' : '') + '" '
+    + 'onclick="toggleHealth()">' + (on ? 'Disconnect' : 'Connect Apple Health') + '</button>'
+    + '<div id="healthResult" class="tmuted" style="font-size:12px;margin-top:10px"></div>';
+}
+
+async function toggleHealth(){
+  const out = document.getElementById('healthResult');
+  const say = m => { if(out) out.textContent = m; };
+  try{
+    if(healthEnabled()){
+      setHealthEnabled(false);
+      renderHealthCard(); renderHealthSuggestions();
+      return;
+    }
+    say('Asking permission…');
+    const r = await healthConnect();
+    if(r === 'granted'){
+      setHealthEnabled(true); tap('success');
+      renderHealthCard(); renderHealthSuggestions();
+    } else if(r === 'denied'){
+      say('Health access is off for Forge. Allow it in Settings > Health > Data Access, then try again.');
+    } else {
+      say('Not available on this device.');
+    }
+  }catch(e){ logErr('toggleHealth', e); say('Could not connect.'); }
+}
+
+// Home cards. At most two at a time — a wall of suggestions is a chore, two is
+// a gift. Only days with NO log yet from you in the active group (a suggestion
+// for a day you already logged is noise), only inside the server clamp (D3),
+// each offered once (seen-memory, logged or dismissed alike).
+async function renderHealthSuggestions(){
+  const el = document.getElementById('healthSuggest');
+  if(!el) return;
+  el.innerHTML = '';
+  if(typeof isNative !== 'function' || !isNative() || !healthEnabled()) return;
+  if(!me || !me.name || !season) return;
+  try{
+    const seen = healthSeen();
+    const myDays = new Set((allLogs||[])
+      .filter(l => l.player===me.name && !l.voided && l.month===season.month && l.year===season.year)
+      .map(l => l.day));
+    const picks = (await healthRecentWorkouts())
+      .filter(w => w.month===season.month && w.year===season.year)
+      .filter(w => !seen.includes(w.id))
+      .filter(w => !myDays.has(w.day))
+      .slice(0, 2);
+    if(!picks.length) return;
+    el.innerHTML = picks.map(w =>
+      '<div class="card" style="margin-bottom:10px">'
+      + '<div style="font-size:13px;font-weight:700;margin-bottom:2px">'
+      + esc(w.source || 'Your phone') + ' recorded a workout</div>'
+      + '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
+      + esc(w.label) + ' · ' + w.minutes + ' min · Day ' + w.day
+      + (w.km ? ' · ' + w.km + ' km' : '') + '</div>'
+      + '<div style="display:flex;gap:8px">'
+      + '<button class="btn btn-gold" style="margin:0;flex:1" '
+      + 'onclick="logHealthSuggestion(\'' + escForInlineJsAttr(w.id) + '\',\''
+      + escForInlineJsAttr(w.label) + '\',' + w.day + ',' + (w.km==null?'null':w.km) + ')">Log it</button>'
+      + '<button class="btn" style="margin:0;flex:1;background:var(--bg-card-2);color:var(--text)" '
+      + 'onclick="dismissHealthSuggestion(\'' + escForInlineJsAttr(w.id) + '\')">Not this one</button>'
+      + '</div></div>').join('');
+  }catch(e){ logErr('renderHealthSuggestions', e); el.innerHTML=''; }
+}
+
+function logHealthSuggestion(id, label, day, km){
+  try{
+    healthMarkSeen(id);
+    // The exact path a manual log takes — validation, celebration, streaks and
+    // all. km rides along only for distance workouts, same rule as manual.
+    selDay = day; selW = [label]; selNote = null;
+    selKm = (km != null && typeof isDistanceWorkout==='function' && isDistanceWorkout(label)) ? km : null;
+    window._mirrorLogMode = true;
+    submitLog();
+    renderHealthSuggestions();
+  }catch(e){ logErr('logHealthSuggestion', e); }
+}
+
+function dismissHealthSuggestion(id){
+  try{ healthMarkSeen(id); tap(); renderHealthSuggestions(); }catch(e){}
+}
+
+// ── WEEKLY RECAP REMINDER (native only) ─────────────────────────────────────
+// The ONE notification this app schedules on-device. Not "don't forget to work
+// out" — functions/index.js argues, correctly, that spending the notification
+// permission on nagging gets an app muted inside a week. This is the Monday
+// recap: last week is closed, the card is waiting. Calendar-based, so unlike
+// anything depending on live team state it cannot go stale while the phone is
+// offline. Streak-at-risk stays server-side, where teammate activity is known.
+function renderRecapNotifCard(){
+  const hdr = document.getElementById('recapNotifShdr');
+  const el  = document.getElementById('recapNotifCard');
+  if(!el || !hdr) return;
+  if(typeof isNative !== 'function' || !isNative()){ hdr.style.display='none'; el.style.display='none'; return; }
+  hdr.style.display=''; el.style.display='';
+  const on = notifEnabled();
+  el.innerHTML =
+    '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
+    + 'A single nudge on Monday morning when the week closes and your recap is ready. '
+    + 'Nothing else — Forge will never remind you to exercise.</div>'
+    // .btn alone sets no colour, so it inherited the UA link blue on iOS and
+    // looked like a mis-styled hyperlink. Gold when off (the action), muted
+    // when on (the undo) — matching every other primary/secondary pair.
+    + '<button class="btn' + (on ? '' : ' btn-gold') + '" id="recapNotifBtn" style="margin:0;'
+    + (on ? 'background:var(--bg-card-2);color:var(--text)' : '') + '" '
+    + 'onclick="toggleRecapNotif()">' + (on ? 'Turn off Monday reminder' : 'Remind me on Mondays')
+    + '</button>'
+    + '<div id="recapNotifResult" class="tmuted" style="font-size:12px;margin-top:10px">'
+    + (on ? 'On — Mondays at 8am.' : '') + '</div>';
+}
+
+async function toggleRecapNotif(){
+  const out = document.getElementById('recapNotifResult');
+  const say = m => { if(out) out.textContent = m; };
+  try{
+    if(notifEnabled()){
+      await cancelMondayRecap();
+      setNotifEnabled(false);
+      renderRecapNotifCard();
+      return;
+    }
+    say('Asking permission…');
+    const r = await scheduleMondayRecap();
+    if(r === 'scheduled'){
+      setNotifEnabled(true); tap('success'); renderRecapNotifCard();
+    } else if(r === 'denied'){
+      say('Notifications are off for Forge. Turn them on in iOS Settings, then try again.');
+    } else {
+      say('Not available on this device.');
+    }
+  }catch(e){ logErr('toggleRecapNotif', e); say('Could not set that up.'); }
+}
 
 function renderDeleteAccountCard(){
   const el = document.getElementById('deleteAccountCard');
@@ -5797,7 +6044,14 @@ function renderFeed(){
   // timestamp means "written by this device just now", so it sorts NEWEST.
   const PENDING=Number.MAX_SAFE_INTEGER;
   const tsMs=l=>(l.timestamp&&l.timestamp.seconds)?l.timestamp.seconds*1000:PENDING;
-  const sorted=[...allLogs].sort((a,b)=>tsMs(b)-tsMs(a));
+  // Guideline 1.2 blocking. Filtered at the FEED only — a blocked person still
+  // scores, still holds their rank, and still counts toward the team streak.
+  // Blocking is about what you have to read, not about erasing someone from a
+  // group they are legitimately part of; silently zeroing their points would
+  // corrupt everyone else's standings.
+  const sorted=[...allLogs]
+    .filter(l => typeof isBlocked !== 'function' || !isBlocked(groupCode, l.player))
+    .sort((a,b)=>tsMs(b)-tsMs(a));
   const tcol=t=>t==='A'?'var(--A)':t==='B'?'var(--B)':'var(--C)';
   const tbg=t=>t==='A'?'var(--Al)':t==='B'?'var(--Bl)':'var(--Cl)';
   const now=new Date();
@@ -5895,6 +6149,7 @@ function renderFeed(){
         ${isMine?`<button class="fi-btn" title="Remove" onclick="deleteLog('${l.id}')"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-close"/></svg></button>`:''}
         ${!isMine&&window.FEATURE_REACTIONS_ENABLED?`<button class="fi-btn${iReacted?' on':''}" title="React" onclick="toggleReaction('${l.id}')">${mirBico('g-flame')}${rCount>0?`<span class="fi-rc">${rCount}</span>`:''}</button>`:''}
         ${!isMine&&!alreadyFlagged?`<button class="fi-btn" title="Flag" onclick="flagLog('${l.id}','${escForInlineJsAttr(l.player)}')"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-flag"/></svg></button>`:''}
+        ${!isMine?`<button class="fi-btn" title="Block ${escForInlineJsAttr(l.player)}" onclick="blockFromFeed('${escForInlineJsAttr(l.player)}')">&#10005;&#65039;</button>`:''}
       </div>
       <div class="fi-ico" style="color:${ccol}">${mirBico(fico)}</div>
     </div>`;
@@ -5950,6 +6205,65 @@ async function deleteLog(id){
   try { await voidLogDoc(id, me.name); }
   catch(e){ logErr('deleteLog', e); toast('Remove failed — check connection.','error'); }
 }
+// Native share sheet where there is one. Falls back to Web Share, then the
+// clipboard, so the button always does something rather than silently failing
+// on a browser without navigator.share.
+async function shareInvite(code){
+  const text = 'Join my group on Forge. Group code: ' + code;
+  const r = await shareText('Join me on Forge', text, 'https://goforge.in');
+  if(r === 'clipboard') toast('Invite copied');
+  else if(r === 'failed') toast('Could not share', 'error');
+  if(r !== 'cancelled' && r !== 'failed') tap();
+}
+
+// ── BLOCKING (Guideline 1.2) ────────────────────────────────────────────────
+// Confirm first: a block is invisible to the other person and easy to do by
+// accident on a small action row, so it should never happen on a stray tap.
+function blockFromFeed(player){
+  if(!player || !groupCode) return;
+  if(!confirm('Hide everything from ' + player + ' in this group?\n\n'
+    + 'You will stop seeing their workouts in the feed. They are not told, '
+    + 'and their points and your team streak are unaffected.\n\n'
+    + 'You can undo this any time under Profile.')) return;
+  try{
+    blockPlayer(groupCode, player);
+    tap('warning');
+    toast(player + ' hidden from your feed');
+    renderFeed();
+    renderBlockedCard();
+  }catch(e){ logErr('blockFromFeed', e); }
+}
+
+function unblockFromProfile(player){
+  try{
+    unblockPlayer(groupCode, player);
+    toast(player + ' unhidden');
+    renderBlockedCard();
+    renderFeed();
+  }catch(e){ logErr('unblockFromProfile', e); }
+}
+
+// The manage-list half of the requirement: blocking is only humane if it is
+// visible and reversible from one place.
+function renderBlockedCard(){
+  const hdr = document.getElementById('blockedShdr');
+  const el  = document.getElementById('blockedCard');
+  if(!el || !hdr) return;
+  const list = (typeof blockedIn === 'function' && groupCode) ? blockedIn(groupCode) : [];
+  if(!list.length){ hdr.style.display='none'; el.style.display='none'; return; }
+  hdr.style.display=''; el.style.display='';
+  el.innerHTML =
+    '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
+    + 'Hidden from your feed in this group. They keep their points and still '
+    + 'count toward the team streak — you just do not see their posts.</div>'
+    + list.map(n =>
+        '<div class="row" style="padding:9px 0;border-bottom:1px solid var(--border)">'
+        + '<div style="font-size:14px">' + esc(n) + '</div>'
+        + '<button class="fi-btn" style="width:auto;padding:4px 12px;font-size:12px" '
+        + 'onclick="unblockFromProfile(\'' + escForInlineJsAttr(n) + '\')">Unhide</button>'
+        + '</div>').join('');
+}
+
 async function flagLog(logId,player){
   if(!confirm(`Flag ${player}'s workout as suspicious?`)) return;
   await db.collection('flags').add({groupCode,logId,player,flaggedBy:me.name,month:season.month,year:season.year,timestamp:firebase.firestore.FieldValue.serverTimestamp()});
@@ -7872,7 +8186,8 @@ async function createGroup(){
 
   const res=document.getElementById('newGroupResult');
   res.className='warn-box warn-green';
-  res.innerHTML=`✅ Group created! Code: <strong style="font-size:20px;letter-spacing:3px">${code}</strong><br>Share this code with your group members.`;
+  res.innerHTML=`✅ Group created! Code: <strong style="font-size:20px;letter-spacing:3px">${code}</strong><br>Share this code with your group members.`
+      + `<button class="btn btn-gold" style="margin-top:10px" onclick="shareInvite('${code}')">Share invite</button>`;
   res.classList.remove('hidden');
   loadSuperAdmin();
 }
@@ -8567,7 +8882,7 @@ async function showTab(t){
   document.querySelectorAll('.tab')[TABS.indexOf(t)]?.classList.add('active');
   updateTabPill(t);
   window.scrollTo(0,0);
-  if(navigator.vibrate) navigator.vibrate(8);
+  tap();
   if(t==='global') loadGlobal();
   if(t==='pledge') renderIronPledgePage();
   if(t==='profile') renderProfile();
