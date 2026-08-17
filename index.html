@@ -258,6 +258,15 @@
            device. Unhidden ONLY by the founder creation path — every other
            _pinFlow entry re-hides it. -->
       <div id="pinSkip" class="hidden" style="margin-top:12px;text-align:center"><span onclick="skipPinForNow()" style="font-size:12px;color:var(--gold);cursor:pointer">Skip for now — set it when it matters</span></div>
+      <!-- EXIT. This was the only onboarding step with no way out and no
+           hard-reset hatch: if the write kept failing (which is not
+           hypothetical — a month of http:// failures landed people exactly
+           here) the only escape was closing the tab, and reloading returned
+           them to the same screen. Shown only when there IS a live session to
+           return to, so it never appears mid-registration where going "back"
+           would mean nowhere. -->
+      <div id="pinBack" class="hidden" style="margin-top:14px;text-align:center"><span onclick="cancelPinStep()" style="font-size:12px;color:var(--muted);cursor:pointer;text-decoration:underline">← Back to my group</span></div>
+      <div class="ob-fix"><span onclick="confirmHardReset()">Stuck here? Clear this device and start fresh</span></div>
     </div>
     <div class="ob-step" id="ob-s4">
       <div class="ob-title">Enter your PIN</div>
@@ -1495,6 +1504,7 @@ function choosePlayer(name){
     document.getElementById('pinConfirm').value = '';
     document.getElementById('pinError').classList.add('hidden');
     document.getElementById('pinSkip')?.classList.add('hidden');   // founder-only affordance
+    document.getElementById('pinBack')?.classList.add('hidden');   // no live session to go back to here
     showObStep(3);
     return;
   }
@@ -1621,6 +1631,7 @@ function gracePinCheckOnResume(){
     document.getElementById('pinConfirm').value = '';
     document.getElementById('pinError').classList.add('hidden');
     document.getElementById('pinSkip')?.classList.add('hidden');   // founder-only affordance
+    document.getElementById('pinBack')?.classList.add('hidden');   // no live session to go back to here
     showObStep(3);
     return true;
   }
@@ -1658,6 +1669,7 @@ async function registerAndJoin(){
   document.getElementById('pinConfirm').value = '';
   document.getElementById('pinError').classList.add('hidden');
   document.getElementById('pinSkip')?.classList.add('hidden');   // founder-only affordance
+    document.getElementById('pinBack')?.classList.add('hidden');   // no live session to go back to here
   showObStep(3);
 }
 
@@ -5305,6 +5317,15 @@ async function submitLog(){
   // and the afterglow report is the only presentation. The write path itself
   // (multi-group broadcast + self-heal watchdog + demo/rank/mix denorm) is
   // unchanged. `subBtn` belonged to the deleted page — guarded, not assumed.
+  // RE-ENTRANCY GUARD. The old protection disabled `subBtn` — an element the
+  // Log tab's removal took with it, so `if(btn)` quietly guarded nothing and
+  // there has been NO double-submit protection since. The window is real: the
+  // picker sheet stays hit-testable for ~300ms while it slides out, nothing on
+  // screen changes during the up-to-4s commit, and a mobile double-tap lands
+  // in ~150ms. Two commits = two log docs, doubled workout counts, doubled
+  // lifetime stats and a doubled global counter.
+  if(window._submitInFlight){ return; }
+  window._submitInFlight = true;
   window._mirrorLogMode=false;
   const btn=document.getElementById('subBtn');
   if(btn){ btn.disabled=true; btn.textContent='Saving...'; }
@@ -5324,6 +5345,18 @@ async function submitLog(){
       } catch(e){ logErr('submitLog: skipped unreadable group '+sess.code, e); /* never block the log */ }
     }));
 
+    // NOTHING TO WRITE MEANS NOTHING TO CELEBRATE. The active group is only
+    // added from inside the sessions loop above, and getSessions() returns []
+    // on any storage read failure or unusable shape — so an empty targets list
+    // produced an empty batch, a commit that "succeeded", and the full
+    // confetti-and-report afterglow for a workout that was never saved
+    // anywhere. Fail loudly instead: this is the one outcome a logging app
+    // must never get wrong.
+    if(!targets.length){
+      logErr('submitLog: no write targets', new Error('EMPTY_TARGETS groupCode='+groupCode+' sessions='+sessions.length));
+      toast('Couldn’t save — this device lost track of your group. Reload and try again.','error');
+      return;
+    }
     const batch = db.batch();
     const newLogIds = new Set();   // reward screen: tells "already echoed into allLogs" apart from listener lag
     // Which log doc landed in which group. The afterglow needs this to work out
@@ -5470,6 +5503,12 @@ async function submitLog(){
       logErr('submitLog: post-commit presentation failed', e);
     }
   } catch(e){ console.error('submitLog failed:',e); toast('Error saving. Check connection.','error'); if(btn){ btn.disabled=false; btn.textContent='Log Workout'; } }
+  finally {
+    // Release on EVERY exit — success, the empty-targets return, and the catch
+    // above. A flag that leaks on one path would block every later log for the
+    // rest of the session, which is worse than the duplicate it prevents.
+    window._submitInFlight = false;
+  }
 }
 
 function fireSparks(){
@@ -8065,6 +8104,7 @@ async function selfServeCreateGroup(){
     document.getElementById('pinInput').value=''; document.getElementById('pinConfirm').value='';
     document.getElementById('pinError').classList.add('hidden');
     document.getElementById('pinSkip').classList.remove('hidden');
+    document.getElementById('pinBack')?.classList.add('hidden');   // brand-new group: no prior session to return to
     showObStep(3);
   } catch(e){
     logErr('selfServeCreateGroup', e);
@@ -8099,6 +8139,29 @@ function renderFounderCard(){
   const noCred = !mine.pin && !mine.pinSet;
   let young=false;
   try { const c=groupData && groupData.createdAt; const d=c && (c.toDate ? c.toDate() : new Date(c)); young=!!d && (Date.now()-d.getTime()) < 8*86400000; } catch(e){}
+
+  // THE CODE IS WITHHELD UNTIL THERE IS A CREDENTIAL, and this is a security
+  // control, not a nag. A founder who skipped their PIN has a roster entry with
+  // no pin and no pinSet — which is exactly the state choosePlayer reads as
+  // "no credential yet, send them to the grace flow". So anyone who has the
+  // code can pick the founder's name, set ANY PIN, and inherit the group's
+  // only admin account. Previously this card handed them the code on a gold
+  // button while the warning sat underneath as a small grey link.
+  //
+  // Withholding the code closes the window completely rather than relying on
+  // the founder reading a nudge. Nothing else about the card changes, so a
+  // founder who sets a PIN gets the full invite loop immediately.
+  if(noCred){
+    el.innerHTML = `
+      <div class="card" style="border:1px solid var(--gold)">
+        <div class="card-title" style="color:var(--gold)">Lock your name first</div>
+        <div class="tmuted" style="margin-bottom:10px">Your group code is ready — but until you set a 4-digit PIN, anyone who gets the code could pick your name and take over the group. Takes ten seconds.</div>
+        <button class="btn btn-gold btn-sm" style="margin:0;width:100%" onclick="founderSetPin()">Set my PIN</button>
+        <div style="margin-top:8px;font-size:11px;color:var(--muted);text-align:center">Then you can share the code and start pulling people in.</div>
+      </div>`;
+    return;
+  }
+
   el.innerHTML = `
     <div class="card" style="border:1px solid var(--gold)">
       <div class="card-title" style="color:var(--gold)">${n===1?'A forge of one':esc(String(n))+' strong'}</div>
@@ -8109,7 +8172,6 @@ function renderFounderCard(){
       </div>
       <button class="btn btn-gold btn-sm" style="margin:0;width:100%" onclick="founderShare()">Share the code</button>
       <div style="margin-top:8px;font-size:11px;color:var(--muted);text-align:center">${n} of 6 — teams unlock at 6</div>
-      ${noCred?`<div style="margin-top:8px;font-size:11px;text-align:center"><span onclick="founderSetPin()" style="color:var(--gold);cursor:pointer">Set a PIN first — it keeps your name yours once the code is out.</span></div>`:''}
       ${young?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--muted)">Week one: try three different workout types. The people who do almost never quit.</div>`:''}
     </div>`;
 }
@@ -8143,8 +8205,23 @@ function founderSetPin(){
   document.getElementById('pinInput').value=''; document.getElementById('pinConfirm').value='';
   document.getElementById('pinError').classList.add('hidden');
   document.getElementById('pinSkip')?.classList.add('hidden');
+  // The founder is already inside the app, so there IS somewhere to go back to.
+  document.getElementById('pinBack')?.classList.remove('hidden');
   showScreen('onboard');
   showObStep(3);
+}
+
+// Leave the PIN step without setting one. Only reachable when a live session
+// exists (founderSetPin unhides the link; every other entry to step 3 hides
+// it), so this always has a group to return to.
+function cancelPinStep(){
+  window._pinFlow = null;
+  document.getElementById('pinBack')?.classList.add('hidden');
+  const sessions = getSessions();
+  const active = sessions.find(s=>s.code===getActiveCode()) || sessions[0];
+  if(!active){ showScreen('onboard'); showObStep(1); return; }
+  groupCode = active.code; me = active.player; setActiveCode(active.code);
+  loadGroup(groupCode, true);
 }
 
 // Helper: YYYY-MM-DD stamp for filenames.
