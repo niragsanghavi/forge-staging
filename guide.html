@@ -288,20 +288,20 @@ footer a{color:var(--gold)}
       <div class="hd">✓ Counts</div>
       <ul>
         <li>Gym, weights</li><li>Run, cycle, swim</li>
-        <li>A proper walk (with a photo)</li><li>Cricket, football, padel</li>
+        <li>A 45-min walk + photo</li><li>Cricket, football, padel</li>
         <li>Yoga, pilates, physio</li><li>Home workout, HIIT</li><li>Dance, martial arts</li>
       </ul>
     </div>
     <div class="tile n">
       <div class="hd">✕ Doesn't</div>
       <ul>
-        <li>A 38-minute stroll</li><li>A walk with no photo</li>
+        <li>A 38-minute walk</li><li>A walk with no photo</li>
         <li>Walking to the car</li><li>Housework, shopping</li><li>Standing at a wedding</li>
         <li>Tonight's planned workout</li><li>Someone else's workout</li>
       </ul>
     </div>
   </div>
-  <div class="note"><b>Walks are the exception.</b> They're the easiest thing to over-claim, so a walk needs to be a real session <b>and</b> have a photo in the group. A 38-minute wander doesn't make it.</div>
+  <div class="note"><b>Walks are the one exception.</b> They're the easiest thing to over-claim, so a walk needs <b>45 minutes minimum</b> and <b>a photo in the WhatsApp group</b>. Both, every time — 38 minutes doesn't count, and neither does 45 with no photo. The line has to sit somewhere or it isn't a line.</div>
   <p class="sub">Everything else runs on the honour system. Cheating a fitness app is just a slow way of lying to yourself — and your group sees the feed anyway.</p>
 </section>
 
@@ -423,10 +423,10 @@ footer a{color:var(--gold)}
 <!-- ── 10. QUIZ ───────────────────────────────────────── -->
 <section>
   <p class="k">Last bit</p>
-  <h2>Eight questions</h2>
+  <h2>Nine questions</h2>
   <p class="sub">Every wrong answer explains itself.</p>
   <div id="quiz" style="display:flex;flex-direction:column;gap:14px"></div>
-  <div class="sc" id="scBox"><div class="n" id="scN">0/8</div><p id="scM"></p></div>
+  <div class="sc" id="scBox"><div class="n" id="scN">0/9</div><p id="scM"></p></div>
 </section>
 
 <section>
@@ -501,6 +501,10 @@ const QUIZ=[
   w:["Never everyone — that would be impossible to hold and people would quit.",
      "Correct. Just over half, rounded up. Enough to need coordination, forgiving enough to survive a rest day.",
      "2 of 5 is under half — not enough."]},
+ {q:"You walked 38 minutes and posted the photo. Does it count?",a:["Yes — you posted the photo","No — walks need 45 minutes","Yes, if you log it the same day"],c:1,
+  w:["The photo is only half the rule. Walks also need 45 minutes, and 38 isn't 45.",
+     "Correct. Walks need BOTH: 45 minutes minimum and a photo in the WhatsApp group. Miss either and it doesn't count.",
+     "Timing of the log doesn't change it. The walk itself was too short."]},
  {q:"Best way to climb the leaderboard?",a:["Longer workouts","Show up on more days","More workouts per day"],c:1,
   w:["Length isn't measured at all. 20 minutes scores like two hours.",
      "Correct. Days are the engine — and they unlock perfect weeks and team streaks too.",
@@ -534,12 +538,12 @@ QUIZ.forEach((it,i)=>{
 function fin(){
   const box=document.getElementById('scBox');
   document.getElementById('scN').textContent=right+'/'+QUIZ.length;
-  const m={8:"Flawless. You understand Forge better than most people running a group.",
-           7:"Excellent. One slip, and you read why.",
-           5:"Solid. The ones you missed are the ones that quietly cost people points.",
+  const m={9:"Flawless. You understand Forge better than most people running a group.",
+           8:"Excellent. One slip, and you read why.",
+           6:"Solid. The ones you missed are the ones that quietly cost people points.",
            3:"Fair start — scroll back to the points section, it's the half that decides the board.",
            0:"That's what this page is for. Skim it again and retry — five minutes."};
-  let msg=m[0];for(const k of [8,7,5,3]){if(right>=k){msg=m[k];break;}}
+  let msg=m[0];for(const k of [9,8,6,3]){if(right>=k){msg=m[k];break;}}
   document.getElementById('scM').textContent=msg;
   box.classList.add('on');box.scrollIntoView({behavior:'smooth',block:'center'});
 }
