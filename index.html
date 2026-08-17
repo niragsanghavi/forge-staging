@@ -4523,6 +4523,31 @@ async function renderHealthSuggestions(){
   }catch(e){ logErr('renderHealthSuggestions', e); el.innerHTML=''; }
 }
 
+// FOREGROUND REFRESH — the fix for the feature's main path.
+// renderHealthSuggestions() only ever ran from renderHome(), so a workout
+// recorded while Forge sat in the background was never noticed: finish a run on
+// the Watch, switch back to an already-open Forge, and no suggestion appears.
+// That is exactly how someone would use this, and it reads as "the feature
+// doesn't work". Confirmed on a real iPhone 17 Aug 2026 — the workout was
+// invisible until a force-quit, then appeared instantly on relaunch.
+//
+// visibilitychange rather than @capacitor/app's appStateChange: WKWebView fires
+// it on background and foreground, it needs no new plugin (so no npm install and
+// no Package.swift churn before a build), and it does the same job for a PWA tab
+// on the web, where the identical staleness exists.
+//
+// Throttled because iOS fires this on every app switch and each call is a real
+// HealthKit query. renderHealthSuggestions() is already a no-op off-native,
+// signed out, or with Health disconnected, so this stays cheap everywhere.
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState !== 'visible') return;
+  const now = Date.now();
+  if(now - (window._healthFgAt || 0) < 3000) return;
+  window._healthFgAt = now;
+  try{ renderHealthSuggestions(); }
+  catch(e){ logErr('healthForegroundRefresh', e); }
+});
+
 function logHealthSuggestion(id, label, day, km){
   try{
     healthMarkSeen(id);
