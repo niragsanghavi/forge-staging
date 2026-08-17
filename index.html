@@ -2,6 +2,35 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<!-- ══ HTTPS GUARD — MUST STAY THE FIRST SCRIPT ON THE PAGE ══════════════
+     Web Crypto (crypto.subtle) exists ONLY in a secure context. Served over
+     plain http it is undefined, so sha256hex() throws and EVERY PIN operation
+     dies inside a generic catch that tells the user "Save failed — check
+     connection." — a message that sends them to their router instead of here.
+
+     This was not hypothetical: 27 logged failures on prod between 17 Jul and
+     17 Aug 2026, every single one from http://goforge.in and none from https.
+     Ten people were blocked from ever registering; five could not set a PIN;
+     ten logins silently degraded to the legacy plaintext-PIN path.
+
+     Why it hid for a month: staging is served from github.io, which browsers
+     force to https automatically. Only the custom domain could ever be
+     reached over http, so no amount of staging testing could reveal it.
+
+     The REAL fix is GitHub Pages → Settings → Pages → "Enforce HTTPS" (a 301
+     at the edge, which also protects assets and old saved links). This is the
+     belt-and-braces guard for any window where that is off — it costs one
+     comparison, and replace() rather than assign() keeps the back button from
+     bouncing between the two protocols. localhost is exempt so local dev over
+     http keeps working (and is a secure context anyway, so crypto works). -->
+<script>
+(function(){
+  var h = location.hostname;
+  if(location.protocol === 'http:' && h !== 'localhost' && h !== '127.0.0.1' && h !== '[::1]'){
+    location.replace('https://' + location.host + location.pathname + location.search + location.hash);
+  }
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <title>Forge</title>
 <link rel="stylesheet" href="src/style/main.css">
@@ -891,6 +920,12 @@ function escForInlineJsAttr(s){
   return esc(String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
 }
 async function sha256hex(str){
+  // Name the failure instead of letting it surface as "check connection".
+  // crypto.subtle is absent in any non-secure context; the head-of-page guard
+  // should have redirected already, so reaching here means https itself is
+  // unavailable (a proxy stripping it, an ancient WebView). Callers translate
+  // INSECURE_CONTEXT into an instruction the person can actually act on.
+  if(!(window.crypto && window.crypto.subtle)) throw new Error('INSECURE_CONTEXT');
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
@@ -1419,6 +1454,18 @@ async function submitPinEntry(){
       const uSnap = await db.collection('users').doc(p.userId).get();
       verified = uSnap.exists ? (await sha256hex(entered)) === uSnap.data().pinHash : (entered === p.pin);
     } catch(e){
+      // A missing crypto.subtle is NOT a failed doc read, and must not take the
+      // fallback. On http that fallback compares against roster.pin, which was
+      // scrubbed for almost everyone — so a CORRECT PIN was being rejected as
+      // wrong (10 logged cases, Jul–Aug 2026), and for the few legacy rows that
+      // still carry plaintext it silently authenticated against it. Stop, and
+      // say the one thing that fixes it.
+      if(e.message==='INSECURE_CONTEXT'){
+        logErr('submitPinEntry: insecure context, refusing plaintext fallback', e);
+        err.textContent='This page is not on a secure connection, so your PIN can’t be checked. Open https://goforge.in (with the s) and try again.';
+        err.classList.remove('hidden');
+        return;
+      }
       logErr('submitPinEntry: users doc read failed, falling back to roster.pin', e);
       verified = (entered === p.pin);
     }
@@ -1669,6 +1716,7 @@ async function submitNewPin(){
     logErr('submitNewPin '+(flow?.mode||''), e);
     if(e.message==='NAME_TAKEN'){ err.textContent='That name was just taken by someone else — go back and pick a different one.'; }
     else if(e.message==='NO_RECORD'){ err.textContent='Could not find your record. Please refresh.'; }
+    else if(e.message==='INSECURE_CONTEXT'){ err.textContent='This page is not on a secure connection, so PINs can’t be saved. Open https://goforge.in (with the s) and try again.'; }
     else { err.textContent='Save failed — check connection.'; }
     err.classList.remove('hidden');
   }
@@ -1714,7 +1762,9 @@ async function skipPinForNow(){
     launchApp();
   } catch(e){
     logErr('skipPinForNow', e);
-    err.textContent = (e.message==='NO_RECORD') ? 'Could not find your record. Please refresh.' : 'Could not finish setup — check connection.';
+    err.textContent = (e.message==='NO_RECORD') ? 'Could not find your record. Please refresh.'
+      : (e.message==='INSECURE_CONTEXT') ? 'This page is not on a secure connection. Open https://goforge.in (with the s) and try again.'
+      : 'Could not finish setup — check connection.';
     err.classList.remove('hidden');
   }
 }
