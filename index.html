@@ -6615,7 +6615,25 @@ async function loadSuperAdmin(){
       el.textContent=`Season will be ${MN[m-1]} ${y} (${seasonIdOf(m,y)}), ${new Date(y,m,0).getDate()} days — taken from today's date.`;
     }
   }catch(e){ logErr('newGroupSeasonNote', e); }
-  const snap=await db.collection('groups').get();
+  // This read was unguarded, and everything on the page hangs off it. When the
+  // local Firebase state is wedged the promise rejects, loadSuperAdmin throws,
+  // and NOTHING below runs — no dashboard, no rollover nudges, no group list,
+  // not even the "No groups yet" fallback. The result is a page rendered as
+  // bare headings with no error anywhere, which reads as "my data is gone"
+  // rather than "the connection is stuck" (seen live, 17 Aug 2026).
+  // Fail loudly and point at the recovery that already exists instead.
+  let snap;
+  try {
+    snap = await db.collection('groups').get();
+  } catch(e){
+    logErr('loadSuperAdmin: groups read failed', e);
+    const list = document.getElementById('superGroupList');
+    if(list) list.innerHTML = '<div class="warn-box warn-red">Could not load groups — the connection to the server is stuck. '
+      + '<span onclick="confirmConnReset()" style="text-decoration:underline;cursor:pointer;font-weight:700">Fix connection</span>, '
+      + 'or reload the page. Nothing has been lost.</div>';
+    toast('Could not load groups — connection stuck.','error');
+    return;
+  }
   const groups=snap.docs.map(d=>({code:d.id,...d.data()}));
 
   // ── Cockpit dashboard (5 sections + month selector + drill-down) ──

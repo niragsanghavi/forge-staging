@@ -511,6 +511,34 @@ function _isTimeoutErr(e){ return !!(e && e.code === 'timeout'); }
 // reload. Boot mints fresh anon auth; user lands on group-code → name → PIN.
 window.fixLocalState = async function(reason){
   try { console.warn('[Forge] fixLocalState running. Reason:', reason); } catch(e){}
+
+  // THE ONE GUARANTEE: this function always ends in a reload.
+  //
+  // Every step below awaits Firebase internals — and this runs at precisely
+  // the moment those internals are wedged, which is the one condition where
+  // db.terminate() / clearPersistence() / signOut() can hang forever. They had
+  // no timeouts, so a single hang left the button stuck on "Fixing… ~30s" and
+  // the reload at step 7 never ran: the recovery path was defeated by the
+  // fault it exists to recover from. Observed live, 17 Aug 2026.
+  //
+  // A partial clean-up followed by a reload beats a perfect clean-up that
+  // never arrives — the reload alone clears most wedges, and step 4b's direct
+  // IndexedDB purge (which always had its own timeouts) does the heavy lifting.
+  var _reloaded = false;
+  var _reload = function(){
+    if(_reloaded) return; _reloaded = true;
+    try { location.reload(); } catch(e){ try { location.href = location.pathname; } catch(e2){} }
+  };
+  setTimeout(_reload, 9000);   // hard watchdog — fires no matter what stalls
+
+  // Cap any promise so one wedged call can't stall the chain. Never rejects:
+  // a timed-out step is logged and skipped, exactly like a caught error.
+  var _cap = function(p, ms, label){
+    return Promise.race([
+      Promise.resolve(p).catch(function(e){ console.warn('[Forge] fixLocalState '+label+':', e); }),
+      new Promise(function(res){ setTimeout(function(){ console.warn('[Forge] fixLocalState '+label+' timed out after '+ms+'ms — continuing'); res(); }, ms); })
+    ]);
+  };
   // 1. unregister service workers (kills the stale SW controlling the page)
   try {
     if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
@@ -523,12 +551,11 @@ window.fixLocalState = async function(reason){
     if (window.caches) { const keys = await caches.keys(); await Promise.all(keys.map(k => caches.delete(k).catch(()=>{}))); }
   } catch(e){ console.warn('[Forge] fixLocalState step2 (caches):', e); }
   // 3. terminate Firestore (must precede clearPersistence)
-  try { await db.terminate(); } catch(e){ console.warn('[Forge] fixLocalState step3 (terminate):', e); }
+  await _cap(db.terminate(), 2500, 'step3 (terminate)');
   // 4. clear the poisoned offline persistence. 'failed-precondition' = another
   //    tab still holds it — log and continue; the IndexedDB purge (below) and
   //    reload still recover this tab.
-  try { await db.clearPersistence(); }
-  catch(e){ console.warn('[Forge] fixLocalState step4 (clearPersistence, code='+(e&&e.code)+'):', e); }
+  await _cap(db.clearPersistence(), 2500, 'step4 (clearPersistence)');
   // 4b. belt-and-suspenders: purge Firebase's own IndexedDB stores directly too
   //     (covers auth-session corruption + any store clearPersistence missed).
   try {
@@ -542,7 +569,7 @@ window.fixLocalState = async function(reason){
     })));
   } catch(e){ console.warn('[Forge] fixLocalState step4b (indexedDB purge):', e); }
   // 5. kill the (possibly corrupted) anonymous auth session
-  try { await auth.signOut(); } catch(e){ console.warn('[Forge] fixLocalState step5 (signOut):', e); }
+  await _cap(auth.signOut(), 2500, 'step5 (signOut)');
   // 6. clear ONLY Forge's own session pointers — NOT localStorage.clear()
   //    (leaves forge_theme / forge_goal_* / unrelated origin data intact).
   //    forge_session is the legacy single-session key migrateLegacySession
@@ -550,7 +577,9 @@ window.fixLocalState = async function(reason){
   try { ['forge_sessions','forge_active','forge_session'].forEach(k => { try{ localStorage.removeItem(k); }catch(e){} }); }
   catch(e){ console.warn('[Forge] fixLocalState step6 (localStorage):', e); }
   // 7. hard reload → fresh anon auth + onboarding. Server identity intact.
-  try { location.reload(); } catch(e){ location.href = location.pathname; }
+  //    Routed through the same guard as the watchdog so the two can never
+  //    double-fire (a second reload mid-navigation is how you get a loop).
+  _reload();
 };
 
 // ── STEP 4: reusable recovery UI (self-contained, inline-styled like the boot
