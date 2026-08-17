@@ -180,7 +180,21 @@ service cloud.firestore {
       allow create: if isAuthed()
         && request.resource.data.size() <= 16
         && request.resource.data.workouts is list
-        && request.resource.data.workouts.size() <= 50
+        && request.resource.data.workouts.size() <= 20
+        // STRING SIZE CAPS. size() above counts FIELDS, not bytes, so a doc with
+        // 16 legal fields could still carry a megabyte of text. Proven 17 Aug
+        // 2026: a 200,000-character `note` was accepted by these rules. Firestore
+        // allows 1MB documents, and every one of them is downloaded by the logs
+        // listener — so this is a storage + read-cost bomb, not just clutter.
+        // The client already slices note to 90 chars, so these are generous.
+        && (!('note' in request.resource.data) || request.resource.data.note.size() <= 200)
+        && (!('player' in request.resource.data) || request.resource.data.player.size() <= 40)
+        && (!('groupCode' in request.resource.data) || request.resource.data.groupCode.size() <= 12)
+        // HONEST LIMIT: rules cannot measure the size of individual ARRAY
+        // ELEMENTS, so 20 workout strings of arbitrary length are still
+        // possible. The count cut from 50 to 20 bounds it (a real log has 1-5);
+        // closing it properly is App Check's job, since this whole attack
+        // requires speaking to Firestore without the app.
         // Mirror pass-1 backlog clamp: a workout's calendar date (year/month/day)
         // must be the same calendar month as the server clock AND within an
         // ~8-day backlog window. Mirrors the client's "max(1st, today-7)…today"
