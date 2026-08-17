@@ -44,6 +44,9 @@ section{display:flex;flex-direction:column;gap:16px}
 .dot{flex:0 0 22px;height:22px;border-radius:50%;background:var(--gold);color:#1a1400;
   font-weight:900;font-size:12px;display:flex;align-items:center;justify-content:center;margin-top:1px}
 .call b{color:var(--tx)} .call span{color:var(--mu)}
+/* .call span (0,1,1) was overriding .dot (0,1,0), painting the numbers
+   grey-on-gold and effectively invisible. Raise the specificity. */
+.call .dot,.calls .dot{color:#1a1400}
 /* the big number */
 .hero{background:var(--card);border:1px solid var(--gold);border-radius:20px;padding:24px;text-align:center;
   display:flex;flex-direction:column;gap:8px}
@@ -102,6 +105,14 @@ section{display:flex;flex-direction:column;gap:16px}
   padding:16px;border-radius:14px;text-decoration:none}
 footer{border-top:1px solid var(--line);padding-top:20px;color:var(--mu);font-size:13.5px;display:flex;flex-direction:column;gap:6px}
 footer a{color:var(--gold)}
+
+/* Sections rise into view one at a time, the way a screen slides into a phone.
+   Motion is opt-out: with prefers-reduced-motion everything is simply visible
+   from the start (the .on class is also applied immediately by the script). */
+.rv{opacity:0;transform:translateY(26px);transition:opacity .6s cubic-bezier(.22,.8,.3,1),transform .6s cubic-bezier(.22,.8,.3,1)}
+.rv.on{opacity:1;transform:none}
+.rv-d1{transition-delay:.06s}.rv-d2{transition-delay:.12s}.rv-d3{transition-delay:.18s}
+@media(prefers-reduced-motion:reduce){.rv{opacity:1!important;transform:none!important;transition:none!important}}
 @media(max-width:400px){.grid2{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -276,19 +287,22 @@ footer a{color:var(--gold)}
     <div class="tile y">
       <div class="hd">✓ Counts</div>
       <ul>
-        <li>Gym, weights</li><li>Run, walk, cycle, swim</li><li>Cricket, football, padel</li>
+        <li>Gym, weights</li><li>Run, cycle, swim</li>
+        <li>A proper walk (with a photo)</li><li>Cricket, football, padel</li>
         <li>Yoga, pilates, physio</li><li>Home workout, HIIT</li><li>Dance, martial arts</li>
       </ul>
     </div>
     <div class="tile n">
       <div class="hd">✕ Doesn't</div>
       <ul>
+        <li>A 38-minute stroll</li><li>A walk with no photo</li>
         <li>Walking to the car</li><li>Housework, shopping</li><li>Standing at a wedding</li>
         <li>Tonight's planned workout</li><li>Someone else's workout</li>
       </ul>
     </div>
   </div>
-  <p class="sub">Nobody audits you. Cheating a fitness app is just a slow way of lying to yourself — and your group sees the feed anyway.</p>
+  <div class="note"><b>Walks are the exception.</b> They're the easiest thing to over-claim, so a walk needs to be a real session <b>and</b> have a photo in the group. A 38-minute wander doesn't make it.</div>
+  <p class="sub">Everything else runs on the honour system. Cheating a fitness app is just a slow way of lying to yourself — and your group sees the feed anyway.</p>
 </section>
 
 <!-- ── 4. POINTS ──────────────────────────────────────── -->
@@ -342,6 +356,16 @@ footer a{color:var(--gold)}
   </div>
   <p class="sub" style="text-align:center">Just over half your team, rounded up. <b style="color:var(--tx)">Not everyone</b> — but you do need each other.</p>
   <div class="note">If your team misses it, <b>you still keep your 5 points.</b> You're never punished for someone else's rest day.</div>
+
+  <h2 style="margin-top:14px">Why it stops at 3</h2>
+  <div class="rows">
+    <div class="row"><span class="pt pos">+1</span><div class="t"><b>Day 1 of the streak</b><span>It begins.</span></div></div>
+    <div class="row"><span class="pt pos">+2</span><div class="t"><b>Day 2</b><span>Getting somewhere.</span></div></div>
+    <div class="row"><span class="pt pos">+3</span><div class="t"><b>Day 3</b><span>Full value.</span></div></div>
+    <div class="row"><span class="pt neu">+3</span><div class="t"><b>Day 4, 5, 20, 60…</b><span>Stays at 3. This is the ceiling.</span></div></div>
+  </div>
+  <p class="sub">Without a ceiling the maths runs away: a 30-day team streak would pay +30 <em>a day</em>, and a group that got hot in week one could never be caught. Everyone else would stop trying — which is the opposite of what the streak is for.</p>
+  <div class="note"><b>Capped at 3, it stays a habit rather than a jackpot.</b> A long streak is worth holding for its own sake, and a group having a bad month is always still in the game.</div>
 </section>
 
 <!-- ── 7. MONTHS ──────────────────────────────────────── -->
@@ -416,6 +440,38 @@ footer a{color:var(--gold)}
 </div>
 
 <script>
+/* ENTRANCE ANIMATION — blocks rise into view as you reach them.
+   Driven by a requestAnimationFrame loop rather than scroll events or
+   IntersectionObserver, because BOTH of those failed to fire in testing and
+   left the page completely blank at opacity:0. This is the page most people
+   meet Forge through; it must be impossible for it to render empty. rAF runs
+   regardless of how scrolling is implemented, costs nothing, and stops itself
+   the moment everything is visible.
+   Layers of safety, in order: no JS -> visible; reduced motion -> visible;
+   loop finishes -> visible; loop somehow never advances -> a 6s timer shows
+   everything anyway. Un-animated always beats invisible. */
+(function(){
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var t = [].slice.call(document.querySelectorAll('.w > section > *, header > *'));
+  if(reduce || !t.length) return;
+  t.forEach(function(el,i){ el.classList.add('rv','rv-d'+((i%3)+1)); });
+  var pending = t.slice(), raf = null, stopped = false;
+  function showAll(){ pending.forEach(function(el){ el.classList.add('on'); }); pending.length=0; halt(); }
+  function halt(){ stopped=true; if(raf) cancelAnimationFrame(raf); }
+  function tick(){
+    if(stopped) return;
+    var h = window.innerHeight || document.documentElement.clientHeight || 800;
+    for(var i=pending.length-1;i>=0;i--){
+      var b = pending[i].getBoundingClientRect();
+      if(b.top < h*0.94 && b.bottom > -80){ pending[i].classList.add('on'); pending.splice(i,1); }
+    }
+    if(!pending.length){ halt(); return; }
+    raf = requestAnimationFrame(tick);
+  }
+  raf = requestAnimationFrame(tick);
+  setTimeout(function(){ if(pending.length) showAll(); }, 6000);
+})();
+
 const QUIZ=[
  {q:"Gym in the morning, cricket in the evening. Points for that day?",a:["5","10","15"],c:0,
   w:["Right — one day is one day, however much you did in it.",
