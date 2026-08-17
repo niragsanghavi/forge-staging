@@ -1317,7 +1317,11 @@ window.onload = () => {
   // Firestore queries, so they must not run until we have a UID.
   ensureAuth().then(uid => {
     window.currentUid = uid;   // available app-wide for Stage 2+ (PIN binding)
-    bootApp();
+    // RETURN it. bootApp is async, so without this its rejection escapes as an
+    // unhandled rejection and skips the .catch below — meaning the boot-failure
+    // recovery screen never renders and the user is left staring at the default
+    // onboarding screen, which looks identical to being logged out.
+    return bootApp();
   }).catch(err => {
     // Auth itself failed — the app can't talk to Firestore at all. This is
     // exactly the signature of a wedged/corrupted local Firebase state (seen
@@ -1865,13 +1869,36 @@ async function loadGroup(code, fromCache){
   // everything (that caused the mass-lockout). Transient errors just alert.
   try {
     const gSnap = await db.collection('groups').doc(code).get();
-    if(!gSnap.exists){ handleDeadGroup(code, 'That group no longer exists.'); return; }
+    // NEVER destroy a session on evidence that came from the local cache.
+    // With enablePersistence on, a get() that cannot reach the server resolves
+    // against IndexedDB instead of rejecting — and an EVICTED cache reports
+    // exists:false. Browsers evict the big IndexedDB store first and leave the
+    // tiny localStorage session intact, so "offline + evicted" looked exactly
+    // like "this group was deleted", and handleDeadGroup then removed the
+    // session permanently. That is the "installed PWA forgot me" incident with
+    // the app as the culprit. (The unused `fromCache` parameter every caller
+    // already passes shows this guard was intended from the start.)
+    if(!gSnap.exists){
+      if(gSnap.metadata && gSnap.metadata.fromCache){
+        logErr('loadGroup: cache says group missing — refusing to drop session', new Error('CACHE_MISS_NOT_DELETION'));
+        toast('Can’t reach the server right now. Your group is still here — try again in a moment.','error');
+        return;
+      }
+      handleDeadGroup(code, 'That group no longer exists.'); return;
+    }
     groupData = gSnap.data();
 
     const sid = groupData.currentSeasonId;
     if(!sid){ handleDeadGroup(code, 'That group has no active season.'); return; }
     const sSnap = await db.collection('groups').doc(code).collection('seasons').doc(sid).get();
-    if(!sSnap.exists){ handleDeadGroup(code, 'That group\'s active season is missing.'); return; }
+    if(!sSnap.exists){
+      if(sSnap.metadata && sSnap.metadata.fromCache){
+        logErr('loadGroup: cache says season missing — refusing to drop session', new Error('CACHE_MISS_NOT_DELETION'));
+        toast('Can’t reach the server right now. Your group is still here — try again in a moment.','error');
+        return;
+      }
+      handleDeadGroup(code, 'That group\'s active season is missing.'); return;
+    }
     season = sSnap.data();
     seasonId = sid;
 
@@ -6098,7 +6125,7 @@ function renderFeed(){
       <div style="font-size:10px;font-weight:700;color:${topTeam?tcol(topTeam):'var(--muted)'};text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Leading today</div>
     </div>`}
     ${topStreakers.length>0?`<div style="background:var(--gold-l);border-radius:10px;padding:12px;text-align:center;grid-column:1/-1">
-      <div style="font-size:16px;font-weight:800;color:var(--orange)">${(function(){const d=topStreak+(topStreak===1?' day ':' days ')+flameIco('flk-m');return topStreakers.length<=3?topStreakers.map(p=>p.name).join(' · ')+' · '+d:'Multiple players · '+d;})()}</div>
+      <div style="font-size:16px;font-weight:800;color:var(--orange)">${(function(){const d=topStreak+(topStreak===1?' day ':' days ')+flameIco('flk-m');return topStreakers.length<=3?topStreakers.map(p=>esc(p.name)).join(' · ')+' · '+d:'Multiple players · '+d;})()}</div>
       <div style="font-size:10px;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">${topStreakers.length<=3?'Longest active streak':topStreakers.length+' players tied — check the board'}</div>
     </div>`:''}
   </div>`;
@@ -6426,6 +6453,13 @@ async function renamePlayer(oldName){
   const newName = String(raw).trim().replace(/\s+/g,' ');
   if(!newName || newName===oldName) return;
   if(newName.length>24){ toast('Names are limited to 24 characters.','error'); return; }
+  // Same character class registerAndJoin enforces. This path only checked
+  // LENGTH, so an admin could plant a name like `<svg onload=...>` straight
+  // into the roster — which then rendered unescaped in the feed's top-streak
+  // tile. The sink is fixed too, but a roster name should never have been able
+  // to carry markup in the first place.
+  if(newName.length < 2){ toast('Names must be at least 2 characters.','error'); return; }
+  if(/[^\p{L}\p{N} .\-]/u.test(newName)){ toast('Name can only contain letters, numbers, spaces, hyphens and periods — no symbols.','error'); return; }
   if((season.roster||[]).some(p=>p.name.toLowerCase()===newName.toLowerCase() && p.name!==oldName)){
     toast(`"${newName}" is already taken in this group.`,'error'); return;
   }
@@ -8376,7 +8410,7 @@ function renderGlobalFromCache({groups,todayByGroup}){
   const top=playerEntries.slice(0,5);
   ptsEl.innerHTML=top.length===0
     ?'<div class="tmuted">No one has opted in yet. Turn on "Show me on the global leaderboard" on your Home screen to appear here.</div>'
-    :top.map((e,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(e.name)}</div><div class="lbmeta">${esc(e.group)}${e.groups>1?` · best of ${e.groups}`:''}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${e.points}</div><div style="font-size:10px;color:var(--muted)">pts</div></div></div>`).join('');
+    :top.map((e,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(e.name)}</div><div class="lbmeta">${esc(e.group)}${e.groups>1?` · best of ${e.groups}`:''}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${esc(e.points)}</div><div style="font-size:10px;color:var(--muted)">pts</div></div></div>`).join('');
 }
 
 // R3 BACKFILL — one-time seed of the denormalized rollups from live data using
