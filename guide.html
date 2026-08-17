@@ -113,6 +113,21 @@ footer a{color:var(--gold)}
 .rv.on{opacity:1;transform:none}
 .rv-d1{transition-delay:.06s}.rv-d2{transition-delay:.12s}.rv-d3{transition-delay:.18s}
 @media(prefers-reduced-motion:reduce){.rv{opacity:1!important;transform:none!important;transition:none!important}}
+/* one-question-at-a-time quiz */
+.qbar{height:4px;background:var(--card2);border-radius:3px;overflow:hidden;margin-bottom:2px}
+.qbar i{display:block;height:100%;background:var(--gold);border-radius:3px;transition:width .35s cubic-bezier(.22,.8,.3,1)}
+.qhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.qhead .of{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--mu);letter-spacing:.08em}
+.next{width:100%;font:inherit;font-size:16px;font-weight:800;color:#1a1400;background:var(--gold);
+  border:0;border-radius:13px;padding:14px;cursor:pointer;display:none}
+.next.on{display:block}
+.next:focus-visible{outline:2px solid var(--tx);outline-offset:2px}
+.qwrap{position:relative}
+.qfade{animation:qin .32s cubic-bezier(.22,.8,.3,1)}
+@keyframes qin{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.qfade{animation:none}}
+.recap{display:flex;flex-direction:column;gap:7px;margin-top:4px;text-align:left}
+.recap div{font-size:13.5px;color:var(--mu);display:flex;gap:8px;align-items:flex-start}
 @media(max-width:400px){.grid2{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -436,7 +451,8 @@ footer a{color:var(--gold)}
   <p class="k">Last bit</p>
   <h2>Nine questions</h2>
   <p class="sub">Every wrong answer explains itself.</p>
-  <div id="quiz" style="display:flex;flex-direction:column;gap:14px"></div>
+  <div class="qbar"><i id="qprog" style="width:0%"></i></div>
+  <div class="qwrap"><div id="quiz"></div></div>
   <div class="sc" id="scBox"><div class="n" id="scN">0/9</div><p id="scM"></p></div>
 </section>
 
@@ -570,42 +586,138 @@ const QUIZ=[
      "Correct. Days are the engine — and they unlock perfect weeks and team streaks too.",
      "Extra workouts the same day add nothing. Spread them out."]}
 ];
-const el=document.getElementById('quiz');let done=0,right=0;
-QUIZ.forEach((it,i)=>{
-  const b=document.createElement('div');b.className='q';
-  const n=document.createElement('div');n.className='qn';n.textContent='Q'+(i+1)+' of '+QUIZ.length;
-  const t=document.createElement('div');t.className='qt';t.textContent=it.q;
-  const o=document.createElement('div');o.className='opts';
-  const e=document.createElement('div');e.className='exp';
-  it.a.forEach((txt,ai)=>{
-    const btn=document.createElement('button');btn.className='opt';btn.type='button';btn.textContent=txt;
-    btn.addEventListener('click',()=>{
-      if(b.dataset.d)return;b.dataset.d='1';
-      const ok=ai===it.c;done++;if(ok)right++;
-      [...o.children].forEach((x,xi)=>{x.disabled=true;
-        if(xi===it.c)x.classList.add('ok');else if(xi===ai)x.classList.add('no');});
-      e.className='exp on '+(ok?'good':'bad');e.innerHTML='';
-      const lb=document.createElement('b');lb.textContent=ok?'Correct':'Not quite';
-      e.appendChild(lb);e.appendChild(document.createTextNode(it.w[ai]));
-      if(!ok){const p=document.createElement('p');p.style.marginTop='7px';
-        p.innerHTML='<b style="color:var(--grn)">Answer: '+it.a[it.c]+'</b>';e.appendChild(p);}
-      if(done===QUIZ.length)fin();
+/* ══ ANALYTICS — first-party counters, no third-party SDK ═════════════════
+   Deliberately NOT Google Analytics: the iOS privacy manifest declares this
+   app carries no third-party analytics, and that declaration has to stay true.
+   So this writes plain counters into our own Firestore, bucketed by day, with
+   no identifiers of any kind — nothing here can be traced to a person.
+   Every call is fire-and-forget and wrapped: analytics must never be able to
+   break the page it measures. */
+var FG = (function(){
+  var KEY='AIzaSyCIXojxM6N6f6kp10g7zYV5XYTyLJ6pz2g', PID='forge-25c8c';
+  if(/forge-staging|localhost|127\.0\.0\.1/.test(location.host+location.pathname)){
+    KEY='AIzaSyD-bFi6X9Hevwmg-p65ajz35G64wco90CA'; PID='forge-staging-865ff';
+  }
+  var tokenP=null;
+  function token(){
+    if(tokenP) return tokenP;
+    tokenP = fetch('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key='+KEY,
+      {method:'POST',headers:{'Content-Type':'application/json'},body:'{"returnSecureToken":true}'})
+      .then(function(r){ return r.json(); }).then(function(j){ return j.idToken||null; })
+      .catch(function(){ return null; });
+    return tokenP;
+  }
+  function day(){ var d=new Date();
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function bump(fields){
+    try{
+      token().then(function(t){
+        if(!t) return;
+        var doc='projects/'+PID+'/databases/(default)/documents/guideStats/'+day();
+        fetch('https://firestore.googleapis.com/v1/projects/'+PID+'/databases/(default)/documents:commit',
+          {method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},
+           body:JSON.stringify({writes:[{
+             update:{name:doc,fields:{}}, updateMask:{fieldPaths:[]},
+             updateTransforms:fields.map(function(f){
+               return {fieldPath:f,increment:{integerValue:'1'}}; })
+           }]})}).catch(function(){});
+      });
+    }catch(e){}
+  }
+  return { bump: bump };
+})();
+
+/* One view per browser session, so a refresh or a scroll-back doesn't inflate
+   the number. sessionStorage, not localStorage: a genuine return visit
+   tomorrow SHOULD count again. */
+try{
+  if(!sessionStorage.getItem('fg_view')){ sessionStorage.setItem('fg_view','1'); FG.bump(['views']); }
+}catch(e){ FG.bump(['views']); }
+
+/* ══ QUIZ — one question at a time ════════════════════════════════════════
+   Nine cards on screen at once let people skim past the explanations, which
+   are the entire point. One card, one decision, then Next. */
+(function(){
+  var host=document.getElementById('quiz'), prog=document.getElementById('qprog'),
+      box=document.getElementById('scBox');
+  if(!host) return;
+  var i=0, right=0, started=false, answers=[];
+
+  function render(){
+    var it=QUIZ[i];
+    host.innerHTML='';
+    var card=document.createElement('div'); card.className='q qfade';
+    var head=document.createElement('div'); head.className='qhead';
+    var qn=document.createElement('div'); qn.className='qn'; qn.textContent='Question '+(i+1);
+    var of=document.createElement('div'); of.className='of'; of.textContent=(i+1)+' / '+QUIZ.length;
+    head.append(qn,of);
+    var t=document.createElement('div'); t.className='qt'; t.textContent=it.q;
+    var opts=document.createElement('div'); opts.className='opts';
+    var exp=document.createElement('div'); exp.className='exp';
+    var next=document.createElement('button'); next.className='next'; next.type='button';
+    next.textContent = (i===QUIZ.length-1) ? 'See my score' : 'Next question';
+
+    it.a.forEach(function(txt,ai){
+      var b=document.createElement('button'); b.className='opt'; b.type='button'; b.textContent=txt;
+      b.addEventListener('click',function(){
+        if(card.dataset.d) return; card.dataset.d='1';
+        if(!started){ started=true; FG.bump(['quizStarted']); }
+        var ok = ai===it.c;
+        if(ok) right++;
+        answers.push({q:it.q, ok:ok});
+        FG.bump(['q'+(i+1)+(ok?'_ok':'_no')]);
+        [].forEach.call(opts.children,function(x,xi){
+          x.disabled=true;
+          if(xi===it.c) x.classList.add('ok'); else if(xi===ai) x.classList.add('no');
+        });
+        exp.className='exp on '+(ok?'good':'bad'); exp.innerHTML='';
+        var lb=document.createElement('b'); lb.textContent = ok?'Correct':'Not quite';
+        exp.appendChild(lb); exp.appendChild(document.createTextNode(it.w[ai]));
+        if(!ok){ var pp=document.createElement('p'); pp.style.marginTop='7px';
+          pp.innerHTML='<b style="color:var(--grn)">Answer: '+it.a[it.c]+'</b>'; exp.appendChild(pp); }
+        next.classList.add('on'); next.focus();
+      });
+      opts.appendChild(b);
     });
-    o.appendChild(btn);
-  });
-  b.append(n,t,o,e);el.appendChild(b);
-});
-function fin(){
-  const box=document.getElementById('scBox');
-  document.getElementById('scN').textContent=right+'/'+QUIZ.length;
-  const m={9:"Flawless. You understand Forge better than most people running a group.",
+
+    next.addEventListener('click',function(){
+      i++;
+      if(i<QUIZ.length){ render(); card.scrollIntoView({behavior:'smooth',block:'center'}); }
+      else fin();
+    });
+
+    card.append(head,t,opts,exp,next);
+    host.appendChild(card);
+    if(prog) prog.style.width = Math.round((i/QUIZ.length)*100)+'%';
+  }
+
+  function fin(){
+    if(prog) prog.style.width='100%';
+    host.innerHTML='';
+    FG.bump(['quizDone','sc'+right]);
+    var m={9:"Flawless. You understand Forge better than most people running a group.",
            8:"Excellent. One slip, and you read why.",
            6:"Solid. The ones you missed are the ones that quietly cost people points.",
            3:"Fair start — scroll back to the points section, it's the half that decides the board.",
            0:"That's what this page is for. Skim it again and retry — five minutes."};
-  let msg=m[0];for(const k of [9,8,6,3]){if(right>=k){msg=m[k];break;}}
-  document.getElementById('scM').textContent=msg;
-  box.classList.add('on');box.scrollIntoView({behavior:'smooth',block:'center'});
-}
+    var msg=m[0]; [9,8,6,3].some(function(k){ if(right>=k){ msg=m[k]; return true; } });
+    document.getElementById('scN').textContent=right+'/'+QUIZ.length;
+    document.getElementById('scM').textContent=msg;
+    var wrong=answers.filter(function(a){ return !a.ok; });
+    var old=box.querySelector('.recap'); if(old) old.remove();
+    if(wrong.length){
+      var r=document.createElement('div'); r.className='recap';
+      var h=document.createElement('div');
+      h.innerHTML='<b style="color:var(--tx)">Worth re-reading:</b>'; r.appendChild(h);
+      wrong.forEach(function(a){ var d=document.createElement('div');
+        d.innerHTML='<span style="color:var(--red)">•</span><span>'+a.q+'</span>'; r.appendChild(d); });
+      box.appendChild(r);
+    }
+    box.classList.add('on');
+    box.scrollIntoView({behavior:'smooth',block:'center'});
+  }
+
+  render();
+})();
 </script>
 </body></html>

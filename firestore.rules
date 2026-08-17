@@ -179,6 +179,19 @@ service cloud.firestore {
     // PIN-claim rate limiter (claimIdentity). Written only by the Function via
     // the admin SDK, which bypasses rules — so no client, signed in or not,
     // can read the attempt history or reset its own budget.
+    // GUIDE COUNTERS — goforge.in/guide. One doc per calendar day holding
+    // nothing but integers: views, quizStarted, quizDone, per-question
+    // right/wrong, and a score histogram. No identifiers, no personal data,
+    // nothing that can be tied back to a person — which is also what keeps the
+    // iOS privacy manifest's "no third-party analytics" declaration true.
+    // Increment-only in practice; the size cap stops the doc being used as
+    // free storage, and delete stays off so history can't be erased.
+    match /guideStats/{day} {
+      allow read:          if isAuthed();
+      allow create, update: if isAuthed() && request.resource.data.size() <= 40;
+      allow delete:        if false;
+    }
+
     match /authRateLimits/{uid} {
       allow read, write: if false;
     }
