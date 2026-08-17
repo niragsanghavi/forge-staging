@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>How Forge Works</title>
+<meta name="description" content="Everything you need to know about Forge in ten minutes — how points work, what counts as a workout, and how to not lose your streak.">
+<meta name="theme-color" content="#0a0a0d">
+<style>
+:root{
+  --bg:#0a0a0d; --card:#141419; --card-2:#1d1d24;
+  --border:rgba(255,255,255,.08); --hairline:rgba(255,255,255,.07);
+  --text:#f5f5f7; --muted:#9a9aa3;
+  --gold:#d4a843; --gold-l:rgba(212,168,67,.13);
+  --green:#30d158; --green-l:rgba(48,209,88,.12);
+  --red:#ff453a; --red-l:rgba(255,69,58,.12);
+  --orange:#ff6a3c; --orange-l:rgba(255,106,60,.12);
+  --blue:#409cff; --blue-l:rgba(64,156,255,.12);
+  --font:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Roboto,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--text); font-family:var(--font);
+  font-size:17px; line-height:1.62; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:720px;margin:0 auto;padding:40px 20px 100px;display:flex;flex-direction:column;gap:52px}
+h1,h2,h3{margin:0;font-weight:800;letter-spacing:-.02em;text-wrap:balance}
+h1{font-size:clamp(34px,8vw,52px);line-height:1.02}
+h2{font-size:clamp(23px,4.6vw,30px);line-height:1.15}
+h3{font-size:18px;line-height:1.3}
+p{margin:0}
+a{color:var(--gold)}
+.kicker{font-size:11px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:var(--gold)}
+.lede{font-size:19px;color:var(--muted)}
+header{display:flex;flex-direction:column;gap:16px;padding-bottom:34px;border-bottom:1px solid var(--border)}
+.wordmark{font-size:26px;font-weight:900;letter-spacing:.34em;color:var(--gold)}
+section{display:flex;flex-direction:column;gap:18px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:12px}
+.big{font-size:44px;font-weight:900;color:var(--gold);line-height:1;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.rule{display:flex;gap:16px;align-items:flex-start;padding:16px 0;border-bottom:1px solid var(--hairline)}
+.rule:last-child{border-bottom:0;padding-bottom:0}
+.pts{flex:0 0 78px;font-weight:900;font-size:20px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.pos{color:var(--green)} .neg{color:var(--red)} .neu{color:var(--gold)}
+.rt{display:flex;flex-direction:column;gap:3px;min-width:0}
+.rt b{font-size:16px}
+.rt span{font-size:14.5px;color:var(--muted)}
+.yn{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.yn>div{border-radius:14px;padding:16px;border:1px solid var(--border)}
+.yes{background:var(--green-l);border-color:rgba(48,209,88,.3)!important}
+.no{background:var(--red-l);border-color:rgba(255,69,58,.3)!important}
+.yn h3{font-size:14px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px}
+.yes h3{color:var(--green)} .no h3{color:var(--red)}
+.yn ul{margin:0;padding-left:18px;font-size:15px;color:var(--muted);display:flex;flex-direction:column;gap:5px}
+.note{background:var(--gold-l);border-left:3px solid var(--gold);border-radius:0 12px 12px 0;padding:16px 18px;font-size:15.5px}
+.note b{color:var(--gold)}
+.warn{background:var(--orange-l);border-left:3px solid var(--orange);border-radius:0 12px 12px 0;padding:16px 18px;font-size:15.5px}
+.warn b{color:var(--orange)}
+.tabs{display:flex;flex-direction:column;gap:10px}
+.tab{display:flex;gap:14px;align-items:flex-start;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:15px 17px}
+.tab .nm{flex:0 0 78px;font-weight:800;color:var(--gold);font-size:15px}
+.tab .ds{font-size:15px;color:var(--muted)}
+.math{background:var(--card-2);border-radius:14px;padding:18px;font-size:15px;display:flex;flex-direction:column;gap:7px}
+.math .l{display:flex;justify-content:space-between;gap:14px;color:var(--muted)}
+.math .l b{color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
+.math .tot{border-top:1px solid var(--border);padding-top:9px;margin-top:3px;color:var(--text);font-weight:800}
+.math .tot b{color:var(--gold);font-size:19px}
+/* quiz */
+.q{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:14px}
+.qn{font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.opts{display:flex;flex-direction:column;gap:9px}
+.opt{width:100%;text-align:left;font:inherit;font-size:15.5px;color:var(--text);background:var(--card-2);
+     border:1px solid var(--border);border-radius:13px;padding:14px 16px;cursor:pointer;transition:border-color .15s,background .15s}
+.opt:hover:not(:disabled){border-color:var(--gold)}
+.opt:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.opt:disabled{cursor:default}
+.opt.correct{background:var(--green-l);border-color:var(--green)}
+.opt.wrong{background:var(--red-l);border-color:var(--red)}
+.exp{font-size:15px;border-radius:13px;padding:14px 16px;display:none}
+.exp.show{display:block}
+.exp.bad{background:var(--red-l);border-left:3px solid var(--red)}
+.exp.good{background:var(--green-l);border-left:3px solid var(--green)}
+.exp b{display:block;margin-bottom:4px}
+.exp.bad b{color:var(--red)} .exp.good b{color:var(--green)}
+.score{background:var(--card);border:1px solid var(--gold);border-radius:18px;padding:24px;text-align:center;display:none;flex-direction:column;gap:8px}
+.score.show{display:flex}
+.score .n{font-size:44px;font-weight:900;color:var(--gold);font-variant-numeric:tabular-nums;line-height:1}
+.cta{display:block;text-align:center;background:var(--gold);color:#1a1400;font-weight:800;font-size:17px;
+     padding:17px;border-radius:15px;text-decoration:none}
+footer{border-top:1px solid var(--border);padding-top:26px;color:var(--muted);font-size:14px;display:flex;flex-direction:column;gap:8px}
+@media(max-width:520px){
+  body{font-size:16px}
+  .yn{grid-template-columns:1fr}
+  .pts{flex-basis:64px;font-size:18px}
+  .tab .nm{flex-basis:64px}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="wordmark">FORGE</div>
+  <p class="kicker">The whole thing, explained</p>
+  <h1>How Forge works</h1>
+  <p class="lede">Ten minutes and you'll know everything — how points actually work, what counts as a workout, and the one mistake nearly everyone makes in week one. There's a short quiz at the end.</p>
+</header>
+
+<section>
+  <h2>The idea, in one paragraph</h2>
+  <p>You log the workouts you actually did. Your group sees it. Points and streaks are calculated for you and your team, and a leaderboard shows how everyone's doing. That's the entire app.</p>
+  <p>It works for one reason: <b>somebody notices when you stop.</b> Every fitness app you've abandoned let you quit quietly. Here, a team streak dies if you skip — and it dies for people whose names you know.</p>
+</section>
+
+<section>
+  <h2>Logging a workout</h2>
+  <p>Open the app, tap the workout you did, done. Two taps. You can log for <b>today, or any of the last 7 days</b> if you forgot.</p>
+  <div class="note"><b>You can't log the future.</b> And you can't go back further than about a week — otherwise "I definitely worked out on the 3rd" becomes a monthly negotiation.</div>
+</section>
+
+<section>
+  <h2>What counts as a workout?</h2>
+  <p>Forge is deliberately generous here. If you deliberately moved your body for a reasonable stretch of time, it counts.</p>
+  <div class="yn">
+    <div class="yes">
+      <h3>Counts</h3>
+      <ul>
+        <li>Gym, weights, any lifting</li>
+        <li>Run, walk, cycle, swim</li>
+        <li>Cricket, football, padel, badminton, tennis, pickleball</li>
+        <li>Yoga, pilates, stretching, physio</li>
+        <li>Home workout, HIIT, skipping</li>
+        <li>A long deliberate walk</li>
+        <li>Dance, Zumba, martial arts</li>
+      </ul>
+    </div>
+    <div class="no">
+      <h3>Doesn't count</h3>
+      <ul>
+        <li>Walking to the car</li>
+        <li>Housework and shopping</li>
+        <li>Standing at a wedding for six hours</li>
+        <li>A workout you're <em>going</em> to do tonight</li>
+        <li>Someone else's workout</li>
+      </ul>
+    </div>
+  </div>
+  <p>Nobody audits you. The honour system is the whole design — cheating a fitness app is just an elaborate way of lying to yourself, and your group can see the feed anyway.</p>
+</section>
+
+<section>
+  <p class="kicker">The part everyone gets wrong</p>
+  <h2>Points are per <em>day</em>, not per workout</h2>
+  <div class="card">
+    <div class="big">5</div>
+    <p><b>You get 5 points for a day you logged.</b> Not 5 per workout. Gym in the morning and cricket in the evening is a great day — and it's still 5 points.</p>
+    <p style="color:var(--muted);font-size:15.5px">Log both anyway. The feed shows them, your stats count them, and the variety is genuinely good for you. But for scoring, the question is only ever: <em>did you show up that day?</em></p>
+  </div>
+  <div class="note">This is the single most common misunderstanding. <b>Forge rewards showing up often, not doing more in one go.</b> Six days of one workout beats two days of three.</div>
+</section>
+
+<section>
+  <h2>Every way to score</h2>
+  <div class="card">
+    <div class="rule"><div class="pts pos">+5</div><div class="rt"><b>A day you logged</b><span>The foundation. Everything else is a bonus on top.</span></div></div>
+    <div class="rule"><div class="pts pos">+10</div><div class="rt"><b>A perfect week</b><span>Seven days in a row inside the same month. You can earn this more than once a month — each streak of 7 counts separately.</span></div></div>
+    <div class="rule"><div class="pts pos">+1 → +3</div><div class="rt"><b>Team streak day</b><span>When enough of your team logs on the same day, the team streak grows and everyone who logged that day earns points. Day one of the streak pays 1, day two pays 2, day three onwards pays 3.</span></div></div>
+    <div class="rule"><div class="pts pos">+50</div><div class="rt"><b>The 30-day bonus</b><span>Awarded by your admin for a full month of consistency. The biggest single prize in the app.</span></div></div>
+    <div class="rule"><div class="pts pos">+10 / +15</div><div class="rt"><b>Captain and Vice-Captain bonus</b><span>If your group uses roles: hit your target by month end and you're rewarded. Miss it and you lose 10 — leaders are held to a higher standard.</span></div></div>
+    <div class="rule"><div class="pts neg">−5</div><div class="rt"><b>Per workout below the minimum</b><span>Applied only at month end. Three short of the minimum costs 15.</span></div></div>
+    <div class="rule"><div class="pts neu">×2</div><div class="rt"><b>Boss Week</b><span>An optional twist your admin can switch on. Every day that week is worth double.</span></div></div>
+  </div>
+  <div class="warn"><b>Your score can never go below zero.</b> A bad month is a bad month — it can't put you in debt.</div>
+</section>
+
+<section>
+  <h2>What a real month looks like</h2>
+  <p>Say you logged 14 days in August, including one run of seven days straight, and your team held a 5-day streak that you were part of.</p>
+  <div class="math">
+    <div class="l"><span>14 days logged × 5</span><b>70</b></div>
+    <div class="l"><span>One perfect week</span><b>+10</b></div>
+    <div class="l"><span>Team streak days (1+2+3+3+3)</span><b>+12</b></div>
+    <div class="l tot"><span>Total</span><b>92</b></div>
+  </div>
+  <p style="color:var(--muted);font-size:15.5px">Notice how much came from simply turning up: 70 of 92. The bonuses are seasoning, not the meal.</p>
+</section>
+
+<section>
+  <h2>Streaks — the two kinds</h2>
+  <div class="card">
+    <h3 style="color:var(--orange)">Your personal streak 🔥</h3>
+    <p>Days in a row that you logged. It's on your home screen and it's pure pride — <b>it earns no points</b>. It exists to make you not want to break it, which turns out to be worth more than points.</p>
+  </div>
+  <div class="card">
+    <h3 style="color:var(--gold)">Your team streak</h3>
+    <p>This one <em>does</em> pay. Each day, if enough of your team logs, the team streak grows — and it pays more the longer it runs, up to 3 points a day.</p>
+    <p style="color:var(--muted);font-size:15.5px">"Enough" is a bit over half your team, rounded up. In a team of 5, three of you need to log that day. You don't need everyone — but you do need each other.</p>
+  </div>
+  <div class="note">If you log and your team doesn't reach the number, <b>you keep your 5 points.</b> You're never punished for someone else's rest day. You just don't get the bonus.</div>
+</section>
+
+<section>
+  <h2>Months and seasons</h2>
+  <p>Forge runs in months. On the 1st, everything resets — points back to zero, leaderboard blank, everyone level again. Your history is kept, but the competition is fresh.</p>
+  <p>This is deliberate. A monthly reset means <b>a terrible month never ruins the whole year</b>, and someone joining on the 20th is only three weeks behind, not a lost cause.</p>
+</section>
+
+<section>
+  <h2>Getting around</h2>
+  <div class="tabs">
+    <div class="tab"><div class="nm">Home</div><div class="ds">Your streak, your points, your calendar, and the button to log. Where you'll spend 95% of your time.</div></div>
+    <div class="tab"><div class="nm">Board</div><div class="ds">The leaderboard. Individual rankings and team standings.</div></div>
+    <div class="tab"><div class="nm">Feed</div><div class="ds">What everyone logged today. The social pressure engine.</div></div>
+    <div class="tab"><div class="nm">Global</div><div class="ds">Opt-in rankings across every Forge group. Off by default.</div></div>
+    <div class="tab"><div class="nm">Profile</div><div class="ds">Your all-time stats, badges, monthly goal, and settings.</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Small things worth knowing</h2>
+  <div class="card">
+    <p><b>Your PIN.</b> Four digits, set once. It stops someone else picking your name and logging as you. Set it the moment you join — before the group code gets shared around.</p>
+  </div>
+  <div class="card">
+    <p><b>Apple Health and Health Connect.</b> On the phone app you can let Forge see workouts your phone already recorded. It suggests them; you confirm with one tap. Your health data never leaves your phone.</p>
+  </div>
+  <div class="card">
+    <p><b>Notifications.</b> Forge sends one: a Monday-morning note that last week's recap is ready. It will <em>never</em> nag you to exercise. You already know you should.</p>
+  </div>
+  <div class="card">
+    <p><b>Made a mistake?</b> Tap the day on your calendar and remove the entry. Wrong name on your logs, or joined twice? Ask your group admin — they can fix it.</p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Prove it</p>
+  <h2>Ten questions</h2>
+  <p class="lede">Every wrong answer explains itself. Getting one wrong is more useful than getting it right.</p>
+  <div id="quiz" style="display:flex;flex-direction:column;gap:16px"></div>
+  <div class="score" id="scoreBox">
+    <div class="n" id="scoreN">0/10</div>
+    <p id="scoreMsg"></p>
+  </div>
+</section>
+
+<section>
+  <h2>That's everything</h2>
+  <p>Log the days you train. Keep your team's streak alive. Don't overthink the rest — the points look after themselves.</p>
+  <a class="cta" href="https://goforge.in/">Open Forge</a>
+</section>
+
+<footer>
+  <p>Forge — a shared workout log for small groups.</p>
+  <p><a href="https://goforge.in/">goforge.in</a> · <a href="https://goforge.in/privacy">Privacy</a></p>
+</footer>
+
+</div>
+
+<script>
+const QUIZ = [
+  { q:"You do a gym session in the morning and play cricket in the evening. How many points for the day?",
+    a:["5","10","15","Depends on how long each one was"], correct:0,
+    why:["Right. Points are per day you showed up, not per workout. Log both anyway — they show in the feed and count towards your stats — but the score is 5.",
+         "This is the most common guess. It'd be true if points were per workout, but they're per DAY. Two workouts on one day is still one day: 5 points.",
+         "Points aren't stacked per workout. A day you logged is 5 points, whether that's one workout or four.",
+         "Duration isn't tracked at all. Forge only asks whether you showed up that day."] },
+  { q:"You forgot to log Tuesday's run. It's now Friday. What can you do?",
+    a:["Nothing, it's lost","Log it — you can go back about a week","Ask an admin to add it","Log it twice today to make up"], correct:1,
+    why:["Not lost at all. Forge lets you fill in the last several days yourself.",
+         "Correct. Tap that day on your calendar and log it. The window is about a week, so don't leave it for a fortnight.",
+         "You don't need an admin for this — you can backfill recent days yourself.",
+         "Two workouts today would still only be today's 5 points, and Tuesday would stay empty. Just log Tuesday."] },
+  { q:"Your personal streak is 12 days. How many points is that streak worth?",
+    a:["12","24","Zero — it's for pride, not points","60"], correct:2,
+    why:["Your personal streak pays nothing directly. The points came from the 12 days themselves (5 each), not the streak.",
+         "Streaks aren't multiplied. The personal streak is a display of consistency, not a scoring rule.",
+         "Correct, and it surprises people. Your personal streak earns no points — it exists to make breaking it feel bad. The TEAM streak is the one that pays.",
+         "That's what the 12 days earned you at 5 each — but that's the days, not the streak. The streak itself adds nothing."] },
+  { q:"You log every single day. Your team doesn't hit its daily number. What happens to you?",
+    a:["You lose points","You keep your 5 a day, you just miss the team bonus","Your streak resets","Nothing counts that day"], correct:1,
+    why:["You're never penalised for what your teammates did or didn't do. Your own days always count.",
+         "Correct. Your 5 points a day are yours regardless. The team bonus is extra on top, and that's the part that needs the others.",
+         "Your personal streak depends only on you. It keeps running.",
+         "Your day absolutely counts. Only the team bonus is affected."] },
+  { q:"It's the 1st of the month. Your 400 points from last month are…",
+    a:["Carried over","Reset to zero — a new season starts","Halved","Converted into a badge"], correct:1,
+    why:["Points don't carry. Every month starts level for everyone.",
+         "Correct. Monthly reset. It means a bad month never ruins your year, and a new joiner is never hopelessly behind.",
+         "Nothing is halved — the new month simply starts at zero.",
+         "Your history is saved and some achievements are recorded, but the points themselves just reset."] },
+  { q:"What's the biggest single points prize in Forge?",
+    a:["A perfect week (+10)","The 30-day bonus (+50)","Boss Week doubling","Captain bonus (+10)"], correct:1,
+    why:["A perfect week is +10 — good, but not the biggest.",
+         "Correct. +50, awarded by your admin for a full month of consistency. Nothing else comes close in one go.",
+         "Boss Week is powerful because it doubles a whole week, but it's not a single fixed prize — and it's only on if your admin enables it.",
+         "The Captain bonus is +10 if you hit your target — and it costs you 10 if you don't."] },
+  { q:"Which of these should you NOT log?",
+    a:["A 40-minute walk","Yoga","The workout you're planning to do tonight","A cricket match"], correct:2,
+    why:["A deliberate 40-minute walk absolutely counts.",
+         "Yoga counts. So do pilates, stretching and physio.",
+         "Correct. Log it after you've done it. Logging intentions is how a workout log turns into fiction — and you can't log future dates anyway.",
+         "Cricket counts, as do football, padel, badminton and the rest."] },
+  { q:"Your team has 5 people. Roughly how many need to log on the same day for the team streak to grow?",
+    a:["All 5","3","2","Just you"], correct:1,
+    why:["You never need everybody — that would make the streak impossible to hold and people would give up.",
+         "Correct. A bit over half, rounded up — 3 out of 5. Enough that it takes real coordination, forgiving enough to survive someone's rest day.",
+         "2 out of 5 is under half, which isn't enough to keep the streak alive.",
+         "One person can't hold a team streak alone — that's rather the point of it being a team streak."] },
+  { q:"Why should you set your 4-digit PIN as soon as you join?",
+    a:["It unlocks extra features","It stops someone else picking your name and logging as you","It's needed for points","It backs up your data"], correct:1,
+    why:["Your PIN doesn't unlock anything — every feature works without it.",
+         "Correct. Without a PIN, anyone with the group code could choose your name. The PIN is what makes your name yours.",
+         "Points work fine without a PIN. It's about protecting your identity, not scoring.",
+         "Your data lives on the server regardless. The PIN is about who can claim to be you."] },
+  { q:"You want to climb the leaderboard. What's the most effective thing to do?",
+    a:["Longer workouts","Show up on more days","More workouts per day","Wait for Boss Week"], correct:1,
+    why:["Length isn't measured at all. A 20-minute session scores exactly like a two-hour one.",
+         "Correct. Days are the engine — 5 points each, and they're what unlocks perfect weeks and team-streak days too. Turning up often beats everything.",
+         "Extra workouts on the same day add nothing to your score. Spread them across days instead.",
+         "Boss Week doubles what you already do — if you're not logging days, doubling nothing is still nothing."] }
+];
+
+const quizEl = document.getElementById('quiz');
+let answered = 0, right = 0;
+
+QUIZ.forEach((item, qi) => {
+  const box = document.createElement('div');
+  box.className = 'q';
+  const n = document.createElement('div');
+  n.className = 'qn'; n.textContent = 'Question ' + (qi + 1) + ' of ' + QUIZ.length;
+  const h = document.createElement('h3'); h.textContent = item.q;
+  const opts = document.createElement('div'); opts.className = 'opts';
+  const exp = document.createElement('div'); exp.className = 'exp';
+  item.a.forEach((text, ai) => {
+    const b = document.createElement('button');
+    b.className = 'opt'; b.type = 'button'; b.textContent = text;
+    b.addEventListener('click', () => {
+      if (box.dataset.done) return;
+      box.dataset.done = '1';
+      const isRight = ai === item.correct;
+      answered++; if (isRight) right++;
+      [...opts.children].forEach((btn, bi) => {
+        btn.disabled = true;
+        if (bi === item.correct) btn.classList.add('correct');
+        else if (bi === ai) btn.classList.add('wrong');
+      });
+      exp.className = 'exp show ' + (isRight ? 'good' : 'bad');
+      exp.innerHTML = '';
+      const lab = document.createElement('b');
+      lab.textContent = isRight ? 'Correct' : 'Not quite';
+      exp.appendChild(lab);
+      exp.appendChild(document.createTextNode(item.why[ai]));
+      if (!isRight) {
+        const fix = document.createElement('p');
+        fix.style.marginTop = '8px';
+        fix.innerHTML = '<b style="color:var(--green)">The answer: ' + item.a[item.correct] + '</b>';
+        exp.appendChild(fix);
+      }
+      if (answered === QUIZ.length) showScore();
+    });
+    opts.appendChild(b);
+  });
+  box.append(n, h, opts, exp);
+  quizEl.appendChild(box);
+});
+
+function showScore(){
+  const box = document.getElementById('scoreBox');
+  document.getElementById('scoreN').textContent = right + '/' + QUIZ.length;
+  const msgs = {
+    10:"Flawless. You understand Forge better than most people who built their own group.",
+    9:"Excellent. One slip, and you read why. You're ready.",
+    7:"Solid. The bits you missed are the bits that quietly cost people points — worth a re-read.",
+    4:"Fair start. Read the points section once more; it's the half that decides the leaderboard.",
+    0:"Honestly, that's what this page is for. Scroll up, skim it again, and try once more — it takes five minutes."
+  };
+  let msg = msgs[0];
+  for (const k of [10,9,7,4]) { if (right >= k) { msg = msgs[k]; break; } }
+  document.getElementById('scoreMsg').textContent = msg;
+  box.classList.add('show');
+  box.scrollIntoView({behavior:'smooth', block:'center'});
+}
+</script>
+</body>
+</html>
