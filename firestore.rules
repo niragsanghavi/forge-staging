@@ -146,7 +146,24 @@ service cloud.firestore {
       allow update: if isAuthed()
         && ( resource.data.get('authUid', null) == null
              || request.auth.uid == resource.data.authUid )                       // owner-gated once linked
-        && request.resource.data.get('authUid', null) == resource.data.get('authUid', null);  // authUid immutable from a client
+        && request.resource.data.get('authUid', null) == resource.data.get('authUid', null)   // authUid immutable from a client
+        // pinHash IS WRITE-ONCE. Without this the ownership rule above closed
+        // nothing: it guards authUid only, so for any doc where authUid is null
+        // — which, with FEATURE_GOOGLE_AUTH off, is EVERY doc — an anonymous
+        // client could PATCH someone else's pinHash and then log in as them via
+        // submitPinEntry. Proven live against these very rules, 17 Aug 2026.
+        //
+        // Worse once Google auth ships: the attacker sets a hash, calls
+        // claimIdentity with the PIN they chose, and the server stamps THEIR
+        // authUid on the doc — after which the clause above locks the real
+        // owner out permanently.
+        //
+        // null/absent -> a value is allowed, because that is the legitimate
+        // grace flow setting a first PIN. value -> anything is refused, in both
+        // directions: allowing value -> null would just make the attack two
+        // writes instead of one.
+        && ( resource.data.get('pinHash', null) == null
+             || request.resource.data.get('pinHash', null) == resource.data.pinHash );
       allow delete: if false;
 
       // Path reserved for the future S2 snapshot writer — not built yet.
