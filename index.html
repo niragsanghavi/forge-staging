@@ -4561,7 +4561,113 @@ document.addEventListener('visibilitychange', function(){
   window._healthFgAt = now;
   try{ renderHealthSuggestions(); }
   catch(e){ logErr('healthForegroundRefresh', e); }
+  // The step challenge fills on the same signal, for the same reason: the day
+  // rolls over while the app sits in the background, and coming back to Forge
+  // is the moment to notice. Separately caught — a step failure must never stop
+  // the workout suggestions rendering.
+  try{ fillStepDays(); }
+  catch(e){ logErr('stepForegroundRefresh', e); }
 });
+
+/* ── THE STEP CHALLENGE: WRITE PATH ────────────────────────────────────────
+   Fills in every COMPLETED day of the current week that is not recorded yet,
+   then says what landed. Runs on app open and on every foreground.
+
+   NEVER TODAY. Today's step count climbs all day. Recording it would make the
+   board flicker, let people watch the race live, and turn "who won" into a
+   question of who refreshed last. Yesterday and earlier are final, which is
+   what a scoreboard needs.
+
+   IDEMPOTENT BY SHAPE, not by bookkeeping. Each day is a KEY in a map on one
+   doc per player per week, so writing 2026-09-01 five times sets the same key
+   five times. Opening the app repeatedly cannot double-count, and there is no
+   "already done" flag to get out of sync. That is also why it is one doc per
+   player per week rather than seven: a single merge write, and a single read
+   to draw the board.
+
+   BACKFILLS. Someone who does not open Forge from Monday to Thursday gets all
+   four days on Thursday, because both HealthKit and Health Connect serve
+   history. Missing the app is not the same as missing the steps.
+   ───────────────────────────────────────────────────────────────────────── */
+async function fillStepDays(){
+  // Every gate that makes this a no-op, cheapest first. Off-native, signed out,
+  // Health disconnected, or the challenge simply not switched on for this
+  // season — in all of those this function costs nothing and touches nothing.
+  if(!window.isNative || !isNative() || !healthEnabled()) return;
+  if(!season || !seasonId || !groupCode || !me || !me.name) return;
+  if(!isStepChallengeOn(season)) return;
+  if(window._stepFillInFlight) return;          // same re-entrancy shape as submitLog
+  window._stepFillInFlight = true;
+  try{
+    const now   = new Date();
+    const monday = weekMondayOf(now);
+    const yest   = new Date(now.getFullYear(), now.getMonth(), now.getDate()-1);
+    if(yest < monday) return;                   // it is Monday: nothing completed yet this week
+
+    const week    = getISOWeek(monday);
+    const docId   = week + '__' + String(me.name).toLowerCase().replace(/[^a-z0-9]+/g,'-');
+    const ref     = db.collection('groups').doc(groupCode).collection('seasons')
+                      .doc(seasonId).collection('stepWeeks').doc(docId);
+
+    // What is already recorded. A read failure must not cause a blind
+    // overwrite, so bail rather than guess — the next foreground retries.
+    let existing = {};
+    try{
+      const snap = await ref.get();
+      if(snap.exists) existing = (snap.data() || {}).days || {};
+    }catch(e){ logErr('fillStepDays: read', e); return; }
+
+    // Which completed days of this week are still missing.
+    const wanted = [];
+    for(let d = new Date(monday); d <= yest; d.setDate(d.getDate()+1)){
+      const key = ymdLocal(d);
+      if(existing[key] == null) wanted.push(key);
+    }
+    if(!wanted.length) return;
+
+    const steps = await healthDailySteps(monday, yest);
+    // Only the missing days, and only ones Health actually answered for. A day
+    // with no data stays ABSENT rather than being written as 0 — absent means
+    // "not known yet" and can still fill in later, whereas a stored 0 would
+    // freeze a genuine reading out forever.
+    const fresh = {};
+    for(const key of wanted){
+      const n = steps[key];
+      if(Number.isFinite(n) && n > 0) fresh[key] = Math.min(n, window.STEP_DAILY_CAP);
+    }
+    if(!Object.keys(fresh).length) return;
+
+    const days  = Object.assign({}, existing, fresh);
+    const total = Object.values(days).reduce((a,b)=>a+(Number(b)||0), 0);
+    const meRow = (season.roster||[]).find(p=>p && p.name===me.name) || {};
+    try{
+      await ref.set({
+        player: me.name, userId: meRow.userId || null, team: meRow.team || null,
+        week, weekStart: ymdLocal(monday),
+        days, total,
+        source: (window.Capacitor && Capacitor.platform === 'android') ? 'healthconnect' : 'healthkit',
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, {merge:true});
+    }catch(e){ logErr('fillStepDays: write', e); return; }
+
+    // Say what landed. One day is the overwhelmingly common case (you opened
+    // the app the morning after); the plural branch is the person coming back
+    // from a few days away, who should be told it caught up rather than left
+    // to wonder.
+    const keys = Object.keys(fresh).sort();
+    if(keys.length === 1){
+      toast('Yesterday’s steps recorded: ' + fresh[keys[0]].toLocaleString('en-IN'), 'success');
+    } else {
+      toast(keys.length + ' days of steps recorded: '
+            + Object.values(fresh).reduce((a,b)=>a+b,0).toLocaleString('en-IN') + ' total', 'success');
+    }
+    if(typeof renderHome === 'function'){ try{ renderHome(); }catch(e){ logErr('fillStepDays: rerender', e); } }
+  }catch(e){
+    logErr('fillStepDays', e);
+  }finally{
+    window._stepFillInFlight = false;
+  }
+}
 
 // month/year are passed explicitly because the suggestion already knows them:
 // healthRecentWorkouts reads them off the HealthKit sample's own start date. The
