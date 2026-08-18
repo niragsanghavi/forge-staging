@@ -233,7 +233,17 @@ window.healthConnect = async function(){
   const H = (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Health) || null;
   if(!H) return 'unsupported';
   try{
-    const s = await H.requestAuthorization({ read: ['workouts'] });
+    // 'steps' rides along with 'workouts' in ONE authorisation sheet. Asking
+    // twice would show the person two prompts for what they experience as one
+    // decision, and HealthKit does not re-prompt for a type already decided —
+    // so a later separate request for steps would silently resolve as
+    // "processed" while returning nothing. Both types, one ask, always.
+    //
+    // WIDENING THIS ARRAY IS AN APP STORE EVENT. The read scope is compiled
+    // into the binary and reviewed; adding a type needs a new build, a new
+    // review, and NSHealthShareUsageDescription copy that names it. Do not add
+    // a type here speculatively.
+    const s = await H.requestAuthorization({ read: ['workouts', 'steps'] });
     // HealthKit never reveals read-denial (by design — denial is itself
     // health information). readAuthorized tells us the sheet was processed;
     // an empty query later is indistinguishable from "no workouts", which is
@@ -268,6 +278,111 @@ window.healthRecentWorkouts = async function(){
       };
     }).filter(w => w.minutes >= 10);   // a 3-minute stroll is not a workout
   }catch(e){ return []; }
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE STEP CHALLENGE — weekly, team-vs-team, read-only from the device.
+
+   ONE NUMBER CONFIGURES IT. `perMemberTarget` (70,000/week = 10k/day) gives
+   both the displayed team goal and the win test, because comparing team
+   AVERAGES is the same arithmetic as comparing totals-over-size:
+
+       team goal shown  = perMemberTarget × teamSize    (5 → 3,50,000)
+       winner           = highest team average
+       cleared the bar? = winning average ≥ perMemberTarget
+
+   That equivalence is why unequal teams are fair for free. Forge's teams are
+   7-and-8 in at least one live group, and a SUM race would hand the 8 a ~14%
+   head start — the same uneven-split unfairness the team-streak threshold
+   already ran into.
+
+   WHY NO MANUAL ENTRY. A typed step count is a number a person chooses, and
+   points hang on it. Reading the platform's own store is the only version of
+   this that is worth playing, and it is also why the feature is native-only:
+   a browser cannot see step data at all.
+
+   COMPLETED DAYS ONLY. Today's count climbs all day. Scoring it would make the
+   board flicker, let people watch the race live, and turn "who won" into a
+   question of who refreshed last. Yesterday and earlier are final and boring,
+   which is what a scoreboard needs.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+window.STEP_PER_MEMBER_TARGET = 70000;   // per member, per week (10k × 7)
+window.STEP_WIN_BONUS         = 5;       // points to each member of the winning team
+// Above any real human day (the recorded 24h record is ~100k) and far below the
+// absurd. Applied on READ as well as write, so a forged doc cannot move a board
+// even if it slips past the rules — the same belt-and-braces shape as
+// KM_MAX_PER_LOG in the scoring engine.
+window.STEP_DAILY_CAP         = 100000;
+
+// YYYY-MM-DD in LOCAL time. Deliberately not toISOString(), which converts to
+// UTC and would file an 11pm IST walk under the following day.
+window.ymdLocal = function(d){
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0')
+                         + '-' + String(d.getDate()).padStart(2,'0');
+};
+
+// The Monday of the week containing `d`, at local midnight. Forge weeks are
+// Mon–Sun everywhere (perfect-week scoring, twist windows), so this matches.
+window.weekMondayOf = function(d){
+  const m = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const dow = m.getDay() || 7;             // Sun(0) → 7
+  m.setDate(m.getDate() - (dow - 1));
+  return m;
+};
+
+// Steps per day for a date range, as { 'YYYY-MM-DD': n }. Reads the platform
+// health store — HealthKit on iOS, Health Connect on Android; the plugin
+// presents one API over both. Returns {} on any failure: a health hiccup must
+// never break Home, same contract as healthRecentWorkouts above.
+window.healthDailySteps = async function(fromDate, toDate){
+  if(!window.isNative() || !window.healthEnabled()) return {};
+  const H = (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Health) || null;
+  if(!H || typeof H.queryAggregated !== 'function') return {};
+  try{
+    const start = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate());
+    const end   = new Date(toDate.getFullYear(),   toDate.getMonth(),   toDate.getDate(), 23, 59, 59, 999);
+    if(end < start) return {};
+    const r = await H.queryAggregated({
+      dataType: 'steps', bucket: 'day',
+      startDate: start.toISOString(), endDate: end.toISOString()
+    });
+    const out = {};
+    for(const b of (r && r.aggregatedData) || []){
+      // The bucket's own start instant decides which local day it belongs to.
+      const d = new Date(b.startDate);
+      if(isNaN(d.getTime())) continue;
+      // A bucket can carry the value under `value` or under a per-type map,
+      // depending on plugin version. Coerce hard: this number is about to
+      // become points, and NaN/Infinity/strings must never reach Firestore.
+      const raw = (b.value != null) ? b.value
+                : (b.values && b.values.steps != null) ? b.values.steps
+                : null;
+      const n = Math.round(Number(raw));
+      if(!Number.isFinite(n) || n <= 0) continue;
+      out[window.ymdLocal(d)] = Math.min(n, window.STEP_DAILY_CAP);
+    }
+    return out;
+  }catch(e){ return {}; }
+};
+
+// Is the challenge switched on for the season being viewed? Super-admin sets
+// season.stepChallenge.enabled. Absent/false on every season that predates the
+// feature, so nothing changes for anyone until it is deliberately turned on.
+window.isStepChallengeOn = function(s){
+  const cfg = (s || window.season || {}).stepChallenge;
+  return !!(cfg && cfg.enabled === true);
+};
+// Per-season overrides, falling back to the constants above.
+window.stepTargetOf = function(s){
+  const cfg = (s || window.season || {}).stepChallenge || {};
+  const t = Number(cfg.perMemberTarget);
+  return (Number.isFinite(t) && t > 0) ? t : window.STEP_PER_MEMBER_TARGET;
+};
+window.stepBonusOf = function(s){
+  const cfg = (s || window.season || {}).stepChallenge || {};
+  const b = Number(cfg.bonus);
+  return (Number.isFinite(b) && b >= 0) ? b : window.STEP_WIN_BONUS;
 };
 
 // seen = suggested-and-actioned (logged or dismissed). Bounded to the last
