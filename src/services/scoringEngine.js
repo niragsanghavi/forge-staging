@@ -26,6 +26,18 @@ const KM_CONTRIBUTOR_BONUS = 15;   // per qualifying member, once per season
 const KM_MIN_CONTRIBUTION  = 1;    // km — stops a 0.1km tap from claiming 15 pts
 const KM_MAX_PER_LOG       = 200;  // km — clamps typos (a "500km walk") per log
 
+// Hard ceiling on what ONE resolved step-week can pay a member. The default is
+// 5 (STEP_WIN_BONUS) and even a very generous admin override would not exceed a
+// handful. This is a SECURITY clamp, not a config: a step_week window lives in
+// twistWindows, which `create: if isAuthed()` leaves open to any anonymous
+// client (proven 18 Aug 2026 — a forged window with bonus:1,000,000 was
+// accepted by the deployed rules). Reading that value straight into a score
+// would let anyone award anyone unlimited points. Clamping on READ means even a
+// forged window can move a board by at most this much — the same belt-and-braces
+// shape as KM_MAX_PER_LOG. The real fix is locking down the twistWindows create
+// rule; this is the floor that holds until it ships.
+const STEP_BONUS_MAX_PER_WEEK = 25;
+
 // ── SNAPSHOT CACHE ──────────────────────────────────────────────────────────
 // score() used to re-scan the whole log array per call, and the team-streak /
 // underdog sections re-scanned it per roster entry per call — one leaderboard
@@ -156,8 +168,18 @@ function _ctxEntry(ctx){
     if(w.twist!=='step_week' || !Array.isArray(w.awarded)) continue;
     // The frozen per-week value. Absent on a doc written before the field
     // existed — pay nothing rather than guess a number that moves a score.
-    const pts=Number(w.bonus);
-    if(!Number.isFinite(pts) || pts<=0) continue;
+    // Clamp on READ. The window is a twistWindows doc, a collection any
+    // anonymous client can write to — so `bonus` is attacker-controllable and
+    // must be treated as hostile input, not trusted config. STEP_BONUS_MAX_PER_WEEK
+    // turns a forged 1,000,000 into at most the cap; a legitimate 5 is untouched.
+    // Validate the RAW value first, THEN clamp — clamping first would turn a
+    // forged Infinity into a passing `min(Infinity,cap)=cap` and pay it.
+    const raw=Number(w.bonus);
+    if(!Number.isFinite(raw) || raw<=0) continue;
+    const pts=Math.min(raw, STEP_BONUS_MAX_PER_WEEK);
+    // The winning set is attacker-controllable too, but it can only ADD names to
+    // a payout the cap already bounds — so a forged window's worst case is
+    // "everyone named gets at most the cap", not "one person gets millions".
     for(const name of w.awarded) stepAwards.set(name,(stepAwards.get(name)||0)+pts);
   }
 
