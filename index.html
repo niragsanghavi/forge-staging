@@ -2542,7 +2542,7 @@ async function mirLoadRanks(){
   _mirRanks={};
   try{ if(me.userId){ const d=await db.collection('users').doc(me.userId).get(); window._mirReadCount=(window._mirReadCount||0)+1; const gr=d.exists&&d.data().groupRanks; if(gr) _mirRanks=Object.assign({},gr); } }
   catch(e){ logErr('mirLoadRanks', e); }
-  try{ mirRenderPills(); }catch(e){}
+  try{ mirRenderPills(); }catch(e){ logErr('mirLoadRanks:renderPills', e); }
 }
 // Best distinct-day month count across archived seasons + current — one cached
 // query on the user's own season archives (same docs Profile already reads).
@@ -4170,7 +4170,8 @@ async function disablePushHere(){
       });
     }
     // best-effort: only possible if the SDK actually loaded
-    try{ if(firebase.messaging) await firebase.messaging().deleteToken(); }catch(e){}
+    try{ if(firebase.messaging) await firebase.messaging().deleteToken(); }
+  catch(e){ logErr('disablePushHere:deleteToken', e); }   // token survives; user still sees push off
     window._myPushToken=null;
     toast('Notifications off for this device.','success');
     renderPushCard();
@@ -4781,15 +4782,27 @@ async function deleteFromOneGroup(gc, localName, userId){
   }
   if(voided) bumpGlobalStat('totalLogs', -voided);
 
-  // 2. Best-effort purges the rules DO allow. Never block the flow.
-  try{
-    const rs = await db.collection('reactions').where('groupCode','==',gc).where('player','==',localName).get();
-    for(const d of rs.docs){ try{ await d.ref.delete(); }catch(e){} }
-  }catch(e){}
-  try{
-    const fs = await db.collection('flags').where('groupCode','==',gc).where('player','==',localName).get();
-    for(const d of fs.docs){ try{ await d.ref.delete(); }catch(e){} }
-  }catch(e){}
+  // 2. Best-effort purges the rules DO allow. Never block the flow — but never
+  //    silent either. "Best-effort" was being used to mean "we will not know":
+  //    a person is told their data is gone, and if these deletes failed nobody
+  //    could ever find out. Deletion is the one promise that has to be auditable,
+  //    so each failure is counted and reported once at the end. The flow still
+  //    completes regardless; only the silence changes.
+  let purgeFailed = 0;
+  for(const [coll, label] of [['reactions','reactions'], ['flags','flags']]){
+    try{
+      const snap = await db.collection(coll).where('groupCode','==',gc).where('player','==',localName).get();
+      for(const d of snap.docs){
+        try{ await d.ref.delete(); }
+        catch(e){ purgeFailed++; logErr('deleteFromOneGroup:'+label+':doc', e); }
+      }
+    }catch(e){ purgeFailed++; logErr('deleteFromOneGroup:'+label+':query', e); }
+  }
+  if(purgeFailed){
+    logErr('deleteFromOneGroup:purgeIncomplete',
+      new Error('PURGE_INCOMPLETE group='+gc+' failures='+purgeFailed+
+                ' — reactions/flags survive; scripts/scrub-deleted-user.mjs is the backstop'));
+  }
 
   // 3. THE HALL OF THE DEPARTED (locked decision, AUTH_DESIGN_FINAL Q4).
   //    The roster row is NOT removed — it is renamed to a departure name and
@@ -10085,7 +10098,12 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
       var key=ymKey(mo.y,mo.m);
       return db.collection('analytics').doc('global').collection('monthly').doc(key).get()
         .then(function(dd){ rollups[key]=(dd.exists&&dd.data().groups)||{}; })
-        .catch(function(){ rollups[key]={}; });
+        // THIS is the catch that hid the wrong headcount. A failed month became
+        // {} indistinguishable from "a month with no activity", so the dashboard
+        // rendered a confidently wrong number with nothing logged anywhere. An
+        // empty object is still the right fallback — the cockpit must not die
+        // because one month is unreadable — but it is no longer a secret.
+        .catch(function(e){ rollups[key]={}; logErr('SuperDash:rollup:'+key, e); });
     }));
     // Flatten into the shapes the build functions consume. gpList: one entry
     // per (group, player-string) with its cross-month workout-day set and the
@@ -10129,15 +10147,20 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
     var groupInfo={};
     await Promise.all(groups.map(async function(g){
       var seasons=[];
+      // A failure here empties a group's whole season history — every archived
+      // month, every roster — and the cockpit then reports on a group that looks
+      // brand new. Same class of lie as the rollup catch above.
       try{ var ss=await db.collection('groups').doc(g.code).collection('seasons').get();
-        seasons=ss.docs.map(function(dd){return {id:dd.id,...dd.data()};}); }catch(e){}
+        seasons=ss.docs.map(function(dd){return {id:dd.id,...dd.data()};}); }
+      catch(e){ logErr('SuperDash:seasons:'+g.code, e); }
       var cur=seasons.find(function(s){return s.id===g.currentSeasonId;})||null;
       var archived=seasons.filter(function(s){return s.status==='archived' && s.snapshotAt;})
         .sort(function(a,b){ return (b.year-a.year)||(b.month-a.month); })[0]||null;
       // tabClicks for the SELECTED month
       var selKey=ymKey(selY,selM), tabs=null;
       try{ var tc=await db.collection('analytics').doc(g.code).collection('tabClicks').doc(selKey).get();
-        if(tc.exists) tabs=tc.data(); }catch(e){}
+        if(tc.exists) tabs=tc.data(); }
+      catch(e){ logErr('SuperDash:tabClicks:'+g.code, e); }
       groupInfo[g.code]={ name:g.name||g.code, roster:(cur&&cur.roster)||[], currentSeasonId:g.currentSeasonId||null,
         archived:archived, tabs:tabs };
     }));
@@ -10173,7 +10196,8 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
     // empty read leaves woTotals null and the band renders as unavailable,
     // exactly like the errors/users sections degrade.
     var woTotals=cachedWo||null;
-    if(!woTotals){ try{ woTotals=await fetchWorkoutTotals(); }catch(e){} }
+    if(!woTotals){ try{ woTotals=await fetchWorkoutTotals(); }
+      catch(e){ logErr('SuperDash:workoutTotals', e); } }   // headline number silently zeroes without this
 
     return { now:now, todayMid:todayMid, curM:curM, curY:curY, selM:selM, selY:selY,
              isCurrentMonth:(selM===curM&&selY===curY), groups:groups, groupInfo:groupInfo,
