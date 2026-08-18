@@ -1346,7 +1346,10 @@ window.onload = () => {
 };
 
 async function bootApp(){
-  try{ renderGoogleLoginDoor(); }catch(e){}   // before any screen shows
+  // Before any screen shows. Swallowed silently until now, which meant a throw
+  // here removed the returning-user door with no trace anywhere — the one
+  // control a person on a new phone needs to get back into their account.
+  try{ renderGoogleLoginDoor(); }catch(e){ logErr('bootApp:renderGoogleLoginDoor', e); }
   // Direct deep-link to group creation (kept from the S3 §4.2 dark-launch
   // era; the screen is now also reachable from onboarding's #founderDoor —
   // see the screen-create comment block for the promotion gate).
@@ -1396,7 +1399,13 @@ async function bootApp(){
     // A Google LOGIN redirect lands here, not in loadGroup's restore hook —
     // by definition this device has no session yet. Same call, no session
     // required; inert while the flag is off.
-    try{ finishGoogleLinkIfReturning(); }catch(e){}
+    // Only a SYNCHRONOUS throw reaches this catch — the function is async, so a
+    // rejection inside it is handled by its own logErr, not here. Either way the
+    // failure mode is the same and used to be invisible: a returning user comes
+    // back from Google, this dies, and they are left staring at the front door
+    // with no error and nothing recorded. That is the single worst outcome the
+    // Google flow has, so it gets a name.
+    try{ finishGoogleLinkIfReturning(); }catch(e){ logErr('bootApp:finishGoogleLinkIfReturning', e); }
   }
 }
 
