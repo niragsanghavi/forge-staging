@@ -4567,6 +4567,10 @@ document.addEventListener('visibilitychange', function(){
   // the workout suggestions rendering.
   try{ fillStepDays(); }
   catch(e){ logErr('stepForegroundRefresh', e); }
+  // Settle last week if it has ended and nobody has settled it yet. Cheap when
+  // there is nothing to do (one existence check), and idempotent when there is.
+  try{ resolveStepWeekIfDue(); }
+  catch(e){ logErr('stepResolveForeground', e); }
 });
 
 /* ── THE STEP CHALLENGE: WRITE PATH ────────────────────────────────────────
@@ -4666,6 +4670,156 @@ async function fillStepDays(){
     logErr('fillStepDays', e);
   }finally{
     window._stepFillInFlight = false;
+  }
+}
+
+/* ── THE STEP CHALLENGE: WEEK RESOLUTION ───────────────────────────────────
+   Settles the week that just ended: reads every player's step doc for that
+   week, averages by team, picks the winner, and FREEZES the result into a
+   twistWindows doc — the exact doc the scoring engine reads and never recomputes
+   from (part 2). After this runs, the points exist and are immune to later
+   roster edits or the challenge being switched off.
+
+   NO ADMIN ACTION. Unlike Boss Week (an admin arms it each Sunday), the step
+   challenge runs every week it is enabled and settles itself. This is the
+   Iron-Pledge auto-settlement pattern: "results settle automatically once a
+   week has fully ended — nothing to click."
+
+   THE GRACE PERIOD. A week is not settled the instant Sunday ends. fillStepDays
+   writes Sunday's steps only when a person next opens the app, so settling at
+   00:00 Monday would miss everyone who opens Monday morning. STEP_RESOLVE_GRACE_H
+   (36h → Tuesday noon) gives Sunday's steps time to arrive before the result is
+   frozen. A week opened for the first time after that still fills, but too late
+   to change a settled result — the honest cost of not having a server cron.
+
+   RACE-SAFE BY RULE. Several phones may try to settle the same week at once.
+   The doc id is deterministic (`step_week_<week>`), the twistWindows rule is
+   create-only (update:false), and the computation is deterministic (same step
+   docs → same winner), so the first write wins and every other is a rejected
+   no-op writing the identical answer. No transaction needed.
+
+   FORGED STEP DOCS ARE UNTRUSTED. stepWeeks lives in a collection any client can
+   write (identity can't be verified under anon auth), so each player total is
+   re-clamped here on read. A forged total can at worst make the WRONG team win;
+   it cannot inflate the payout, which part 2 caps at STEP_BONUS_MAX_PER_WEEK. */
+window.STEP_RESOLVE_GRACE_H = 36;
+
+async function resolveStepWeekIfDue(){
+  if(!window.isNative || !isNative()) return;            // no health data source at all
+  if(!season || !seasonId || !groupCode) return;
+  if(!isStepChallengeOn(season)) return;
+  if(window._stepResolveInFlight) return;
+  window._stepResolveInFlight = true;
+  try{
+    const now = new Date();
+    const thisMonday = weekMondayOf(now);
+    // The week that just ended is the one whose Monday is 7 days before this
+    // week's Monday.
+    const lastMonday = new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate()-7);
+    // It ended at the start of THIS Monday; settle only once the grace has passed.
+    const settleAfter = new Date(thisMonday.getTime() + window.STEP_RESOLVE_GRACE_H*3600000);
+    if(now < settleAfter) return;
+
+    // Scope to THIS season. If the season rolled over since last week, that
+    // week belongs to an archived season and is out of scope for this pass —
+    // resolving into an archived season is deliberately not done here.
+    if(lastMonday.getMonth()+1 !== season.month || lastMonday.getFullYear() !== season.year) return;
+
+    const week   = getISOWeek(lastMonday);
+    const winId  = 'step_week_' + week;
+    const sRef   = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
+    const winRef = sRef.collection('twistWindows').doc(winId);
+
+    // Already settled? One existence check, and the cheap common case.
+    try{
+      const winSnap = await winRef.get();
+      if(winSnap.exists && Array.isArray((winSnap.data()||{}).awarded)) return;
+    }catch(e){ logErr('resolveStepWeek: window read', e); return; }
+
+    // Everyone's steps for that week.
+    let stepDocs = [];
+    try{
+      const q = await sRef.collection('stepWeeks').where('week','==',week).get();
+      stepDocs = q.docs.map(d=>d.data());
+    }catch(e){ logErr('resolveStepWeek: stepWeeks read', e); return; }
+    if(!stepDocs.length) return;                          // nobody logged a step — nothing to settle
+
+    // Per-player total, RE-CLAMPED from the day map (never trust the stored
+    // `total`), keyed by roster name so a forged doc for a non-member is ignored.
+    const roster = (season.roster||[]).filter(p=>p && p.departed!==true);
+    const teamOf = new Map(roster.map(p=>[p.name, p.team]));
+    const byPlayer = new Map();
+    for(const d of stepDocs){
+      if(!d || !teamOf.has(d.player)) continue;           // only current, non-departed members count
+      let t = 0;
+      const days = (d.days && typeof d.days==='object') ? d.days : {};
+      for(const k of Object.keys(days)){
+        const n = Number(days[k]);
+        if(Number.isFinite(n) && n>0) t += Math.min(n, window.STEP_DAILY_CAP);
+      }
+      byPlayer.set(d.player, t);
+    }
+
+    // Team average over the FULL team size (a member who logged nothing counts
+    // as a zero — that is what makes it a team effort, not a top-walker contest).
+    const teamSum = new Map(), teamSize = new Map();
+    for(const p of roster){
+      teamSize.set(p.team, (teamSize.get(p.team)||0)+1);
+      teamSum.set(p.team, (teamSum.get(p.team)||0)+(byPlayer.get(p.name)||0));
+    }
+    const teams = [...teamSize.keys()].map(t=>({
+      team:t, size:teamSize.get(t), sum:teamSum.get(t)||0,
+      avg:(teamSum.get(t)||0)/(teamSize.get(t)||1)
+    })).sort((a,b)=>b.avg-a.avg);
+    if(!teams.length) return;
+
+    const target = stepTargetOf(season);
+    let winnerTeam=null, cleared=false;
+    if(teams.length === 1){
+      // Solo / single team: no opponent, so the target IS the contest.
+      if(teams[0].avg >= target){ winnerTeam=teams[0].team; cleared=true; }
+    } else {
+      // Highest average wins. A dead-heat for first pays nobody — a coin-flip
+      // bonus would feel worse than none.
+      if(teams[0].avg > teams[1].avg){
+        winnerTeam = teams[0].team;
+        cleared = teams[0].avg >= target;
+      }
+    }
+
+    const awarded = winnerTeam ? roster.filter(p=>p.team===winnerTeam).map(p=>p.name) : [];
+    const docData = {
+      twist:'step_week', week,
+      monDate:lastMonday.getDate(),
+      sunDate:new Date(lastMonday.getFullYear(),lastMonday.getMonth(),lastMonday.getDate()+6).getDate(),
+      month:lastMonday.getMonth()+1, year:lastMonday.getFullYear(),
+      bonus: stepBonusOf(season),
+      winner: winnerTeam, awarded, cleared, target,
+      // A compact record of how it was decided, for the board's "last week" card.
+      standings: teams.map(t=>({team:t.team, avg:Math.round(t.avg)})),
+      resolvedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    try{
+      // .set() on an existing doc is an UPDATE, which the create-only rule
+      // rejects — so a second racer fails here harmlessly. Swallow that; log
+      // anything else.
+      await winRef.set(docData);
+    }catch(e){
+      const msg = String(e && e.message || e);
+      if(!/PERMISSION_DENIED|already exists|Missing or insufficient/i.test(msg)) logErr('resolveStepWeek: write', e);
+      return;
+    }
+
+    if(winnerTeam){
+      const mine = (season.roster||[]).some(p=>p && p.name===me?.name && p.team===winnerTeam);
+      toast(mine ? `Your team won last week’s step challenge — +${stepBonusOf(season)} each 🔥`
+                 : `Team ${winnerTeam} won last week’s step challenge.`, 'success');
+    }
+    if(typeof renderHome === 'function'){ try{ renderHome(); }catch(e){ logErr('resolveStepWeek: rerender', e); } }
+  }catch(e){
+    logErr('resolveStepWeekIfDue', e);
+  }finally{
+    window._stepResolveInFlight = false;
   }
 }
 
