@@ -118,16 +118,29 @@ function _ctxEntry(ctx){
   // Scoring reads PERMANENT window docs, never the live toggle — so toggling a
   // twist on/off can never retroactively change a past window's effect.
   const seasonWindows=tw.filter(w=>w && w.month===month && w.year===year);
-  // Boss Week: any day-of-month inside a boss_week window's [monDate,sunDate] is doubled.
+  // A window that starts near a month end runs into the next month, and it is
+  // stamped with its MONDAY's month — so 31 Aug – 6 Sep is stored under August
+  // with monDate 31, sunDate 6. Read literally that is an empty range, and both
+  // twists below silently did nothing for the whole week. The old comment called
+  // that "safe"; it is not, it is a twist the admin switched on, was told had
+  // been set, and which then paid nobody.
+  //
+  // Clamping the end to the last day of THIS season is the only coherent reading:
+  // scoring is season-scoped, the window doc lives under August, and September's
+  // engine filters it out by month above — so the September half of that week can
+  // never be doubled from here no matter what this returns. The August half can,
+  // and now is. Non-spanning windows are untouched.
+  const endOf=w=>(w.sunDate>=w.monDate ? w.sunDate : DAYS);
+  // Boss Week: any day-of-month inside a boss_week window's [monDate, end] is doubled.
   const bossDays=new Set();
   for(const w of seasonWindows){
     if(w.twist!=='boss_week') continue;
-    for(let d=w.monDate; d<=w.sunDate; d++) bossDays.add(d);   // spanning weeks (mon>sun) add nothing — safe
+    for(let d=w.monDate; d<=endOf(w); d++) bossDays.add(d);
   }
   // Underdog Week: each window froze its last-place players at activation time.
   const underdogWindows=seasonWindows
     .filter(w=>w.twist==='underdog_week')
-    .map(w=>({monDate:w.monDate, sunDate:w.sunDate, frozen:new Set(w.frozenPlayers||[])}));
+    .map(w=>({monDate:w.monDate, sunDate:endOf(w), frozen:new Set(w.frozenPlayers||[])}));
 
   const b30Set=new Set(bonuses.map(b=>b.player));
   const jackCnt=new Map();

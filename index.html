@@ -6668,10 +6668,19 @@ function renderTwistToggles(){
     const D=inSeason?now.getDate():(seasonPast?99:0);
     const isSunday=now.getDay()===0;
     const mn=MN[season.month-1];
-    const fmt=w=>`${mn} ${w.monDate}–${w.sunDate}`;
+    // Same month-end case as the scoring engine: a window running into the next
+    // month is stored with sunDate < monDate. Read literally, "past" (sunDate < D)
+    // matched a window that was actually RUNNING and "current" could never match —
+    // so on 31 Aug the admin panel would file a live Boss Week under Finished.
+    // Clamp the end to this season, exactly as the engine does.
+    const lastDay=new Date(season.year, season.month, 0).getDate();
+    const endOf=w=>(w.sunDate>=w.monDate ? w.sunDate : lastDay);
+    const fmt=w=>(w.sunDate>=w.monDate
+      ? `${mn} ${w.monDate}–${w.sunDate}`
+      : `${mn} ${w.monDate}${w.monDate===lastDay?'':'–'+lastDay}`);
     const wins=twistWindows.filter(w=>w.twist===t.id && w.month===season.month && w.year===season.year).sort((a,b)=>a.monDate-b.monDate);
-    const past=wins.filter(w=>w.sunDate<D);
-    const current=wins.filter(w=>w.monDate<=D && D<=w.sunDate);
+    const past=wins.filter(w=>endOf(w)<D);
+    const current=wins.filter(w=>w.monDate<=D && D<=endOf(w));
     const upcoming=wins.filter(w=>w.monDate>D);
     let status;
     if(current.length) status=`<span style="color:var(--green);font-weight:600">Active: ${esc(current.map(fmt).join(', '))}</span>`;
@@ -6779,10 +6788,21 @@ async function activateTwistWindow(twistId){
   try{
     await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId)
       .collection('twistWindows').doc(`${twistId}_${weekStr}`).set(docData);
-    const range=`${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][mon.getMonth()]} ${monDate}–${sunDate}`;
+    const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    // A week starting near a month end runs into the next month. The window is
+    // stamped with its MONDAY's month and scoring is season-scoped, so only the
+    // days falling inside THIS month can ever pay. Report that instead of a
+    // clean success and a nonsense range like "Aug 31–6".
+    const spans = sun.getMonth()!==mon.getMonth();
+    const lastDay = new Date(mon.getFullYear(), mon.getMonth()+1, 0).getDate();
+    const range = spans ? `${MN[mon.getMonth()]} ${monDate} – ${MN[sun.getMonth()]} ${sunDate}`
+                        : `${MN[mon.getMonth()]} ${monDate}–${sunDate}`;
+    const spanNote = spans
+      ? ` Heads up: only ${MN[mon.getMonth()]} ${monDate}${monDate===lastDay?'':'–'+lastDay} counts, because ${MN[sun.getMonth()]} belongs to next month's season.`
+      : '';
     toast(twistId==='underdog_week' && docData.frozenPlayers && docData.frozenPlayers.length
-      ? `${label} set for next week (${range}). Underdog: ${docData.frozenPlayers.join(', ')}`
-      : `${label} set for next week (${range}).`,'success');
+      ? `${label} set for next week (${range}). Underdog: ${docData.frozenPlayers.join(', ')}.${spanNote}`
+      : `${label} set for next week (${range}).${spanNote}`,'success');
   }catch(e){ logErr('activateTwistWindow '+twistId, e); toast(`Could not set ${label} — it may already be set, or check your connection.`,'error'); }
 }
 async function saveTwistConfig(id,key,value){
