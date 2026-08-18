@@ -8499,6 +8499,14 @@ let globalDataCacheTime = 0;
 // denormalise into ONE summary doc alongside analytics/global/daily, dropping
 // the cost from G reads to 1. That needs a writer and a backfill, so it is a
 // deliberate piece of work rather than something to bolt on mid-batch.
+// MEASURED 18 Aug 2026 (crash test, 5,000-user simulation). The projection
+// above is confirmed: 1,000 users / 83 groups = 84,000 reads/day, 168% of the
+// free tier. The exact crossover, solving users × (users/12 + 1) = 50,000, is
+// ~775 USERS — around 65 groups. That is the real number to plan against, and
+// it is the FIRST wall Forge hits: the scoring engine itself was measured
+// linear and comfortable to 5,000 people in a single group (223ms), so CPU is
+// nowhere near being the constraint. Reads are, and they grow as users × groups
+// — quadratic, so doubling the user base roughly quadruples the bill.
 const GLOBAL_CACHE_TTL = 30 * 60 * 1000; // 30 minutes — see the ceiling above
 
 // ── GLOBAL LEADERBOARD (cross-group, opt-in) ───────────────────────────────
