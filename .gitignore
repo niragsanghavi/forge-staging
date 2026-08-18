@@ -76,3 +76,11 @@ node_modules/
 firestore-debug.log
 ui-debug.log
 firebase-debug.log
+
+# Security model — deployed via `firebase deploy --only firestore:rules` from
+# the LOCAL copy. Untracked because GitHub Pages serves every tracked file at
+# the site root: goforge.in/firestore.rules returned 200, handing anyone a map
+# of exactly what the rules do and do not allow. Removing it is PROSPECTIVE
+# only — 15 revisions are already public and must be assumed known. Canonical
+# copy + backups live in ~/Desktop/forge-backups/.
+firestore.rules
