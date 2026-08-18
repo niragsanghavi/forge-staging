@@ -8480,7 +8480,26 @@ function toggleTheme(){
 
 let globalDataCache = null;
 let globalDataCacheTime = 0;
-const GLOBAL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+// ── THE GLOBAL TAB'S READ CEILING — measured, not guessed ────────────────────
+// loadGlobal costs G reads (one per group) on every cache miss, for every user
+// who opens the Global tab. This cache is in memory, so it is also lost on every
+// page load. Measured against the real data, assuming half of users open Global
+// twice a day:
+//
+//        76 users /  8 groups   ~608 reads/day     1.2% of the free tier
+//      1000 users / 83 groups ~83000 reads/day   166.0%  <-- over budget
+//
+// Raising the TTL 5 -> 30 min halves it. That is worth taking and is all this
+// constant can do: 83% of the tier is still not a plan. Global stats are not
+// real-time — the daily rollup only moves when someone logs — so 30 minutes
+// costs nothing anyone will notice.
+//
+// THE ACTUAL FIX, when groups pass ~40: stop reading G group docs. loadGlobal
+// needs only {name, demo, globalStats} per group, which is small enough to
+// denormalise into ONE summary doc alongside analytics/global/daily, dropping
+// the cost from G reads to 1. That needs a writer and a backfill, so it is a
+// deliberate piece of work rather than something to bolt on mid-batch.
+const GLOBAL_CACHE_TTL = 30 * 60 * 1000; // 30 minutes — see the ceiling above
 
 // ── GLOBAL LEADERBOARD (cross-group, opt-in) ───────────────────────────────
 // R3 DENORMALIZED READ. Was: read every group's season + twists + all-platform
