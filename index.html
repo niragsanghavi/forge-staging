@@ -10366,12 +10366,46 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
       ? '<b>'+grp(selN)+'</b> in '+MONTHS[data.selM-1]+' '+data.selY
         +' · <b>'+t.months+'</b> active month'+(t.months===1?'':'s')+span
       : 'No workouts in any rollup yet — run backfillGlobalStats() to seed history.';
+    // PEOPLE, not roster rows. Summing each group's `members` counts anyone in
+    // two groups twice — which is exactly why the dashboard read "Nirag" three
+    // times: one human, one userId, three rosters (75EKZT, AJ6W6B, IPJEGE).
+    // gpList carries the canonical userId resolved at rollup-write time (the
+    // mergedInto chain is already followed there), so a Set over it is the
+    // honest headcount and costs no extra reads.
+    var p = distinctPeople(data);
+    // Entries with no stamped userId cannot be deduped — they predate the
+    // identity work. Counting them in silently would overstate; dropping them
+    // silently would understate. They are added and then declared.
+    var peopleSub = p.unstamped
+      ? 'distinct people · '+p.unstamped+' pre-identity, may double-count'
+      : 'distinct people · deduped by identity';
     return '<div class="sd-forged">'
-      +'<div class="sd-forged-l">Workouts forged</div>'
-      +'<div class="sd-forged-v">'+grp(t.allTime)+'</div>'
-      +'<div class="sd-forged-s">every group · all time · demo excluded</div>'
+      +'<div class="sd-forged-pair">'
+        +'<div>'
+          +'<div class="sd-forged-l">Workouts forged</div>'
+          +'<div class="sd-forged-v">'+grp(t.allTime)+'</div>'
+          +'<div class="sd-forged-s">every group · all time</div>'
+        +'</div>'
+        +'<div>'
+          +'<div class="sd-forged-l">People</div>'
+          +'<div class="sd-forged-v">'+grp(p.people)+'</div>'
+          +'<div class="sd-forged-s">'+peopleSub+'</div>'
+        +'</div>'
+      +'</div>'
       +'<div class="sd-forged-m">'+cover+'</div>'
       +'</div>';
+  }
+  // Distinct humans who have logged at least once, across every non-demo group.
+  // Keyed on the canonical userId; entries without one fall back to group||player,
+  // which is the best available guess and is reported separately rather than
+  // folded in as if it were certain.
+  function distinctPeople(data){
+    var ids=new Set(), unstamped=0;
+    (data.gpList||[]).forEach(function(e){
+      if(e.uid) ids.add(e.uid);
+      else { ids.add('anon:'+e.code+'||'+e.player); unstamped++; }
+    });
+    return { people: ids.size, unstamped: unstamped };
   }
   // 1234567 -> "1,234,567"
   function grp(n){ return String(n==null?0:n).replace(/\B(?=(\d{3})+(?!\d))/g,','); }
@@ -10895,6 +10929,11 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
       +'.sd-forged-l{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.18em;color:var(--muted)}'
       +'.sd-forged-v{font-size:44px;font-weight:900;color:var(--gold);line-height:1.05;margin:6px 0 3px;font-variant-numeric:tabular-nums}'
       +'.sd-forged-s{font-size:11px;color:var(--muted)}'
+      /* Two headline figures side by side. The divider is a hairline so the pair
+         reads as one card rather than two competing tiles. */
+      +'.sd-forged-pair{display:flex;align-items:stretch;justify-content:center;gap:0}'
+      +'.sd-forged-pair>div{flex:1 1 0;padding:0 8px;min-width:0}'
+      +'.sd-forged-pair>div+div{border-left:1px solid rgba(212,175,55,.25)}'
       +'.sd-forged-m{font-size:12px;color:var(--muted);margin-top:12px;padding-top:10px;border-top:1px solid rgba(212,175,55,.25)}'
       +'.sd-forged-m b{color:var(--text);font-variant-numeric:tabular-nums}'
       +'.sd-pulse{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}'
