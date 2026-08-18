@@ -448,6 +448,9 @@
     <div id="weeklyMover"></div>
     <!-- Team distance goal. Renders nothing at all unless season.kmTarget is set. -->
     <div id="kmGoalCard"></div>
+    <!-- Weekly step challenge. Empty unless season.stepChallenge.enabled AND
+         running natively (a web user has no step source). -->
+    <div id="stepChallengeCard"></div>
     <div class="shdr" id="teamStandHdr">Team Standings</div>
     <!-- Solo groups hide this whole section, but the header above already
          shows during boot for them too, so the placeholder doesn't introduce a
@@ -6339,9 +6342,94 @@ function renderKmGoal(){
     </div>`;
 }
 
+/* ── THE STEP CHALLENGE: BOARD CARD ────────────────────────────────────────
+   Two things stacked: THIS week's live team averages (a read, lightly cached),
+   and LAST week's frozen result (free — it is already in the twistWindows
+   global the season listener keeps warm). Empty unless the challenge is on AND
+   we are native, so a web user never sees a card they cannot play.
+
+   ⚠️ VISUAL QA OWED. This is the one part of the challenge that could not be
+   verified without a browser/device (native-only, challenge-on). The markup
+   reuses the km card's classes; confirm on a real phone once the app is live.  */
+window._stepWeekCache = null;   // { week, at, teams:[{team,avg,size,members}] }
+async function renderStepChallenge(){
+  const el=document.getElementById('stepChallengeCard');
+  if(!el) return;
+  if(!(window.isNative && isNative()) || !season || !isStepChallengeOn(season)){ el.innerHTML=''; return; }
+
+  const target=stepTargetOf(season);
+  const roster=(season.roster||[]).filter(p=>p && p.departed!==true);
+  const myTeam=me?me.team:null;
+  const nf=n=>Math.round(n).toLocaleString('en-IN');
+
+  // LAST week's frozen result — from the already-loaded twistWindows global.
+  const now=new Date();
+  const lastMon=new Date(weekMondayOf(now).getTime()-7*86400000);
+  const lastWeek=getISOWeek(lastMon);
+  const resolved=(twistWindows||[]).find(w=>w && w.twist==='step_week' && w.week===lastWeek);
+  let lastHtml='';
+  if(resolved && Array.isArray(resolved.awarded)){
+    if(resolved.winner){
+      const mineWon=myTeam && resolved.winner===myTeam;
+      lastHtml=`<div class="km-rfoot" style="margin-top:10px">
+        <b>Last week:</b> Team ${esc(resolved.winner)} won${resolved.cleared?' and cleared the target':''}
+        — +${resolved.bonus} each${mineWon?' · that was you 🔥':''}</div>`;
+    } else {
+      lastHtml=`<div class="km-rfoot" style="margin-top:10px"><b>Last week</b> ended in a dead heat — no bonus.</div>`;
+    }
+  }
+
+  // THIS week's live averages. Read the current week's step docs, cached 5 min
+  // so repeated Home renders do not each hit Firestore.
+  const thisWeek=getISOWeek(weekMondayOf(now));
+  let teams=[];
+  try{
+    const c=window._stepWeekCache;
+    if(c && c.week===thisWeek && (Date.now()-c.at)<300000){
+      teams=c.teams;
+    } else {
+      const snap=await db.collection('groups').doc(groupCode).collection('seasons')
+        .doc(seasonId).collection('stepWeeks').where('week','==',thisWeek).get();
+      const byPlayer=new Map();
+      snap.docs.forEach(d=>{
+        const x=d.data()||{}; if(!x.player) return;
+        let t=0; const days=(x.days&&typeof x.days==='object')?x.days:{};
+        for(const k of Object.keys(days)){ const n=Number(days[k]); if(Number.isFinite(n)&&n>0) t+=Math.min(n,window.STEP_DAILY_CAP); }
+        byPlayer.set(x.player,t);
+      });
+      const sum=new Map(), size=new Map();
+      roster.forEach(p=>{ size.set(p.team,(size.get(p.team)||0)+1); sum.set(p.team,(sum.get(p.team)||0)+(byPlayer.get(p.name)||0)); });
+      teams=[...size.keys()].map(t=>({team:t, size:size.get(t), avg:(sum.get(t)||0)/(size.get(t)||1)})).sort((a,b)=>b.avg-a.avg);
+      window._stepWeekCache={ week:thisWeek, at:Date.now(), teams };
+    }
+  }catch(e){ logErr('renderStepChallenge: read', e); /* fall through to header-only */ }
+
+  const rows=teams.map(t=>{
+    const pct=Math.max(4, Math.min(100, Math.round(t.avg/target*100)));
+    const mine=t.team===myTeam;
+    return `<div class="km-row${mine?' km-mine':''}${t.avg>=target?' km-done':''}">
+      <div class="km-rhead">
+        <span class="km-tname">Team ${esc(t.team)}${mine?' · you':''}</span>
+        <span class="km-tval">${nf(t.avg)}<span class="km-of"> / ${nf(target)} avg</span></span>
+      </div>
+      <div class="km-track"><div class="km-fill" style="width:${pct}%"></div></div>
+      <div class="km-rfoot">${t.avg>=target?'<b>Target cleared</b>':nf(Math.max(0,target-t.avg))+' steps/head to go'} · ${t.size} in the team</div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML=`<div class="shdr">Step Challenge — ${nf(target)}/person this week</div>
+    <div class="card km-card">
+      <div class="km-intro">Every step your phone counts. Highest team <b>average</b> by Sunday wins
+        <b>+${stepBonusOf(season)} points</b> each — a free workout. Yesterday and earlier only; today keeps climbing.</div>
+      ${rows||'<div class="km-rfoot">No steps in yet this week — open the app tomorrow and yesterday’s land automatically.</div>'}
+      ${lastHtml}
+    </div>`;
+}
+
 function renderLB(){
   try{ renderWeeklyMover(); }catch(e){ logErr('renderWeeklyMover', e); }
   try{ renderKmGoal(); }catch(e){ logErr('renderKmGoal', e); }
+  try{ renderStepChallenge(); }catch(e){ logErr('renderStepChallenge', e); }
   if(!season) return;
   const players=season.roster||[];
   const teams=[...new Set(players.map(p=>p.team))];
