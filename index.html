@@ -740,6 +740,10 @@
           <input type="checkbox" id="editDemo" style="width:auto;margin:0">
           <span>Demo / test group — hide from SuperDash and global stats</span>
         </label>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:8px">
+          <input type="checkbox" id="editStepChallenge" style="width:auto;margin:0">
+          <span>Weekly step challenge — reads phone steps, native app only</span>
+        </label>
         <div style="display:flex;gap:8px;margin-top:12px">
           <button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="closeEditGroup()">Cancel</button>
           <button class="btn btn-gold btn-sm" style="flex:1;margin:0" onclick="saveEditGroup()">Save Changes</button>
@@ -7506,6 +7510,9 @@ async function openEditGroup(code){
     window._editGroupCode=code;
     window._editSeasonId=sid;
     window._editRoster=s.roster||[];
+    // Kept so saveEditGroup can preserve nested config (step-challenge target/
+    // bonus) when only the on/off switch is touched.
+    window._editSeasonData=s;
 
     document.getElementById('editGroupNameInput').value = g.name || '';
     document.getElementById('editGroupName').textContent=`${g.name} (${sid})`;
@@ -7520,6 +7527,7 @@ async function openEditGroup(code){
     document.getElementById('editRoles').checked=(s.rolesEnabled!==false);
     // demo lives on the GROUP doc, not the season — it outlives any one month.
     document.getElementById('editDemo').checked=(g.demo===true);
+    document.getElementById('editStepChallenge').checked=!!(s.stepChallenge && s.stepChallenge.enabled===true);
 
     document.getElementById('editGroupStatus').textContent='';
     document.getElementById('editGroupModal').classList.remove('hidden');
@@ -7553,6 +7561,12 @@ async function saveEditGroup(){
   const kmTarget=(_kmRaw!=='' && Number.isFinite(_kmNum) && _kmNum>0) ? Math.min(10000,_kmNum) : null;
   const rolesEnabled=document.getElementById('editRoles').checked;
   const isDemo=document.getElementById('editDemo').checked;
+  // Step challenge lives on the SEASON as a nested object so its own config
+  // (target, bonus) can travel with the toggle. Preserve any existing config
+  // when flipping the switch rather than clobbering an admin's overrides.
+  const _stepOn=document.getElementById('editStepChallenge').checked;
+  const _stepPrev=(window._editSeasonData && window._editSeasonData.stepChallenge) || {};
+  const stepChallenge=Object.assign({}, _stepPrev, {enabled:_stepOn});
 
   // ── Guard: reducing team count while players sit on a vanishing team ──
   // Generalised from the old numTeams===2-only check. Dropping to 1 strands
@@ -7600,14 +7614,15 @@ async function saveEditGroup(){
         days, capTarget, vcTarget, minWorkouts, numTeams,
         teamStreakThreshold: thresholdPct/100,
         kmTarget,
-        rolesEnabled
+        rolesEnabled,
+        stepChallenge
       })
     ]);
     // Update panel title immediately so it reflects the new name before loadSuperAdmin reloads.
     document.getElementById('editGroupName').textContent=`${newGroupName} (${sid})`;
     // If we're editing the group we're currently viewing in-app, refresh local in-memory state.
     if(window.season && window.seasonId===sid && window.groupCode===code){
-      Object.assign(window.season,{days,capTarget,vcTarget,minWorkouts,numTeams,teamStreakThreshold:thresholdPct/100,kmTarget,rolesEnabled});
+      Object.assign(window.season,{days,capTarget,vcTarget,minWorkouts,numTeams,teamStreakThreshold:thresholdPct/100,kmTarget,rolesEnabled,stepChallenge});
     }
     if(window.groupData && window.groupCode===code){ window.groupData.name=newGroupName; window.groupData.demo=isDemo; }
     status.textContent='✅ Saved.';
