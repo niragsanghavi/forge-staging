@@ -10372,13 +10372,24 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
     // gpList carries the canonical userId resolved at rollup-write time (the
     // mergedInto chain is already followed there), so a Set over it is the
     // honest headcount and costs no extra reads.
-    var p = distinctPeople(data);
-    // Entries with no stamped userId cannot be deduped — they predate the
-    // identity work. Counting them in silently would overstate; dropping them
-    // silently would understate. They are added and then declared.
-    var peopleSub = p.unstamped
-      ? 'distinct people · '+p.unstamped+' pre-identity, may double-count'
-      : 'distinct people · deduped by identity';
+    // canonicalCount is usersAggCount(): every users doc minus mergedInto
+    // tombstones — the actual registered headcount, already fetched by fetchAll
+    // on every render. The first version of this tile counted distinct userIds
+    // in gpList instead, which is a different question ("who has logged
+    // recently") and read 17 against a real 76. gpList is bounded by the
+    // 5-month monthList AND by a silent catch on each rollup fetch, so it is
+    // the wrong source for a platform total no matter how it is deduped.
+    var reg = data.canonicalCount, peopleN, peopleSub;
+    if(!data.usersDenied && reg > 0){
+      peopleN = reg;
+      peopleSub = 'registered · merged accounts collapsed';
+    } else {
+      // Only if the aggregation was denied. Says which number it is, because a
+      // silent substitution here is how the 17 went unnoticed in the first place.
+      var p = distinctPeople(data);
+      peopleN = p.people;
+      peopleSub = 'have logged recently · registered count unavailable';
+    }
     return '<div class="sd-forged">'
       +'<div class="sd-forged-pair">'
         +'<div>'
@@ -10388,7 +10399,7 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
         +'</div>'
         +'<div>'
           +'<div class="sd-forged-l">People</div>'
-          +'<div class="sd-forged-v">'+grp(p.people)+'</div>'
+          +'<div class="sd-forged-v">'+grp(peopleN)+'</div>'
           +'<div class="sd-forged-s">'+peopleSub+'</div>'
         +'</div>'
       +'</div>'
