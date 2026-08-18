@@ -10037,10 +10037,25 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
     }catch(e){}
   }
 
-  // Own load listener — initial check after 2s, then every 10s.
+  // Own load listener — initial check after 2s, then every 10s while visible.
   // The 2s delay gives Firestore time to load before the first check.
+  //
+  // The interval handle used to be thrown away, so this polled every 10 seconds
+  // for the life of the tab with no way to stop it — including the whole time
+  // the app sat in the background, which on a phone is most of its life.
+  // Keeping the handle costs nothing and makes it stoppable; pausing it when
+  // hidden is the actual saving, reusing the same visibilitychange signal the
+  // Apple Health refresh already listens on.
   window.addEventListener('load', function(){
-    try{ setTimeout(syncRecapBtn, 2000); setInterval(syncRecapBtn, 10000); }catch(e){}
+    try{
+      setTimeout(syncRecapBtn, 2000);
+      var start=function(){ if(!window._recapTimer) window._recapTimer=setInterval(syncRecapBtn, 10000); };
+      var stop =function(){ if(window._recapTimer){ clearInterval(window._recapTimer); window._recapTimer=null; } };
+      start();
+      document.addEventListener('visibilitychange', function(){
+        if(document.visibilityState==='visible'){ syncRecapBtn(); start(); } else { stop(); }
+      });
+    }catch(e){ logErr('recapBtn:timer', e); }
   });
 
   // Profile tab (on-demand recap for archived seasons) needs to open this

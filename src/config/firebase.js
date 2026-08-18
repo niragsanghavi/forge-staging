@@ -312,13 +312,30 @@ window.ensureAuth = function(){
     // survived but localStorage was evicted" apart from a fresh first visit.
     window._forgeAuthPreexisting = !!existing;
     if(existing){ resolve(existing.uid); return; }
+    // A ceiling on the whole thing. signInAnonymously().catch covers the case
+    // where the call itself fails, but not the one where it resolves and
+    // onAuthStateChanged never fires — a wedged connection, a half-open socket,
+    // an IndexedDB that will not answer. There was no timer here, so that path
+    // hung forever: no error, no timeout, no screen. Boot simply stopped, which
+    // is exactly the "connection stuck" symptom that took a live debugging
+    // session to pin down.
+    //
+    // 15s is deliberately generous — a slow Indian mobile connection on a cold
+    // start must not trip this. Anything past 15s was never going to arrive.
+    let settled = false;
+    const done = fn => (...a) => { if(settled) return; settled = true; clearTimeout(timer); fn(...a); };
+    const timer = setTimeout(() => {
+      try{ unsubscribe(); }catch(e){}
+      done(reject)(new Error('AUTH_TIMEOUT'));
+    }, 15000);
+
     const unsubscribe = auth.onAuthStateChanged(user => {
-      if(user){ unsubscribe(); resolve(user.uid); }
+      if(user){ try{ unsubscribe(); }catch(e){} done(resolve)(user.uid); }
     });
     auth.signInAnonymously().catch(err => {
-      unsubscribe();
+      try{ unsubscribe(); }catch(e){}
       console.error('Anonymous sign-in failed:', err);
-      reject(err);
+      done(reject)(err);
     });
   });
 };
