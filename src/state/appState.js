@@ -112,6 +112,20 @@ window.reactions = [];          // S5 🔥 reactions. MUST be pre-declared: rend
                                 // as an implicit global that was a boot-order ReferenceError that could
                                 // kill the whole render pass (seen live on Android, blocked a real user).
 window.selDay = null;
+// The MONTH the selected day belongs to. submitLog used to take `day` from the
+// tapped calendar cell but `month`/`year` from `season`, with nothing
+// reconciling the two — a log's date was assembled from two unrelated sources.
+// Nothing crossed them in practice, because closed months are untappable and
+// future days are refused, but that is a UI guard standing in for a data
+// invariant: one regression in mirTapDay and you get a workout dated into a
+// month it did not happen in. Prasham's two ghost logs were exactly that shape,
+// written by the backlog script rather than the client.
+//
+// null means "no calendar context" — submitLog then falls back to season, which
+// is the correct answer for the Log-today entry points. Every writer of selDay
+// sets these alongside it.
+window.selMonth = null;
+window.selYear = null;
 window.selW = [];
 window.selKm = null;            // distance for the log in flight, km. null = not
                                 // captured (the overwhelming majority of logs).

@@ -2402,6 +2402,8 @@ let _mirLoading=false, _mirNoMore=false;
 let _mirRanks=null;         // {code:rank} from users doc, cached per session
 let _mirBestMonth=null;     // max distinct-day month count, from season archives
 let _mirPendingDay=null;    // day being logged via the sheet
+let _mirPendingMonth=null;  // …and the month/year that day belongs to, captured
+let _mirPendingYear=null;   // at tap time so the log's date has ONE source
 const _mirLogCache={};      // `${code}_${y}_${m}` -> [{day,workouts,id}] (own logs)
 const _mirInflight={};      // in-flight promise dedup (renderMirrorHome fires per snapshot)
 
@@ -2718,7 +2720,9 @@ function mirTapDay(ix, d){
   if(d>todayD){ shake(); return; }                          // future
   if(d<MIN_TAP){ shake(); toast("Logs older than a week can't be added — Forge counts the week you're living."); return; }
   if(M.byDay[d]){ mirOpenDayDetail(d); return; }            // logged, in window → detail
-  _mirPendingDay=d;                                          // empty, in window → log sheet
+  // Capture the month FROM THE PANEL, not from season. M is the descriptor of
+  // the calendar the finger landed on, so day and month now come from one source.
+  _mirPendingDay=d; _mirPendingMonth=M.month; _mirPendingYear=M.year;   // empty, in window → log sheet
   mirOpenLogSheet(d);
 }
 
@@ -2756,8 +2760,8 @@ function mirOpenLogSheet(d){
   mirOpenSheet();
 }
 function mirOpenDayDetail(d){
-  _mirPendingDay=d;
   const cur=_mirMonths[_mirMonths.length-1];
+  _mirPendingDay=d; _mirPendingMonth=cur&&cur.month; _mirPendingYear=cur&&cur.year;
   const logs=cur.byDay[d]||[];
   const dt=new Date(season.year, season.month-1, d);
   const DOW=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -2802,7 +2806,7 @@ function mirLogQuick(w){
     return;
   }
   mirCloseSheet();
-  selDay=_mirPendingDay; selW=[w]; selKm=null; selNote=null;
+  selDay=_mirPendingDay; selMonth=_mirPendingMonth; selYear=_mirPendingYear; selW=[w]; selKm=null; selNote=null;
   window._mirrorLogMode=true;
   submitLog();
 }
@@ -2857,7 +2861,7 @@ function _mirLiftGo(w, note){
     }
   }
   mirCloseSheet();
-  selDay=_mirPendingDay; selW=[w]; selKm=null;
+  selDay=_mirPendingDay; selMonth=_mirPendingMonth; selYear=_mirPendingYear; selW=[w]; selKm=null;
   selNote = note || null;
   window._mirrorLogMode=true;
   submitLog();
@@ -2911,7 +2915,7 @@ function mirOpenKmStep(w){
 function mirKmSet(v){ const i=document.getElementById('mirKmInp'); if(i){ i.value=v; i.focus(); } }
 function mirKmSkip(w){
   mirCloseSheet();
-  selDay=_mirPendingDay; selW=[w]; selKm=null;
+  selDay=_mirPendingDay; selMonth=_mirPendingMonth; selYear=_mirPendingYear; selW=[w]; selKm=null;
   window._mirrorLogMode=true;
   submitLog();
 }
@@ -2923,7 +2927,7 @@ function mirKmConfirm(w){
   if(raw==='' || !Number.isFinite(v) || v<=0){ mirKmSkip(w); return; }
   if(v>KM_CONSTS.maxPerLog){ toast(`That\'s over ${KM_CONSTS.maxPerLog} km — check the number.`,'error'); return; }
   mirCloseSheet();
-  selDay=_mirPendingDay; selW=[w];
+  selDay=_mirPendingDay; selMonth=_mirPendingMonth; selYear=_mirPendingYear; selW=[w];
   selKm=Math.round(v*10)/10;      // one decimal; the engine clamps again on read
   window._mirrorLogMode=true;
   submitLog();
@@ -3792,7 +3796,7 @@ async function mirFillCrossGroup(activeShowed, activeMoved, isToday){
 function mirCloseReport(){
   const rep=document.getElementById('mirReport');
   rep.classList.remove('on'); rep.style.transform='';
-  selDay=null; selW=[]; selKm=null; selNote=null; window._mirrorLogMode=false;
+  selDay=null; selMonth=null; selYear=null; selW=[]; selKm=null; selNote=null; window._mirrorLogMode=false;
   try{ renderMirrorHome(); }catch(e){ logErr('mirCloseReport render', e); }
 }
 // swipe-down dismiss on the report
@@ -4526,7 +4530,8 @@ async function renderHealthSuggestions(){
       + '<div style="display:flex;gap:8px">'
       + '<button class="btn btn-gold" style="margin:0;flex:1" '
       + 'onclick="logHealthSuggestion(\'' + escForInlineJsAttr(w.id) + '\',\''
-      + escForInlineJsAttr(w.label) + '\',' + w.day + ',' + (w.km==null?'null':w.km) + ')">Log it</button>'
+      + escForInlineJsAttr(w.label) + '\',' + w.day + ',' + (w.km==null?'null':w.km)
+      + ',' + w.month + ',' + w.year + ')">Log it</button>'
       + '<button class="btn" style="margin:0;flex:1;background:var(--bg-card-2);color:var(--text)" '
       + 'onclick="dismissHealthSuggestion(\'' + escForInlineJsAttr(w.id) + '\')">Not this one</button>'
       + '</div></div>').join('');
@@ -4558,12 +4563,19 @@ document.addEventListener('visibilitychange', function(){
   catch(e){ logErr('healthForegroundRefresh', e); }
 });
 
-function logHealthSuggestion(id, label, day, km){
+// month/year are passed explicitly because the suggestion already knows them:
+// healthRecentWorkouts reads them off the HealthKit sample's own start date. The
+// old signature dropped them and let submitLog assume the current season, so a
+// workout recorded late on the 31st and confirmed after midnight would have been
+// filed into the following month. Undefined from an older call site falls back
+// to season, which is the previous behaviour.
+function logHealthSuggestion(id, label, day, km, month, year){
   try{
     healthMarkSeen(id);
     // The exact path a manual log takes — validation, celebration, streaks and
     // all. km rides along only for distance workouts, same rule as manual.
-    selDay = day; selW = [label]; selNote = null;
+    selDay = day; selMonth = month || null; selYear = year || null;
+    selW = [label]; selNote = null;
     selKm = (km != null && typeof isDistanceWorkout==='function' && isDistanceWorkout(label)) ? km : null;
     window._mirrorLogMode = true;
     submitLog();
@@ -5431,9 +5443,13 @@ async function submitLog(){
         team: sess.player.team,
         role: sess.player.role,
         workouts: selW,
+        // day, month and year now come from ONE source. selMonth/selYear are set
+        // by whatever selected the day — the calendar panel that was tapped, or
+        // the Health suggestion's own date — and are null only for the
+        // log-today entry points, where season is the right answer by definition.
         day: selDay,
-        month: season.month,
-        year: season.year,
+        month: (selMonth != null ? selMonth : season.month),
+        year:  (selYear  != null ? selYear  : season.year),
         timestamp: firebase.firestore.FieldValue.serverTimestamp(),
         // S4 NORTHSTAR §5.2: forward-only identity attribution — existing
         // logs are never backfilled. uid = this device's auth session;
@@ -5547,8 +5563,11 @@ async function submitLog(){
       // this log landed in, not just the one on screen. Snapshot the day/
       // workouts too — mirCloseReport clears the sel* globals, and the
       // cross-group fill can still be in flight when it does.
+      // Same source as the write above, or the afterglow narrates a different
+      // date than the one that was saved.
       window._mirBroadcast = { list: broadcast, day: selDay,
-                               month: season.month, year: season.year,
+                               month: (selMonth != null ? selMonth : season.month),
+                               year:  (selYear  != null ? selYear  : season.year),
                                workouts: (selW||[]).slice(),
                                km: selKm, note: selNote };
 
