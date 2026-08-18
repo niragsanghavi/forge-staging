@@ -142,6 +142,25 @@ function _ctxEntry(ctx){
     .filter(w=>w.twist==='underdog_week')
     .map(w=>({monDate:w.monDate, sunDate:endOf(w), frozen:new Set(w.frozenPlayers||[])}));
 
+  // Step Challenge: a RESOLVED week froze three things at resolution time — who
+  // won, who was on that team, and what the bonus was worth. Scoring reads only
+  // those frozen fields and never recomputes from step data, for the same
+  // reason Underdog Week freezes its players: a roster edit on Tuesday must not
+  // rewrite who won last week, and turning the challenge off must not silently
+  // claw back points people were already told they had.
+  //
+  // An UNRESOLVED window (no `awarded`) pays nothing. That is what makes the
+  // week live on the board but worth zero until it is settled.
+  const stepAwards=new Map();
+  for(const w of seasonWindows){
+    if(w.twist!=='step_week' || !Array.isArray(w.awarded)) continue;
+    // The frozen per-week value. Absent on a doc written before the field
+    // existed — pay nothing rather than guess a number that moves a score.
+    const pts=Number(w.bonus);
+    if(!Number.isFinite(pts) || pts<=0) continue;
+    for(const name of w.awarded) stepAwards.set(name,(stepAwards.get(name)||0)+pts);
+  }
+
   const b30Set=new Set(bonuses.map(b=>b.player));
   const jackCnt=new Map();
   jacks.forEach(a=>{ if(!a.groupCode||a.groupCode===myGC) jackCnt.set(a.player,(jackCnt.get(a.player)||0)+1); });
@@ -164,7 +183,7 @@ function _ctxEntry(ctx){
     // Coerced here so a stringly-typed admin value can't poison comparisons.
     kmTarget: (Number.isFinite(Number(cfg.kmTarget)) && Number(cfg.kmTarget)>0) ? Number(cfg.kmTarget) : null,
     kmByPlayer, kmByTeam, teamOf,
-    bonusWord, friOn, monOn, bossDays, underdogWindows,
+    bonusWord, friOn, monOn, bossDays, underdogWindows, stepAwards,
     b30Set, jackCnt, ipSum,
     dowBase, todayDay, isEnd, rosterLen:roster.length,
     results:new Map()
@@ -180,7 +199,7 @@ function score(playerName, ctx){
 
   const p=E.rosterByName.get(playerName);
   if(!p){
-    r={wo:0,base:0,sb:0,wb:0,rb:0,tb:0,b30:0,pen:0,bossBonus:0,dayBonuses:0,underdogBonus:0,jackBonus:0,ipBonus:0,kmBonus:0,myKm:0,teamKm:0,total:0,streak:0,days:_EMPTY_SET};
+    r={wo:0,base:0,sb:0,wb:0,rb:0,tb:0,b30:0,pen:0,bossBonus:0,dayBonuses:0,underdogBonus:0,jackBonus:0,ipBonus:0,kmBonus:0,stepBonus:0,myKm:0,teamKm:0,total:0,streak:0,days:_EMPTY_SET};
     E.results.set(playerName,r);
     return r;
   }
@@ -285,8 +304,12 @@ function score(playerName, ctx){
     if(teamKm>=E.kmTarget && myKm>=KM_MIN_CONTRIBUTION) kmBonus=KM_CONTRIBUTOR_BONUS;
   }
 
-  const total=Math.max(0, base+sb+wb+rb+tb+b30+bossBonus+pen+dayBonuses+underdogBonus+jackBonus+ipBonus+kmBonus);
-  r={wo,base,sb,wb,rb,tb,b30,pen,bossBonus,dayBonuses,underdogBonus,jackBonus,ipBonus,kmBonus,myKm,teamKm,total,streak,days};
+  // Step Challenge: whatever this player's resolved weeks froze for them. Zero
+  // for everyone until a week is actually settled, and zero forever in a season
+  // where the challenge was never switched on.
+  const stepBonus=E.stepAwards.get(playerName)||0;
+  const total=Math.max(0, base+sb+wb+rb+tb+b30+bossBonus+pen+dayBonuses+underdogBonus+jackBonus+ipBonus+kmBonus+stepBonus);
+  r={wo,base,sb,wb,rb,tb,b30,pen,bossBonus,dayBonuses,underdogBonus,jackBonus,ipBonus,kmBonus,stepBonus,myKm,teamKm,total,streak,days};
   E.results.set(playerName,r);
   return r;
 }
