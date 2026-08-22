@@ -8150,6 +8150,16 @@ async function performRollover(code){
       // (foundryGoal is deliberately NOT carried — it's a manual override of an
       // auto-computed goal, and a stale number is worse than re-computing.)
       kmTarget: cur2.kmTarget ?? null,
+      // stepChallenge is the SAME class of thing as kmTarget — a feature toggle
+      // that lives on the season, where "unset" means the feature does not
+      // exist. Leaving it out of this list would have switched the weekly step
+      // challenge off at every month boundary, silently, with the admin's
+      // checkbox still appearing ticked until they reopened the panel. That is
+      // the exact bug the note above records for kmTarget; caught here before
+      // the feature had ever been enabled on a live season.
+      //
+      // Carried whole, so a per-season target or bonus override travels with it.
+      ...(cur2.stepChallenge ? { stepChallenge: cur2.stepChallenge } : {}),
       roster: newRoster, status:'active',
       startedAt: firebase.firestore.FieldValue.serverTimestamp(), endedAt: null
     });
