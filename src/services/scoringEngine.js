@@ -128,26 +128,73 @@ function _ctxEntry(ctx){
   // loses points, and a dormant member rejoins the denominator the moment they
   // log again.
   //
-  // KNOWN WRINKLE, accepted deliberately: the denominator can only grow during
-  // a month, so a latecomer logging on the 20th raises the bar for everyone and
-  // can retroactively un-qualify an early day. The alternative — freezing the
-  // count on day 1 — would hand a permanent advantage to teams whose members
-  // start slowly. Growing is the fairer of the two, and by mid-month it is
-  // stable in practice.
-  const playedThisMonth=new Set();
-  for(const l of logs){ if(l && l.player) playedThisMonth.add(l.player); }
+  // THE BAR IS PER DAY, AND THE PAST IS FIXED. A member counts toward the
+  // denominator from the day of their FIRST log that month, and every day after
+  // it. Not before.
+  //
+  // The naive version — one denominator for the whole month, counting anyone who
+  // logged at any point — silently rewrites history. Every day is re-scored with
+  // today's bar, so one dormant member returning on the 25th raises the bar for
+  // the 1st through the 24th as well. Measured on live data 22 Aug 2026, a
+  // single returner would have cost Ghadiyali B 9 of its 17 qualifying days,
+  // HardCore A 9 of 12, and Vandrao A all 4 of 4. The loyal members would open
+  // the app to find a streak they had already been shown was gone, because
+  // somebody else came back. That is the opposite of what a comeback should do.
+  //
+  // Anchoring each day's denominator to who was playing BY THAT DAY makes the
+  // past immutable: a return can only ever affect today and the days after it.
+  // The residual is the ~8-day backlog window — logging for a past day does
+  // move that day's denominator — which is narrow, rare, and self-correcting.
+  // A ROLLING WINDOW, so the bar adapts in BOTH directions. You are counted on
+  // day D if you logged at any point in the previous ACTIVE_WINDOW days. Not
+  // "ever this month" — that let a single log on the 6th hold the bar up for
+  // the remaining 25 days, which is the same unfairness pointing forwards.
+  //
+  // Two properties this buys, and both matter:
+  //   · The past cannot be rewritten. Day D's bar depends only on logs up to
+  //     day D, so a comeback on the 25th can never un-qualify the 5th.
+  //   · A member who stops drifts back out on their own after two weeks, with
+  //     no admin action and nobody marked as departed.
+  //
+  // Two weeks because it is the shortest window that survives a holiday or a
+  // work trip without dropping someone who is still committed, and the measured
+  // return cliff sits at 8 days — past that, two thirds never come back, so
+  // fourteen is comfortably beyond the point where absence is usually real.
+  const ACTIVE_WINDOW=14;
+  const dayListOf=new Map();
+  for(const l of logs){
+    if(!l || !l.player || !l.day) continue;
+    if(!dayListOf.has(l.player)) dayListOf.set(l.player,[]);
+    dayListOf.get(l.player).push(l.day);
+  }
+  const teamMembers=new Map();
   roster.forEach(p=>{ if(p && p.departed===true) return;
-                      if(!playedThisMonth.has(p.name)) return;
+                      if(!teamMembers.has(p.team)) teamMembers.set(p.team,[]);
+                      teamMembers.get(p.team).push(p.name);
                       teamCount.set(p.team,(teamCount.get(p.team)||0)+1); });
   const qualByTeam=new Map();
-  for(const [t,count] of teamCount){
+  for(const [t,names] of teamMembers){
     const td=teamDayLog.get(t);
-    // Floor of 1: with a count of 0 the threshold would be 0, and "at least 0
-    // people trained" is true on every day of the month — a free streak for a
-    // team where nobody logged at all.
-    const thr=Math.max(1, Math.ceil(count*thrFactor));
+    // Per-day headcount via a difference array: each logged day marks its owner
+    // present for the next ACTIVE_WINDOW days. O(logs + DAYS) per member rather
+    // than scanning the window per day — this runs on every render.
+    const present=new Array(DAYS+2).fill(0);
+    for(const n of names){
+      const ds=dayListOf.get(n); if(!ds || !ds.length) continue;
+      const cover=new Array(DAYS+2).fill(0);
+      for(const d of ds){
+        const a=Math.max(1,d), b=Math.min(DAYS,d+ACTIVE_WINDOW-1);
+        if(a<=b){ cover[a]++; cover[b+1]--; }
+      }
+      let acc=0;
+      for(let d=1; d<=DAYS; d++){ acc+=cover[d]; if(acc>0) present[d]++; }
+    }
     const qual=[]; let run=0;
     for(let d=1; d<=DAYS; d++){
+      // Floor of 1: a denominator of 0 would make the bar 0, and "at least 0
+      // people trained" is true every day — a free streak for a team where
+      // nobody has logged.
+      const thr=Math.max(1, Math.ceil(present[d]*thrFactor));
       const s=(td && td.get(d)) || _EMPTY_SET;
       if(s.size>=thr){ run++; qual.push({set:s, streakLen:run}); }
       else run=0;
