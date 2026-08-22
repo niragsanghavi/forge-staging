@@ -6529,6 +6529,63 @@ function renderLB(){
 }
 
 // ── FEED ──────────────────────────────────────────────────────────────────
+/* ── STREAK MILESTONES IN THE FEED ─────────────────────────────────────────
+   DERIVED, never stored. Every milestone is recomputed from allLogs, which the
+   season listener already holds — so this costs ZERO extra Firestore reads,
+   has no write path for anyone to forge, and self-heals: void a log and the
+   milestone it created disappears on the next render.
+
+   WHY IT EXISTS. Someone pulls ahead on the board and nobody knows why. Points
+   accrue invisibly, so a member who is quietly on a 21-day run looks to
+   everyone else like someone who is simply winning. Naming the moment turns an
+   opaque scoreboard into a story the group can follow — and it is the only
+   thing in Forge that puts one member's effort in front of the others.
+
+   Mirrors STREAK_MILESTONE_DAYS in the scoring engine. If that changes, change
+   the 7 here too — they are deliberately the same number, not a coincidence. */
+function feedMilestones(){
+  const out=[];
+  try{
+    const roster=(season.roster||[]).filter(p=>p && p.departed!==true);
+    const byPlayer=new Map();
+    (allLogs||[]).forEach(l=>{
+      if(!l || l.voided===true || !l.player) return;
+      if(!byPlayer.has(l.player)) byPlayer.set(l.player,new Set());
+      byPlayer.get(l.player).add(l.day);
+    });
+    for(const p of roster){
+      const ds=[...(byPlayer.get(p.name)||[])].sort((a,b)=>a-b);
+      let run=0;
+      for(let i=0;i<ds.length;i++){
+        run=(i>0 && ds[i]===ds[i-1]+1) ? run+1 : 1;
+        // The milestone belongs to the DAY THE RUN REACHED IT, not to today —
+        // so it stays anchored in the feed's timeline like any other event.
+        if(run%7===0) out.push({name:p.name, team:p.team, day:ds[i], days:run});
+      }
+    }
+  }catch(e){ logErr('feedMilestones', e); }
+  return out.sort((a,b)=>b.day-a.day);
+}
+
+// One line of text a member can paste into the group's WhatsApp. Forge has no
+// push notifications, and building them means FCM plus a server — so until then
+// the group chat IS the notification channel, and this meets it where it is.
+function shareMilestones(){
+  try{
+    const now=new Date();
+    const today=(now.getMonth()+1===season.month && now.getFullYear()===season.year) ? now.getDate() : 31;
+    const recent=feedMilestones().filter(m=>today-m.day<=7);
+    if(!recent.length){ toast('No streak milestones in the last week yet.'); return; }
+    const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const lines=recent.map(m=>`${m.name} — ${m.days} days in a row (+${m.days/7*10} pts)`);
+    const txt=`🔨 ${groupData?.name||'Forge'} — this week's streaks\n\n${lines.join('\n')}\n\n${MN[season.month-1]} standings: goforge.in`;
+    if(navigator.share){ navigator.share({text:txt}).catch(()=>{}); return; }
+    navigator.clipboard.writeText(txt)
+      .then(()=>toast('Copied — paste it into the group chat.','success'))
+      .catch(()=>toast('Could not copy on this device.','error'));
+  }catch(e){ logErr('shareMilestones', e); toast('Could not build the message.','error'); }
+}
+
 function renderFeed(){
   // PASS-2 FIX 1a — a just-written log's serverTimestamp() is NULL in the local
   // offline echo until the server acks. The old `||0` sorted those brand-new
@@ -6595,6 +6652,24 @@ function renderFeed(){
       <div style="font-size:10px;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">${topStreakers.length<=3?'Longest active streak':topStreakers.length+' players tied — check the board'}</div>
     </div>`:''}
   </div>`;
+
+  // Milestones from the last 7 days, newest first. Silent when there are none —
+  // an empty "achievements" box every day would train people to ignore the space.
+  const _ms=feedMilestones().filter(m=>todayDay>0 && todayDay-m.day<=7 && todayDay-m.day>=0);
+  if(_ms.length){
+    statsHTML += `<div style="background:var(--gold-l);border:1px solid var(--gold);border-radius:10px;padding:12px 14px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+        <div style="font-size:10px;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:.5px">Streaks this week</div>
+        <button onclick="shareMilestones()" style="background:none;border:1px solid var(--gold);color:var(--orange);font-size:10px;font-weight:700;padding:4px 9px;border-radius:99px;cursor:pointer">Share</button>
+      </div>
+      ${_ms.slice(0,4).map(m=>`<div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:13px">
+        ${flameIco('flk-s')}
+        <span style="font-weight:800;color:${tcol(m.team)}">${esc(m.name)}</span>
+        <span style="color:var(--text)">hit ${m.days} days in a row</span>
+        <span style="margin-left:auto;font-weight:800;color:var(--orange)">+${m.days/7*10}</span>
+      </div>`).join('')}
+    </div>`;
+  }
 
   if(sorted.length===0){ document.getElementById('feedList').innerHTML=statsHTML+'<div class="tmuted">No workouts logged yet. Be the first! '+flameIco('flk-s')+'</div>'; return; }
   // PASS-2 FIX 5 — feed rows: full block tinted the player's TEAM colour, name
