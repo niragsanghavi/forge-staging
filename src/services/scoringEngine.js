@@ -113,12 +113,39 @@ function _ctxEntry(ctx){
   // permanently raise the bar for everyone still playing — one person quitting
   // would quietly break their team's streak. Their PAST logs still score; only
   // the forward-looking headcount changes.
+  //
+  // THE SAME ARGUMENT APPLIES TO THE LIVING. A member who has not logged once
+  // all month is, for the purposes of "did enough of us train today", exactly
+  // as absent as a deleted account — but they were still inflating the bar for
+  // everyone who did show up. Measured on live data 22 Aug 2026: Squad +1s
+  // Team A needed 3 of a roster of 4 when only 2 people were still playing, so
+  // its two loyal members could log perfectly every day and never once earn a
+  // streak. Vandrao Team B needed 6 with 5 playing. Both were unreachable, and
+  // silently so — nothing on screen said the mechanic was off.
+  //
+  // Counting only the people who are actually playing this month fixes that
+  // without labelling anyone as gone. Nobody is removed from the roster, nobody
+  // loses points, and a dormant member rejoins the denominator the moment they
+  // log again.
+  //
+  // KNOWN WRINKLE, accepted deliberately: the denominator can only grow during
+  // a month, so a latecomer logging on the 20th raises the bar for everyone and
+  // can retroactively un-qualify an early day. The alternative — freezing the
+  // count on day 1 — would hand a permanent advantage to teams whose members
+  // start slowly. Growing is the fairer of the two, and by mid-month it is
+  // stable in practice.
+  const playedThisMonth=new Set();
+  for(const l of logs){ if(l && l.player) playedThisMonth.add(l.player); }
   roster.forEach(p=>{ if(p && p.departed===true) return;
+                      if(!playedThisMonth.has(p.name)) return;
                       teamCount.set(p.team,(teamCount.get(p.team)||0)+1); });
   const qualByTeam=new Map();
   for(const [t,count] of teamCount){
     const td=teamDayLog.get(t);
-    const thr=Math.ceil(count*thrFactor);
+    // Floor of 1: with a count of 0 the threshold would be 0, and "at least 0
+    // people trained" is true on every day of the month — a free streak for a
+    // team where nobody logged at all.
+    const thr=Math.max(1, Math.ceil(count*thrFactor));
     const qual=[]; let run=0;
     for(let d=1; d<=DAYS; d++){
       const s=(td && td.get(d)) || _EMPTY_SET;
