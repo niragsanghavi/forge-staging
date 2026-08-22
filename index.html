@@ -366,6 +366,10 @@
          Painted by renderHealthSuggestions(). D2: nothing here has left the
          phone; confirming creates a normal Forge log via submitLog(). -->
     <div id="healthSuggest"></div>
+    <!-- TODAY'S TEAM CALL. One line: how many more teammates need to log to keep
+         the streak alive today. Silent once the bar is met, and silent for solo
+         groups. renderTeamCall() owns it. -->
+    <div id="teamCall"></div>
     <!-- FOUNDER CARD — solo groups (numTeams 1) only. The invite loop: code,
          share, countdown to teams; flips to a split-into-teams nudge at 6.
          renderFounderCard() owns it; renders empty for every other group. -->
@@ -2285,6 +2289,8 @@ function renderHome(){
   // must never take Home down with it.
   try { renderGoalRing(); }
   catch(e){ logErr('renderGoalRing', e); }
+  try { renderTeamCall(); }
+  catch(e){ logErr('renderTeamCall', e); }
   try { renderMondayRecap(); }
   catch(e){ logErr('renderMondayRecap', e); }
   try { renderFounderCard(); }
@@ -6529,6 +6535,62 @@ function renderLB(){
 }
 
 // ── FEED ──────────────────────────────────────────────────────────────────
+/* ── TODAY'S TEAM CALL ─────────────────────────────────────────────────────
+   The absence half of the streak work. A team streak breaks silently: nothing
+   tells anyone it is about to, and by the time the board shows a zero the day
+   is gone. This is one line on Home saying how many more teammates need to log
+   today — while it is still fixable.
+
+   Measured 22 Aug 2026: after someone's first break, a gap of up to 7 days ends
+   with them returning 92% of the time; past 8 days, only 33%. So the useful
+   moment for any nudge is TODAY, not at month end and not in a weekly digest.
+
+   Mirrors the engine's denominator exactly — members who have logged at least
+   once this month, floor of 1 — because a call to action that disagrees with
+   the scoring would be worse than none. If that rule changes, change it here.
+
+   Deliberately never names who is missing. "Two more of you" is a nudge;
+   "waiting on Siri" is a pile-on, in a group where these people see each other
+   every day. Silent when the bar is already met, and silent for solo groups,
+   so it stays worth reading. */
+function renderTeamCall(){
+  const el=document.getElementById('teamCall');
+  if(!el) return;
+  el.innerHTML='';
+  if(!season || !me) return;
+  if(typeof isSoloMode==='function' && isSoloMode()) return;
+
+  const now=new Date();
+  if(now.getMonth()+1!==season.month || now.getFullYear()!==season.year) return;   // viewing a closed month
+  const today=now.getDate();
+
+  const roster=(season.roster||[]).filter(p=>p && p.departed!==true);
+  const mine=roster.filter(p=>p.team===me.team);
+  if(mine.length<2) return;
+
+  const live=(allLogs||[]).filter(l=>l && l.voided!==true);
+  const playing=new Set(live.map(l=>l.player));
+  const denom=mine.filter(p=>playing.has(p.name)).length;
+  const need=Math.max(1, Math.ceil(denom*(season.teamStreakThreshold ?? 0.6)));
+  const doneToday=new Set(live.filter(l=>l.day===today && mine.some(p=>p.name===l.player)).map(l=>l.player));
+  const short=need-doneToday.size;
+  if(short<=0) return;                       // bar already met — say nothing
+
+  const iLogged=doneToday.has(me.name);
+  const msg = short===1
+    ? (iLogged ? 'One more teammate keeps the streak alive today.'
+               : 'One more of you keeps the streak alive today — it can be you.')
+    : `${short} more of you needed today to keep the streak alive.`;
+
+  el.innerHTML=`<div style="background:var(--bg-card-2);border:1px solid var(--hairline);border-left:3px solid var(--orange);border-radius:10px;padding:11px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
+    ${flameIco('flk-s')}
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:700;color:var(--text)">${esc(msg)}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:1px">Team ${esc(me.team)} · ${doneToday.size} of ${need} in</div>
+    </div>
+  </div>`;
+}
+
 /* ── STREAK MILESTONES IN THE FEED ─────────────────────────────────────────
    DERIVED, never stored. Every milestone is recomputed from allLogs, which the
    season listener already holds — so this costs ZERO extra Firestore reads,
