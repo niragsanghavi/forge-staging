@@ -7713,7 +7713,14 @@ async function saveEditGroup(){
   const days=parseInt(document.getElementById('editDays').value)||30;
   const capTarget=parseInt(document.getElementById('editCapTarget').value)||16;
   const vcTarget=parseInt(document.getElementById('editVCTarget').value)||20;
-  const minWorkouts=parseInt(document.getElementById('editMinWO').value)||12;
+  // `|| 12` swallowed a deliberate ZERO: parseInt('0') is 0, and 0 || 12 is 12,
+  // so an admin turning the month-end penalty off silently turned it back on at
+  // full strength. Found 22 Aug 2026 while trying to disable the penalty before
+  // it wiped 26 people. `??` only falls back when the value is genuinely absent,
+  // which is what was meant. The scoring engine already honours 0 correctly
+  // (cfg.minWorkouts ?? 12) — only this save path was wrong.
+  const _mwRaw=parseInt(document.getElementById('editMinWO').value);
+  const minWorkouts=Number.isFinite(_mwRaw) && _mwRaw>=0 ? _mwRaw : 12;
   const numTeams=Math.min(3,Math.max(1,parseInt(document.getElementById('editNumTeams').value)||3));
   const thresholdPct=Math.min(100,Math.max(30,parseInt(document.getElementById('editThreshold').value)||60));
   // null (not 0, not absent) is the explicit "off" value — every km surface tests
