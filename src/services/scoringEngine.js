@@ -38,6 +38,14 @@ const KM_MAX_PER_LOG       = 200;  // km — clamps typos (a "500km walk") per l
 // rule; this is the floor that holds until it ships.
 const STEP_BONUS_MAX_PER_WEEK = 25;
 
+// ── PERSONAL STREAK MILESTONE ───────────────────────────────────────────────
+// Every unbroken week of logging pays this, to the person who did it. Sized
+// deliberately against the alternatives: two days of base (+10), the same as a
+// perfect week, and half a Jack of All Trades. Big enough to notice on the
+// board, small enough that consistency still beats it over a month.
+const STREAK_MILESTONE_DAYS  = 7;
+const STREAK_MILESTONE_BONUS = 10;
+
 // ── SNAPSHOT CACHE ──────────────────────────────────────────────────────────
 // score() used to re-scan the whole log array per call, and the team-streak /
 // underdog sections re-scanned it per roster entry per call — one leaderboard
@@ -244,11 +252,38 @@ function score(playerName, ctx){
   let base=0;
   for(const d of days) base += dayBaseOf(d);
 
-  // ── STREAK (display only) ── consecutive run ending today (or yesterday)
+  // ── STREAK ── consecutive run ending today (or yesterday), for display
   const checkUpTo=days.has(E.todayDay) ? E.todayDay : E.todayDay-1;
   let streak=0;
   for(let d=checkUpTo; d>=1 && days.has(d); d--) streak++;
-  const sb=0;
+
+  // ── STREAK MILESTONE BONUS ──────────────────────────────────────────────
+  // `sb` has been in the return shape and summed into `total` since the
+  // beginning, hardcoded to 0 — the slot was designed for and never filled.
+  //
+  // WHY THIS EXISTS. The personal streak was display-only: the one thing a
+  // member controls entirely on their own paid nothing, while the team streak
+  // — which depends on five other people showing up — was the only streak that
+  // scored. For anyone drifting, that is exactly backwards.
+  //
+  // Awarded per COMPLETED WEEK of an unbroken run, not once per run: 7 days
+  // pays 10, 14 pays 20, 21 pays 30. Continuing is worth as much as starting.
+  // A broken run resets the count, so the bonus can never be farmed by
+  // alternating days.
+  //
+  // Scoped to the season month like everything else here, so a run spanning a
+  // month boundary is counted within each month separately. That is the same
+  // rule perfect-week already uses, and keeping them consistent matters more
+  // than catching the handful of runs that straddle the 1st.
+  let sb=0;
+  {
+    const sorted=[...days].sort((a,b)=>a-b);
+    let run=0;
+    for(let i=0;i<sorted.length;i++){
+      run = (i>0 && sorted[i]===sorted[i-1]+1) ? run+1 : 1;
+      if(run%STREAK_MILESTONE_DAYS===0) sb += STREAK_MILESTONE_BONUS;
+    }
+  }
 
   // ── PERFECT WEEK ──
   // Rolling non-overlapping 7-day windows within the month.
