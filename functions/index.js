@@ -364,3 +364,129 @@ exports.awardSeasonBadges = onCall({ region: REGION }, async (request) => {
   logger.info(`awardSeasonBadges: ${groupCode}/${sid} — ${result.awarded} awarded${result.already?' (already)':''}`);
   return { ok:true, ...result };
 });
+
+/**
+ * adminResetPin — clear a player's PIN so they can set a new one.
+ *
+ * WHY THIS HAS TO BE SERVER-SIDE. The client used to do this itself, in
+ * resetPlayerPin(). Then the 17 Aug rules made users.pinHash WRITE-ONCE from
+ * any client — deliberately, because value -> null is the second half of a
+ * proven takeover (PATCH someone's pinHash, then sign in as them). That rule
+ * is right and stays. It also means the reset button has been failing for
+ * every player who ever set a PIN — 72 of them — since the day it shipped.
+ * The admin SDK bypasses rules, so this is the only place the write can live.
+ *
+ * WHAT GATES IT, AND WHY NOT THE OBVIOUS THINGS.
+ * This callable can unlock ANY account in ANY group, so what authorises it
+ * matters more than the write itself. Two tempting options are both worthless:
+ *
+ *   - roster entry `isAdmin`. The roster is a plain array on a client-writable
+ *     season doc; anyone can add isAdmin:true to their own entry. Proven live.
+ *   - the app's ADMIN_PIN_HASH. It sits in src/state/appState.js in a PUBLIC
+ *     repo, and it hashes a FOUR DIGIT pin — 10,000 candidates, so the hash
+ *     being public means the PIN is public. It is not a secret and never was.
+ *
+ * So the gate is a value that has never been in the repo and never reaches a
+ * browser bundle: a Firebase secret. Set it once, out of band:
+ *
+ *     firebase functions:secrets:set ADMIN_RESET_KEY --project forge-25c8c
+ *
+ * Deploying needs Blaze (Functions always has); this usage stays inside the
+ * free grant.
+ *
+ * data: { groupCode, name, adminKey }
+ * Returns: { ok:true, cleared:{roster,userDoc}, already? }
+ */
+const { defineSecret } = require('firebase-functions/params');
+const ADMIN_RESET_KEY = defineSecret('ADMIN_RESET_KEY');
+
+exports.adminResetPin = onCall({ region: REGION, secrets: [ADMIN_RESET_KEY] }, async (request) => {
+  const auth = request.auth;
+  if(!auth || !auth.uid) throw new HttpsError('unauthenticated', 'Open the app first.');
+  const uid = auth.uid;
+
+  const groupCode = String((request.data && request.data.groupCode) || '').trim().toUpperCase();
+  const name      = String((request.data && request.data.name) || '').trim();
+  const adminKey  = String((request.data && request.data.adminKey) || '');
+  if(!groupCode || !name || !adminKey){
+    throw new HttpsError('invalid-argument', 'Group code, player name and the admin key are required.');
+  }
+
+  // Rate limit BEFORE the key check, so the budget cannot be probed for free.
+  // Only a WRONG key spends it — a successful reset is not a brute-force
+  // attempt, and an admin clearing four PINs in a row must not lock themselves
+  // out halfway through.
+  await assertUnderRateLimit(uid, 'adminReset', 5, 3600 * 1000);
+
+  const expected = ADMIN_RESET_KEY.value();
+  if(!expected){
+    // Fail closed and say so. A missing secret must never read as "no gate".
+    throw new HttpsError('failed-precondition', 'Server key is not configured. Set ADMIN_RESET_KEY.');
+  }
+  // Compare the HASHES, not the values: hashEq is constant-time but only over
+  // equal-length inputs, and raw keys differ in length. Hashing first makes
+  // every comparison 64 hex chars, so length alone leaks nothing.
+  if(!hashEq(sha256hex(adminKey), sha256hex(expected))){
+    await recordRateHit(uid, 'adminReset', 3600 * 1000);
+    throw new HttpsError('permission-denied', 'That admin key is not right.');
+  }
+
+  const gSnap = await db.collection('groups').doc(groupCode).get();
+  if(!gSnap.exists) throw new HttpsError('not-found', 'No group with that code.');
+  const sid = gSnap.data().currentSeasonId;
+  if(!sid) throw new HttpsError('not-found', 'That group has no active season.');
+  const sRef = db.collection('groups').doc(groupCode).collection('seasons').doc(sid);
+
+  const result = await db.runTransaction(async tx => {
+    const sSnap = await tx.get(sRef);
+    if(!sSnap.exists) throw new HttpsError('not-found', 'That season is missing.');
+    const roster = sSnap.data().roster || [];
+    const idx = roster.findIndex(p => p && String(p.name).toLowerCase() === name.toLowerCase());
+    if(idx < 0) throw new HttpsError('not-found', `${name} is not on ${groupCode}'s roster.`);
+
+    const entry = roster[idx];
+    const userId = entry.userId || null;
+
+    // ALL READS BEFORE ANY WRITE — Firestore transactions require it.
+    let uSnap = null;
+    if(userId) uSnap = await tx.get(db.collection('users').doc(userId));
+
+    // A Google-linked account has no PIN to reset, and clearing one would be a
+    // takeover route rather than a favour: the next person to reach the grace
+    // flow on that name would set a credential on a secured account.
+    if(uSnap && uSnap.exists && uSnap.data().authUid){
+      throw new HttpsError('failed-precondition', `${entry.name} signs in with Google — there is no PIN to reset.`);
+    }
+
+    const rosterHadPin = entry.pin != null || entry.pinSet === true;
+    const userHadHash  = !!(uSnap && uSnap.exists && uSnap.data().pinHash);
+    if(!rosterHadPin && !userHadHash){
+      return { already:true, cleared:{ roster:false, userDoc:false }, displayName: entry.name };
+    }
+
+    // Rebuild the entry rather than mutating in place, so nothing else on it
+    // (team, role, uid, userId) can be dropped by accident.
+    roster[idx] = { ...entry, pin: null, pinSet: false };
+    tx.update(sRef, { roster });
+
+    // Only touch the user doc if it actually exists. tx.update on a missing
+    // doc throws, and a roster entry can outlive its user record.
+    if(uSnap && uSnap.exists) tx.update(db.collection('users').doc(userId), { pinHash: null });
+
+    return { already:false, cleared:{ roster:true, userDoc:!!(uSnap && uSnap.exists) }, displayName: entry.name };
+  });
+
+  // AUDIT. This callable can unlock any account, so every use leaves a record
+  // that no client can read or delete. Names and codes only — never a PIN,
+  // never a hash, and never the admin key.
+  try{
+    await db.collection('pinResets').add({
+      groupCode, seasonId: sid, player: result.displayName,
+      byUid: uid, at: FieldValue.serverTimestamp(),
+      already: result.already, cleared: result.cleared
+    });
+  }catch(e){ logger.warn('adminResetPin: audit write failed', e.message); }
+
+  logger.info(`adminResetPin: ${result.displayName} in ${groupCode}${result.already?' (already clear)':''}`);
+  return { ok:true, ...result };
+});
