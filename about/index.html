@@ -340,6 +340,27 @@ html.locked .rail{display:none}
   stroke-linecap:round;stroke-linejoin:round}
 .btn-ig:hover,.btn-ig:active{border-color:var(--gold)}
 .btn-ig:focus-visible{outline:2px solid var(--gold-hot);outline-offset:3px}
+/* App Store — same outlined pill as the Instagram button, so the two secondary
+   actions read as one tier. The Apple glyph is a FILLED path, not the stroked
+   line-art the other icons use, so it needs its own fill/stroke override. */
+.btn-ig.btn-app svg{fill:var(--text);stroke:none}
+/* The row of secondary actions under the primary CTA. gap replaces .btn-ig's
+   own margin-top so two buttons side by side sit level instead of stacking
+   with doubled space; they wrap to one per line on a narrow phone. */
+.cta-secondary{display:flex;flex-wrap:wrap;justify-content:center;gap:12px}
+.cta-secondary .btn-ig{margin-top:0}
+/* Tertiary: WhatsApp is now the "talk to a human" fallback rather than the
+   only way in, so it drops to text weight below the two buttons. */
+.cta-human{margin-top:20px;font-size:13px;color:var(--muted)}
+.cta-human a{color:var(--gold);text-decoration:underline;text-underline-offset:3px;
+  text-decoration-thickness:1px;text-decoration-color:var(--gold-line)}
+.cta-human a:hover{color:var(--gold-hot);text-decoration-color:var(--gold-hot)}
+/* A pill that is a real link, not a "coming soon" label. */
+a.pill{color:var(--text);cursor:pointer;transition:border-color .3s var(--ease),color .3s var(--ease)}
+a.pill svg{stroke:none;fill:var(--text)}
+a.pill:hover{border-color:var(--gold);color:var(--gold-hot)}
+a.pill:hover svg{fill:var(--gold-hot)}
+a.pill:focus-visible{outline:2px solid var(--gold-hot);outline-offset:3px}
 
 /* ════════════════ D · WHATSAPP CTA ════════════════ */
 
@@ -748,25 +769,45 @@ html.locked .rail{display:none}
 
   <section class="sec cta">
     <h2 class="display rv">Bring your <b class="gk">group</b>.</h2>
+    <p class="rv" style="margin-top:14px;color:var(--muted);font-size:15px">
+      Name it, pick your own code, and you&rsquo;re running. It works on day one
+      with nobody else in it &mdash; teams unlock as your friends join.
+    </p>
     <div class="rv">
-      <a class="btn" href="https://wa.me/919870000217?text=Hi!%20I%20want%20to%20start%20a%20Forge%20group%20for%20my%20crew.">Start your group</a>
+      <!-- Straight into the app's self-serve founder flow. ?create is handled
+           at index.html:1360 and lands on #screen-create. This used to be a
+           wa.me link, which meant every new group waited on Nirag reading a
+           message and building it by hand — the funnel existed in the product
+           months before this page stopped hiding it. -->
+      <a class="btn" href="https://goforge.in/?create">Start your group</a>
     </div>
-    <div class="rv">
+    <div class="rv cta-secondary">
+      <a class="btn-ig btn-app" href="https://apps.apple.com/app/id6802334800" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.8 8.2c-1.2-.1-2.3.7-3.8.7s-2.5-.7-3.7-.7c-1.9.1-4.1 1.7-4.1 5 0 3.4 2.6 7.6 4.6 7.6 1 0 1.7-.7 3.2-.7s2.1.7 3.2.7c2 0 4.6-4.2 4.6-7.6 0-3.3-2.2-4.9-4-5z"/><path d="M12.3 7.5c-.3-1.9.9-3.7 2.8-4.1.3 1.9-1 3.7-2.8 4.1z"/></svg>
+        Get it on the <b class="gk">App Store</b>
+      </a>
       <a class="btn-ig" href="https://www.instagram.com/go.forge/" target="_blank" rel="noopener">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4.5"/><circle cx="12" cy="12" r="3.6"/><path d="M16.6 7.4h.01"/></svg>
         Follow the build on <b class="gk">Instagram</b>
       </a>
     </div>
+    <p class="rv cta-human">
+      Rather talk to a person first?
+      <a href="https://wa.me/919870000217?text=Hi!%20I%20want%20to%20start%20a%20Forge%20group%20for%20my%20crew.">Message us on WhatsApp</a>
+    </p>
   </section>
 
   <!-- ════════════════ D · WHATSAPP CTA ════════════════ -->
   <!-- ════════════════ E · FOOTER STRIP ════════════════ -->
   <footer class="foot">
     <div class="pills rv">
-      <span class="pill">
+      <!-- Live since 25 Aug 2026. Bare /app/id… with no country segment so the
+           link resolves in the visitor's own storefront rather than forcing
+           everyone through the Indian one. -->
+      <a class="pill" href="https://apps.apple.com/app/id6802334800" target="_blank" rel="noopener">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.8 8.2c-1.2-.1-2.3.7-3.8.7s-2.5-.7-3.7-.7c-1.9.1-4.1 1.7-4.1 5 0 3.4 2.6 7.6 4.6 7.6 1 0 1.7-.7 3.2-.7s2.1.7 3.2.7c2 0 4.6-4.2 4.6-7.6 0-3.3-2.2-4.9-4-5z"/><path d="M12.3 7.5c-.3-1.9.9-3.7 2.8-4.1.3 1.9-1 3.7-2.8 4.1z"/></svg>
-        App Store &mdash; Coming soon
-      </span>
+        Download on the App&nbsp;Store
+      </a>
       <span class="pill">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 4.6v14.8c0 .7.8 1.2 1.4.8l12.3-7.4c.6-.4.6-1.2 0-1.6L7.9 3.8c-.6-.4-1.4.1-1.4.8z"/></svg>
         Google Play &mdash; Coming soon
@@ -1145,6 +1186,15 @@ document.querySelectorAll('.rv').forEach(function(el){ io.observe(el); });
   });
   var waA=document.querySelector('.cta a[href*="wa.me"]');
   if(waA) waA.addEventListener('click', function(){ track('whatsapp_click'); });
+  // The two routes that replaced WhatsApp as the way in. Both are querySelector
+  // ALL — the App Store appears twice (CTA + footer pill) and both should
+  // count, otherwise the footer's traffic is invisible.
+  document.querySelectorAll('a[href*="apps.apple.com"]').forEach(function(a){
+    a.addEventListener('click', function(){ track('appstore_click'); });
+  });
+  document.querySelectorAll('a[href*="goforge.in/?create"]').forEach(function(a){
+    a.addEventListener('click', function(){ track('create_group_click'); });
+  });
 })();
 
 /* ── HAMMER & ANVIL RAIL — hammer descends with scroll, strikes at the

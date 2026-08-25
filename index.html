@@ -4842,18 +4842,35 @@ async function resolveStepWeekIfDue(){
 // workout recorded late on the 31st and confirmed after midnight would have been
 // filed into the following month. Undefined from an older call site falls back
 // to season, which is the previous behaviour.
-function logHealthSuggestion(id, label, day, km, month, year){
+// MARK SEEN ONLY AFTER THE WRITE LANDS. This used to burn the suggestion on
+// the first line, before submitLog was even called — so a log that failed took
+// the workout with it. healthSeen() is permanent and per-device, meaning that
+// HealthKit sample could never be offered again on that phone: the workout was
+// unloggable from Health forever, and the card simply vanished with no error,
+// no toast and nothing to retry. Reordering costs one await and makes a failed
+// tap fully recoverable — the card comes straight back.
+async function logHealthSuggestion(id, label, day, km, month, year){
   try{
-    healthMarkSeen(id);
     // The exact path a manual log takes — validation, celebration, streaks and
     // all. km rides along only for distance workouts, same rule as manual.
     selDay = day; selMonth = month || null; selYear = year || null;
     selW = [label]; selNote = null;
     selKm = (km != null && typeof isDistanceWorkout==='function' && isDistanceWorkout(label)) ? km : null;
     window._mirrorLogMode = true;
-    submitLog();
+    const ok = await submitLog();
+    // Only an explicit false is a failure. An older submitLog (or any future
+    // early return that predates this contract) returns undefined, and the safe
+    // reading of undefined is "it probably wrote" — re-offering a workout that
+    // did save would produce a duplicate log, which is worse than losing a
+    // suggestion. submitLog itself already toasts on the paths that return false.
+    if(ok !== false) healthMarkSeen(id);
     renderHealthSuggestions();
-  }catch(e){ logErr('logHealthSuggestion', e); }
+  }catch(e){
+    logErr('logHealthSuggestion', e);
+    // Repaint regardless, so a thrown error leaves the card on screen to retry
+    // rather than a half-updated Home.
+    try{ renderHealthSuggestions(); }catch(_){}
+  }
 }
 
 function dismissHealthSuggestion(id){
@@ -5665,7 +5682,11 @@ async function submitLog(){
   // screen changes during the up-to-4s commit, and a mobile double-tap lands
   // in ~150ms. Two commits = two log docs, doubled workout counts, doubled
   // lifetime stats and a doubled global counter.
-  if(window._submitInFlight){ return; }
+  // Returns true when the log was written (or safely queued offline), false on
+  // every failure path. Callers that need to know — logHealthSuggestion has to
+  // decide whether to burn the Health suggestion — can await it; the Mirror
+  // sheet ignores the result, which is the previous behaviour.
+  if(window._submitInFlight){ return false; }
   window._submitInFlight = true;
   window._mirrorLogMode=false;
   const btn=document.getElementById('subBtn');
@@ -5681,7 +5702,20 @@ async function submitLog(){
       // not per-active-group — a broadcast can mix demo and real groups).
       if(sess.code === groupCode){ targets.push({...sess, _demo: !!(groupData && groupData.demo===true)}); return; }
       try {
-        const gSnap = await db.collection('groups').doc(sess.code).get();
+        // TIMEOUT. There is a watchdog on the commit but there was none here,
+        // and this read runs BEFORE the toast, before the error log and before
+        // the finally that releases _submitInFlight. A get() that never settles
+        // therefore wedged the flag true for the rest of the session: the tap
+        // did nothing, said nothing, recorded nothing, and every later tap hit
+        // the re-entrancy guard and returned in silence. Suspected cause of the
+        // dead Health "Log it" button on 25 Aug 2026.
+        // 6s, and a timeout is treated exactly like an unreadable group —
+        // skipped, logged, never fatal. The active group is pushed above
+        // without a read, so it can never be the one that stalls.
+        const gSnap = await Promise.race([
+          db.collection('groups').doc(sess.code).get(),
+          new Promise((_,rej)=>setTimeout(()=>rej(new Error('GROUP_READ_TIMEOUT')), 6000))
+        ]);
         if(gSnap.exists && gSnap.data().currentSeasonId === seasonId) targets.push({...sess, _demo: gSnap.data().demo===true});
       } catch(e){ logErr('submitLog: skipped unreadable group '+sess.code, e); /* never block the log */ }
     }));
@@ -5696,7 +5730,7 @@ async function submitLog(){
     if(!targets.length){
       logErr('submitLog: no write targets', new Error('EMPTY_TARGETS groupCode='+groupCode+' sessions='+sessions.length));
       toast('Couldn’t save — this device lost track of your group. Reload and try again.','error');
-      return;
+      return false;
     }
     const batch = db.batch();
     const newLogIds = new Set();   // reward screen: tells "already echoed into allLogs" apart from listener lag
@@ -5850,7 +5884,18 @@ async function submitLog(){
     } catch(e){
       logErr('submitLog: post-commit presentation failed', e);
     }
-  } catch(e){ console.error('submitLog failed:',e); toast('Error saving. Check connection.','error'); if(btn){ btn.disabled=false; btn.textContent='Log Workout'; } }
+    return true;
+  } catch(e){
+    // logErr, not console.error. console output dies with the WKWebView, and
+    // this is the one failure we most need to see: on an App Store build there
+    // is no inspector, so a save that fails on someone's phone left no trace
+    // anywhere. Routing it through logErr puts it in errorLogs with the device
+    // context attached. The toast is unchanged.
+    logErr('submitLog', e);
+    toast('Error saving. Check connection.','error');
+    if(btn){ btn.disabled=false; btn.textContent='Log Workout'; }
+    return false;
+  }
   finally {
     // Release on EVERY exit — success, the empty-targets return, and the catch
     // above. A flag that leaks on one path would block every later log for the
@@ -7130,49 +7175,63 @@ async function renamePlayer(oldName){
   }
 }
 
-// S3 §4.1 PIN reset: clears BOTH roster.pin (legacy) and users.pinHash (S1)
-// in the SAME transaction — a partial reset (one cleared, not the other)
-// would leave the player unable to log in via either path, or worse, still
-// loggable-in via their OLD pin through whichever path didn't clear. Puts
-// the player back into the existing grace-flow state (no pin yet); their
-// next name-pick routes them straight into setting a new one.
+// PIN RESET IS A SERVER CALL NOW, and it has to be. This used to clear
+// roster.pin and users.pinHash from here in one transaction. Then the 17 Aug
+// rules made pinHash WRITE-ONCE from any client — deliberately, because
+// value -> null is the second half of a proven takeover (PATCH someone's
+// pinHash, then sign in as them). That rule is correct and stays, which means
+// this write is DENIED for every player who ever set a PIN. It failed for all
+// 72 of them and blamed the network. The admin SDK bypasses rules, so the work
+// moved to the adminResetPin callable and this is now just its front door.
+//
+// The admin key is NOT the 4-digit group PIN and NOT ADMIN_PIN_HASH — that one
+// lives in a public repo hashing four digits, so it is public by construction.
+// It is a server secret (ADMIN_RESET_KEY) that has never been in the bundle.
+// It is read into a local, sent once, and never stored, logged or toasted.
 async function resetPlayerPin(name){
   if(!confirm(`Reset ${name}'s PIN? They'll set a new one next time they log in.`)) return;
-  const sRef = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
+  const adminKey = prompt(`Admin key to reset ${name}'s PIN.\n\nThis is the server key, not the 4-digit group PIN.`);
+  if(adminKey === null) return;                       // cancelled, not failed
+  if(!adminKey.trim()){ toast('Admin key is required.','error'); return; }
   try {
-    let written=null, clearedUserId=null, wasLinked=false;
-    await db.runTransaction(async tx=>{
-      const snap=await tx.get(sRef);
-      if(!snap.exists) throw new Error('SEASON_MISSING');
-      const roster=snap.data().roster||[];
-      const entry=roster.find(p=>p.name===name);
-      if(!entry) throw new Error('NO_RECORD');
-      clearedUserId=entry.userId||null;
-      // A player who secured their account with Google has no PIN to reset —
-      // and once the users-doc ownership rule is live (AUTH_PHASE2_NOTES),
-      // writing pinHash:null on their doc from an admin's client is BLOCKED.
-      // So detect the link inside the transaction and skip the user-doc write;
-      // there is nothing to clear and attempting it would just error.
-      let linkedDoc=null;
-      if(clearedUserId){
-        const uSnap=await tx.get(db.collection('users').doc(clearedUserId));   // all reads first
-        linkedDoc = uSnap.exists && uSnap.data().authUid ? uSnap : null;
-      }
-      wasLinked = !!linkedDoc;
-      if(wasLinked) return;   // Google account — no PIN exists; leave roster + user doc untouched
-      entry.pin=null;
-      entry.pinSet=false;   // clear the credential sentinel → next login routes to grace
-      tx.update(sRef,{roster});
-      if(clearedUserId){
-        tx.update(db.collection('users').doc(clearedUserId), {pinHash:null});
-      }
-      written=roster;
-    });
-    if(wasLinked){ toast(`${name} signs in with Google — there's no PIN to reset.`,'default'); return; }
-    if(written){ season.roster=written; }
+    const r = await callFunction('adminResetPin', { groupCode, name, adminKey: adminKey.trim() });
+    // Mirror the server's write locally rather than re-reading the season — the
+    // callable already did the authoritative work, and a re-read costs a doc
+    // read to learn something we know. Matched case-insensitively because that
+    // is how the function resolves the roster entry.
+    if(r && r.ok && !r.already && Array.isArray(season && season.roster)){
+      const e = season.roster.find(p => p && String(p.name).toLowerCase() === name.toLowerCase());
+      if(e){ e.pin = null; e.pinSet = false; }
+    }
     renderAdminRoles();
-    toast(`${name}'s PIN has been reset.`,'success');
-  } catch(e){ logErr('resetPlayerPin', e); toast('Reset failed — check connection.','error'); }
+    toast(r && r.already
+      ? `${name} had no PIN set — nothing to reset.`
+      : `${name}'s PIN has been reset.`, 'success');
+  } catch(e){
+    logErr('resetPlayerPin', e);                      // the error carries no key
+    // The compat SDK prefixes callable codes with "functions/"; the modular one
+    // does not. Strip it so one set of cases covers both.
+    const code = String((e && e.code) || '').replace(/^functions\//, '');
+    const msg  = String((e && e.message) || '');
+    if(msg === 'FUNCTIONS_SDK_MISSING'){
+      toast('Reload the page and try again.','error');
+    } else if(code === 'permission-denied'){
+      toast('That admin key is not right.','error');
+    } else if(code === 'resource-exhausted'){
+      toast(msg || 'Too many attempts. Try again later.','error');
+    } else if(code === 'failed-precondition'){
+      // Either the player signs in with Google, or ADMIN_RESET_KEY was never
+      // set on the project. The function says which; pass it through verbatim.
+      toast(msg || 'Cannot reset this account.','error');
+    } else if(code === 'not-found'){
+      // Ambiguous on purpose: a callable that was never deployed 404s exactly
+      // like a group code that does not exist. Name both so the admin is not
+      // hunting a typo when the real answer is that functions are not live yet.
+      toast(msg || 'Not found — check the name, or the reset function may not be deployed yet.','error');
+    } else {
+      toast('Reset failed — check connection.','error');
+    }
+  }
 }
 
 function renderTwistToggles(){
@@ -8848,7 +8907,13 @@ async function createGroup(){
   const days=new Date(year, month, 0).getDate();
   const capTarget=parseInt(document.getElementById('newGroupCapTarget').value);
   const vcTarget=parseInt(document.getElementById('newGroupVCTarget').value);
-  const minWorkouts=parseInt(document.getElementById('newGroupMinWO').value);
+  // Same trap as the admin panel, one step earlier: an emptied box parses to
+  // NaN and this one had no fallback at all, so the season was created with
+  // minWorkouts: NaN. Nothing errors — `wo < NaN` is simply always false — so
+  // the penalty silently never applies and the group looks fine for a month.
+  // Every sibling field on this form is already clamped; this one was missed.
+  const _ngMw=parseInt(document.getElementById('newGroupMinWO').value,10);
+  const minWorkouts=Number.isFinite(_ngMw) && _ngMw>=0 ? _ngMw : 12;
   const numTeams=Math.min(3, Math.max(1, parseInt(document.getElementById('newGroupNumTeams').value)||3));
   const thresholdPct=Math.min(100, Math.max(30, parseInt(document.getElementById('newGroupThreshold').value)||60));
   const rolesEnabled=document.getElementById('newGroupRoles').checked;
