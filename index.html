@@ -225,6 +225,14 @@
         <div style="margin-top:6px;font-size:11px;color:var(--muted);text-align:center">Works alone from day one. Teams unlock as friends join.</div>
       </div>
       <div id="joinCancel" class="hidden" style="margin-top:12px;text-align:center"><span onclick="cancelJoin()" style="font-size:12px;color:var(--gold);cursor:pointer">← Back to my group</span></div>
+      <!-- The pitch, for the person hesitating between the two doors. This
+           screen previously assumed you already knew what Forge was — the one
+           person guaranteed NOT to know is the stranger standing here. Relative
+           href on purpose: resolves to the bundled copy inside the native shell
+           (guide.html ships in www/ as of this change) and to /guide.html on
+           the web. guideStats already measures whether anyone actually reads
+           it, so this link's worth is checkable, not assumed. -->
+      <div style="margin-top:12px;text-align:center"><a href="guide.html" style="font-size:12px;color:var(--gold)">New here? See how Forge works →</a></div>
       <!-- The escape hatch, ON THE FIRST SCREEN. The nav's ↻ only exists once
            you're already inside, which is no use to someone the login is
            refusing — that's exactly the person who needs it. -->
