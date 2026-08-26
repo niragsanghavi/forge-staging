@@ -234,6 +234,19 @@ async function recordRateHit(uid, action, windowMs){
 exports.claimIdentity = onCall({ region: REGION }, async (request) => {
   const auth = request.auth;
   if(!auth || !auth.uid) throw new HttpsError('unauthenticated', 'Sign in with Google first.');
+  // PROVIDER CHECK, grafted from the superseded auth branch — the one thing it
+  // had that this newer implementation lost. Without it, an ANONYMOUS session
+  // that guesses a PIN (rate-limited, but 4 digits) gets authUid bound to a
+  // throwaway anonymous uid: the account reads as "secured", the real owner is
+  // permanently refused ("secured by a different Google sign-in"), and the
+  // attacker holds it for as long as that anon session lives. Claiming is only
+  // meaningful when the uid is durable and re-loginable — i.e. Google.
+  const fb = auth.token && auth.token.firebase;
+  const provider = fb && fb.sign_in_provider;
+  const identities = (fb && fb.identities) || {};
+  if(provider !== 'google.com' && !identities['google.com']){
+    throw new HttpsError('permission-denied', 'Claiming needs a Google sign-in, not a guest session.');
+  }
   const authUid = auth.uid;
   const email = (auth.token && auth.token.email) || null;
 
