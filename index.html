@@ -2210,7 +2210,118 @@ function subscribe(){
     refresh();
   }, _chanErr('season')));
 
-  unsub.push(db.collection('logs').where('groupCode','==',groupCode).where('month','==',month).where('year','==',year).onSnapshot(s=>{ allLogs=s.docs.map(d=>({id:d.id,...d.data()})).filter(l=>!l.voided); refresh(); }, _chanErr('logs')));
+  /* ── LOGS: DELTA SYNC ─────────────────────────────────────────────────────
+     The old listener re-billed the group's ENTIRE month on every app open —
+     measured 26 Aug 2026: 86–182 docs per open per group, ≈35–40k reads/day
+     at ~80 users, growing with every day of the month. Logs are append-only
+     (create once; the only later mutation is the void tombstone, which always
+     stamps voidedAt), which is exactly the shape cursor sync wants.
+
+     Shape: the month's logs live in localStorage; two cursored listeners ask
+     only "what's new since my high-water mark?" — one on timestamp (creates),
+     one on voidedAt (tombstones). Cost per open drops to a handful of docs.
+     Cursors use >= plus id-dedupe, so two docs sharing a commit timestamp can
+     never be half-seen. High-water marks advance ONLY on server-confirmed
+     docs — a pending write's serverTimestamp is null and must not move them.
+
+     The submitter's own instant echo can no longer come from the listener
+     (a pending null timestamp doesn't match a range query), so submitLog and
+     voidLogDoc call the _logDelta* hooks below for the optimistic update; the
+     server echo later overwrites the same id with the real timestamp.
+
+     BOTH queries need composite indexes (equality + range):
+       logs: groupCode ASC, timestamp ASC
+       logs: groupCode ASC, voidedAt ASC
+     firestore.indexes.json carries them; until deployed, the listeners fail
+     with failed-precondition and the catch below falls back to the legacy
+     full-month listener — correct, just at the old cost. */
+  {
+    const LOG_KEY=`forgeLogs:${groupCode}:${year}-${String(month).padStart(2,'0')}`;
+    let st;
+    try{ st=JSON.parse(localStorage.getItem(LOG_KEY)||'null'); }catch(e){ st=null; }
+    if(!st || !Array.isArray(st.logs)) st={logs:[],hwm:0,vhwm:0};
+    const logsMap=new Map(st.logs.map(l=>[l.id,l]));
+    const persist=()=>{
+      try{ localStorage.setItem(LOG_KEY, JSON.stringify({logs:[...logsMap.values()],hwm:st.hwm,vhwm:st.vhwm})); }
+      catch(e){ try{ localStorage.removeItem(LOG_KEY); }catch(_){} } // quota: drop cache; next boot re-syncs from the season start
+    };
+    // Prune caches from seasons this device no longer shows (keep current
+    // month across ALL groups this device belongs to — multi-group broadcast).
+    try{
+      const cur=`:${year}-${String(month).padStart(2,'0')}`;
+      for(let i=localStorage.length-1;i>=0;i--){
+        const k=localStorage.key(i);
+        if(k && k.startsWith('forgeLogs:') && !k.endsWith(cur)) localStorage.removeItem(k);
+      }
+    }catch(e){}
+    const publish=()=>{ allLogs=[...logsMap.values()].filter(l=>!l.voided); refresh(); };
+    publish();   // paint from cache before the network answers — 0 reads
+    // Optimistic hooks — registered per subscription, torn down with it.
+    window._logDeltaOptimistic=(l)=>{ try{
+      if(!l || l.groupCode!==groupCode || l.month!==month || l.year!==year) return;
+      if(logsMap.has(l.id)) return;
+      logsMap.set(l.id,l); persist(); publish();
+    }catch(e){} };
+    window._logDeltaVoid=(id)=>{ try{
+      const l=logsMap.get(id); if(!l || l.voided) return;
+      l.voided=true; persist(); publish();
+    }catch(e){} };
+    unsub.push(()=>{ window._logDeltaOptimistic=null; window._logDeltaVoid=null; });
+    // First sync of a season starts at the 1st minus a day of TZ slack; the
+    // month is billed once, then never again on this device.
+    const TS=firebase.firestore.Timestamp;
+    const legacy=()=>{
+      // The optimistic hooks publish from logsMap, which the legacy listener
+      // does not feed — leaving them live would let one submit repaint the
+      // board as ONLY that submit (found in QA, 26 Aug). Legacy snapshots
+      // echo pending writes on their own, so the hooks are simply unneeded.
+      window._logDeltaOptimistic=null; window._logDeltaVoid=null;
+      unsub.push(db.collection('logs').where('groupCode','==',groupCode).where('month','==',month).where('year','==',year)
+        .onSnapshot(s=>{ allLogs=s.docs.map(d=>({id:d.id,...d.data()})).filter(l=>!l.voided); refresh(); }, _chanErr('logs')));
+    };
+    const fallback=(which)=>(err)=>{
+      if(err && err.code==='failed-precondition'){
+        logErr('logDelta:'+which+':missing-index — falling back to full listener', err);
+        legacy();
+      } else { _chanErr('logs')(err); }
+    };
+    const seasonStartMs=new Date(year, month-1, 1).getTime() - 86400000;
+    const jsonTs=(t)=> t && typeof t.seconds==='number' ? {seconds:t.seconds}
+                    : t && t.toMillis ? {seconds:Math.floor(t.toMillis()/1000)} : null;
+    unsub.push(db.collection('logs')
+      .where('groupCode','==',groupCode)
+      .where('timestamp','>=', st.hwm ? TS.fromMillis(st.hwm) : TS.fromMillis(seasonStartMs))
+      .onSnapshot(s=>{
+        let changed=false;
+        s.docs.forEach(d=>{
+          const raw=d.data();
+          if(raw.month!==month || raw.year!==year) return;   // cursor spans a boundary; this season shows one month
+          const l={id:d.id,...raw,timestamp:jsonTs(raw.timestamp)};
+          const prev=logsMap.get(l.id);
+          if(prev && prev.voided) l.voided=prev.voided;      // never let a create-echo resurrect a tombstone
+          logsMap.set(l.id,l); changed=true;
+          if(!d.metadata.hasPendingWrites && raw.timestamp && raw.timestamp.toMillis){
+            st.hwm=Math.max(st.hwm, raw.timestamp.toMillis());
+          }
+        });
+        if(changed){ persist(); publish(); }
+      }, fallback('new')));
+    unsub.push(db.collection('logs')
+      .where('groupCode','==',groupCode)
+      .where('voidedAt','>=', st.vhwm ? TS.fromMillis(st.vhwm) : TS.fromMillis(seasonStartMs))
+      .onSnapshot(s=>{
+        let changed=false;
+        s.docs.forEach(d=>{
+          const raw=d.data();
+          const l=logsMap.get(d.id);
+          if(l && !l.voided){ l.voided=true; changed=true; }
+          if(!d.metadata.hasPendingWrites && raw.voidedAt && raw.voidedAt.toMillis){
+            st.vhwm=Math.max(st.vhwm, raw.voidedAt.toMillis());
+          }
+        });
+        if(changed){ persist(); publish(); } else { persist(); }  // vhwm may advance with no visible change
+      }, fallback('void')));
+  }
   unsub.push(db.collection('bonuses_30day').where('groupCode','==',groupCode).where('month','==',month).where('year','==',year).onSnapshot(s=>{ bonus30=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }, _chanErr('bonuses_30day')));
   unsub.push(db.collection('flags').where('groupCode','==',groupCode).where('month','==',month).where('year','==',year).onSnapshot(s=>{ flags=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }, _chanErr('flags')));
   // S5 §7.1: reactions, scoped exactly like flags — one listener per group/month/year.
@@ -5749,6 +5860,18 @@ async function submitLog(){
     targets.forEach(sess => {
       const ref = db.collection('logs').doc();
       newLogIds.add(ref.id);
+      // Delta-sync echo: a pending serverTimestamp is null, so the cursored
+      // listener cannot show this log until the server acks — and offline,
+      // not at all. Hand the active group's copy to the store directly; the
+      // ack later overwrites the same id with the real timestamp.
+      if(sess.code===groupCode && window._logDeltaOptimistic){
+        window._logDeltaOptimistic({ id:ref.id, groupCode:sess.code, player:sess.player.name,
+          team:sess.player.team, role:sess.player.role, workouts:(selW||[]).slice(),
+          day:selDay, month:season.month, year:season.year,
+          timestamp:{seconds:Math.floor(Date.now()/1000)},
+          ...(Number.isFinite(Number(selKm)) && Number(selKm)>0 ? {km:Number(selKm)} : {}),
+          ...(selNote ? {note:String(selNote).slice(0,90)} : {}) });
+      }
       broadcast.push({ code: sess.code, name: sess.name || sess.code,
                        player: sess.player.name, team: sess.player.team,
                        role: sess.player.role, logId: ref.id, demo: !!sess._demo });
@@ -6857,6 +6980,10 @@ function bumpGlobalStat(field, n){
 }
 
 function voidLogDoc(id, actorName){
+  // Delta-sync echo, same reason as submitLog's: the voidedAt cursor listener
+  // only fires on server ack. Tombstone the local copy now; harmless if the
+  // update is later refused (next boot re-syncs truth from the cursors).
+  if(window._logDeltaVoid) window._logDeltaVoid(id);
   return db.collection('logs').doc(id).update({
     voided: true,
     voidedBy: actorName,
