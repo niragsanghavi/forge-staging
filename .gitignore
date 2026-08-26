@@ -84,3 +84,9 @@ firebase-debug.log
 # only — 15 revisions are already public and must be assumed known. Canonical
 # copy + backups live in ~/Desktop/forge-backups/.
 firestore.rules
+
+# Admin/ops tooling and IDE/agent state — public Pages repo, nothing here
+# should serve at the site. scripts/ carries prod-project references.
+.idea/
+.claude/
+scripts/
