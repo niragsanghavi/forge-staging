@@ -623,8 +623,19 @@ window.FEATURE_SERVER_WRITES = false;
 //   Web Push certificates -> Generate key pair
 // Paste the key below and flip the flag. Without it getToken() throws, so the
 // flag is a real gate, not decoration. Staging first; prod after warm QA.
-window.FEATURE_PUSH = false;
-window.FCM_VAPID_KEY = '';   // <-- paste the Web Push certificate key pair here
+// PILOT OVERRIDE: localStorage.setItem('forgePushPilot','1') turns the push
+// UI on for THIS DEVICE ONLY — so the feature can be tested end-to-end on
+// prod without 76 people seeing a button that is still being proven. The
+// global flag below remains the launch switch for everyone else.
+// ?pushpilot in the URL arms the same override — a phone has no console, and
+// the pilot's whole point is testing on the devices notifications target.
+window.FEATURE_PUSH = false || (function(){ try{
+  if(location.search.indexOf('pushpilot')>=0) localStorage.setItem('forgePushPilot','1');
+  return localStorage.getItem('forgePushPilot')==='1';
+}catch(e){ return false; } })();
+window.FCM_VAPID_KEY = 'BP2E5C9t--QJBU2hX9qYNPn2NX7p5V_i_e8U34fvP3SpZgPd9FAFsFw9oBpaYLEGQmPDmR4y345daVedGL88Ad4';   // Web Push certificate (PUBLIC key
+// by design — it ships in every client; the private half never leaves Google).
+// Generated 26 Aug 2026, forge-25c8c -> Cloud Messaging -> Web configuration.
 
 // ── THE HALL OF THE DEPARTED ──────────────────────────────────────────────
 // Locked decision, 25 Jul 2026 (AUTH_DESIGN_FINAL Q4). A deleted player is not

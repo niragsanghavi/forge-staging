@@ -329,6 +329,40 @@ exports.claimIdentity = onCall({ region: REGION }, async (request) => {
  *
  * data: { groupCode, sid? }  (sid defaults to the group's current season)
  */
+/**
+ * testPush — the deterministic end-to-end notification test. streakAtRisk
+ * only fires at 8pm IST when a team is genuinely one short, which makes
+ * "did the pipe work?" a once-a-day maybe; this sends a test message NOW to
+ * every registered token (at pilot time that is one person's devices).
+ * Gated on ADMIN_RESET_KEY like adminResetPin — the payload is harmless but
+ * an open sender is a spam primitive.
+ */
+exports.testPush = onCall({ region: REGION, secrets: ['ADMIN_RESET_KEY'] }, async (request) => {
+  if(!request.auth || !request.auth.uid) throw new HttpsError('unauthenticated', 'Sign in first.');
+  const adminKey = String((request.data && request.data.adminKey) || '');
+  await assertUnderRateLimit(request.auth.uid, 'testpush', 5, 3600 * 1000);
+  if(!hashEq(sha256hex(adminKey), sha256hex(ADMIN_RESET_KEY.value() || ''))){
+    await recordRateHit(request.auth.uid, 'testpush', 3600 * 1000);
+    throw new HttpsError('permission-denied', 'That admin key is not right.');
+  }
+  // Every token in the system. During the pilot that is the tester's own
+  // devices; by launch this function should be retired or re-scoped.
+  const us = await db.collection('users').get();
+  const entries = [];
+  us.docs.forEach(u => {
+    const d = u.data();
+    if(d.deletedAt) return;
+    Object.keys(d.pushTokens || {}).forEach(t => entries.push({ token: t, userId: u.id }));
+  });
+  const r = await sendAll(entries, {
+    kind: 'test',
+    title: 'Forge — test notification',
+    body: 'The pipe works. This is what a real one will feel like.'
+  });
+  logger.info(`testPush: ${r.sent} sent, ${r.pruned} pruned, ${entries.length} tokens known`);
+  return { ok: true, tokens: entries.length, ...r };
+});
+
 exports.awardSeasonBadges = onCall({ region: REGION }, async (request) => {
   if(!request.auth || !request.auth.uid) throw new HttpsError('unauthenticated', 'Sign in first.');
   const groupCode = String((request.data && request.data.groupCode) || '').trim().toUpperCase();
