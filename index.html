@@ -1968,6 +1968,21 @@ async function loadGroup(code, fromCache){
     // And refresh the push token if permission was already granted. Silent:
     // never prompts, never blocks boot. Inert while FEATURE_PUSH is off.
     try{ refreshPushTokenQuietly(); }catch(e){}
+    // PILOT-ONLY, delete at launch: a home-screen PWA has no address bar, so
+    // the ?pushpilot arm can't reach it, and iOS gives every home-screen app
+    // its own storage so arming Safari first doesn't carry over. The pilot
+    // flag therefore also lives on the user doc (users/{id}.pushPilot) —
+    // one extra read per boot, per device, for the pilot's duration only.
+    // When FEATURE_PUSH flips true globally this block is dead weight: remove it.
+    if(!window.FEATURE_PUSH && me && me.userId){
+      db.collection('users').doc(me.userId).get().then(s=>{
+        if(s.exists && s.data().pushPilot===true){
+          window.FEATURE_PUSH=true;
+          try{ renderPushCard(); }catch(e){}
+          try{ refreshPushTokenQuietly(); }catch(e){}
+        }
+      }).catch(()=>{});
+    }
 
     // S2 auto-rollover: opportunistic, never awaited — this client keeps
     // booting normally on the (possibly about-to-be-archived) season; if a
