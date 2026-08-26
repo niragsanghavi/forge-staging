@@ -543,6 +543,10 @@ window.enablePush = async function(){
 // to get switched off, so this becomes an in-app toast.
 window.startForegroundPush = async function(onMessage){
   if(!window.FEATURE_PUSH || !window.pushSupported()) return;
+  // Idempotent: called from boot (permission already granted) AND from
+  // turnOnPush (permission granted this session). Double-registering
+  // onMessage would toast every arrival twice.
+  if(window._fgPushWired) return; window._fgPushWired = true;
   try{
     const messaging = await _loadMessaging();
     messaging.onMessage(function(payload){

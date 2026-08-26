@@ -4143,14 +4143,13 @@ function renderPushCard(){
     ? '<div class="tmuted" style="font-size:12px">'
       + mirIco('g-flame','color:var(--green)')
       + ' <b>Notifications on for this device.</b><br>'
-      + 'You will hear from Forge when your team\'s streak is at risk, and when the '
-      + 'week\'s recap is ready. Nothing else — no daily nagging.</div>'
+      + 'We only interrupt you when it is worth it.</div>'
       + '<button class="btn btn-surface" style="margin:10px 0 0" onclick="disablePushHere()">Turn off on this device</button>'
     : '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
       + 'Forge can only reach you when you remember to open it — which is the wrong way round. '
-      + 'Turn this on and we will tell you the two things worth interrupting you for: '
-      + '<b>your team\'s streak is about to break tonight</b>, and <b>last week\'s recap is ready</b>.'
-      + '<br><br>That is all. No "don\'t forget to exercise".</div>'
+      + 'Turn this on and Forge can tell you when it matters: '
+      + '<b>your team\'s streak is about to break tonight</b>, <b>last week\'s recap is ready</b> — '
+      + 'that kind of thing.</div>'
       + '<button class="btn btn-gold" id="pushBtn" style="margin:0" onclick="turnOnPush()">Turn on notifications</button>'
       + '<div id="pushResult" style="margin-top:10px;font-size:13px"></div>';
 }
@@ -4167,6 +4166,12 @@ async function turnOnPush(){
                 renderPushCard(); return; }
     await savePushToken(token);
     window._myPushToken=token;
+    // Wire the foreground handler NOW. It was only ever registered on boot
+    // when permission was ALREADY granted — so in the very session someone
+    // opted in, a foreground message arrived and vanished without a trace
+    // (found live, 26 Aug: the first test notification ever sent). The boot
+    // path stays for every later session; startForegroundPush is idempotent.
+    startForegroundPush(function(d){ if(d && d.body) toast(d.body); });
     toast('Notifications on.','success');
     renderPushCard();
   }catch(e){
