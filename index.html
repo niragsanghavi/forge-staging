@@ -4203,6 +4203,12 @@ async function savePushToken(token){
   // which a whole-map write would.
   await db.collection('users').doc(me.userId).set({
     pushTokens: { [token]: { addedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                             // The sender needs this: web tokens get DATA-ONLY
+                             // messages (our SW displays them), native tokens
+                             // need an FCM `notification` block or iOS shows
+                             // nothing at all.
+                             platform: (typeof isNative==='function' && isNative() && window.Capacitor)
+                                         ? (Capacitor.getPlatform()||'native') : 'web',
                              ua: (navigator.userAgent||'').slice(0,120) } }
   }, {merge:true});
 }

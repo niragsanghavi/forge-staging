@@ -41,7 +41,7 @@ const REGION = 'asia-south1';
 // ── helpers ────────────────────────────────────────────────────────────────
 function istNow(){ return new Date(Date.now() + 5.5*3600*1000); }
 
-/** Tokens for a set of userIds, flattened. Skips users with none. */
+/** Tokens for a set of userIds, flattened, with each token's platform. */
 async function tokensFor(userIds){
   const out = [];
   for(const id of userIds){
@@ -51,7 +51,8 @@ async function tokensFor(userIds){
       if(!s.exists) continue;
       const u = s.data();
       if(u.deletedAt) continue;                       // deleted accounts never get pushed
-      Object.keys(u.pushTokens || {}).forEach(t => out.push({ token:t, userId:id }));
+      Object.entries(u.pushTokens || {}).forEach(([t,meta]) =>
+        out.push({ token:t, userId:id, platform:(meta && meta.platform) || 'web' }));
     }catch(e){ logger.warn('tokensFor failed', id, e.message); }
   }
   return out;
@@ -66,7 +67,25 @@ async function sendAll(entries, data){
   let sent=0, pruned=0;
   for(const e of entries){
     try{
-      await admin.messaging().send({ token:e.token, data });
+      // ONE payload shape per platform, and the difference is load-bearing:
+      //   web    -> DATA-ONLY. Our firebase-messaging-sw.js displays it. A
+      //             `notification` block would make the SDK display it TOO —
+      //             every web push would appear twice.
+      //   native -> notification block REQUIRED. iOS shows nothing for a
+      //             data-only message to a backgrounded app; the block rides
+      //             APNs and the OS renders it with no app code running.
+      //             `threadId`/`tag` keep replacement semantics (a second
+      //             streak nudge replaces the first instead of stacking).
+      const msg = (e.platform === 'web')
+        ? { token: e.token, data }
+        : { token: e.token,
+            notification: { title: data.title || 'Forge', body: data.body || '' },
+            data,
+            apns: { headers: (data.tag ? { 'apns-collapse-id': String(data.tag).slice(0,64) } : {}),
+                    payload: { aps: { sound: 'default', 'thread-id': data.tag || 'forge' } } },
+            android: (data.tag ? { collapseKey: String(data.tag).slice(0,64),
+                                   notification: { tag: String(data.tag).slice(0,64) } } : {}) };
+      await admin.messaging().send(msg);
       sent++;
     }catch(err){
       const code = err && err.errorInfo && err.errorInfo.code;

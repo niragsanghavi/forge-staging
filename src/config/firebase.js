@@ -475,7 +475,16 @@ window.callFunction = function(name, data){
 
 // Browser capability only — deliberately does NOT require the messaging SDK to
 // be loaded, because it isn't: see _loadMessaging below.
+// The NATIVE push plugin (@capacitor-firebase/messaging), present only inside
+// the Capacitor shells. On iOS it wraps APNs and hands back an FCM token, so
+// users.pushTokens holds one token currency across every platform and the
+// Cloud Functions sender needs no separate APNs path.
+function _nativeMsg(){
+  const C = window.Capacitor;
+  return (C && C.Plugins && C.Plugins.FirebaseMessaging) || null;
+}
 window.pushSupported = function(){
+  if(typeof isNative==='function' && isNative()) return !!_nativeMsg();
   return 'Notification' in window
       && 'serviceWorker' in navigator
       && 'PushManager' in window;
@@ -507,6 +516,10 @@ function _loadMessaging(){
 }
 
 window.pushPermission = function(){
+  // Native: the plugin's checkPermissions is async, which this sync helper
+  // cannot await. 'default' makes every caller treat it as not-yet-asked and
+  // route through enablePush, whose native branch asks properly.
+  if(typeof isNative==='function' && isNative()) return 'default';
   try{ return Notification.permission; }catch(e){ return 'unsupported'; }
 };
 
@@ -527,6 +540,16 @@ async function _messagingSW(){
 window.enablePush = async function(){
   if(!window.FEATURE_PUSH) throw new Error('FEATURE_OFF');
   if(!window.pushSupported()) throw new Error('UNSUPPORTED');
+  // NATIVE (App Store / Play builds): APNs-or-FCM via the plugin. The web
+  // path below never runs inside the shell — its service worker registration
+  // would fail against the capacitor:// scheme anyway.
+  if(typeof isNative==='function' && isNative()){
+    const M = _nativeMsg(); if(!M) throw new Error('UNSUPPORTED');
+    const p = await M.requestPermissions();
+    if(!p || p.receive !== 'granted') return null;
+    const r = await M.getToken();                    // FCM token on both OSes
+    return (r && r.token) || null;
+  }
   const perm = await Notification.requestPermission();
   if(perm !== 'granted') return null;                     // includes 'denied'
   const messaging = await _loadMessaging();      // injects the SDK on first use
@@ -547,6 +570,21 @@ window.startForegroundPush = async function(onMessage){
   // turnOnPush (permission granted this session). Double-registering
   // onMessage would toast every arrival twice.
   if(window._fgPushWired) return; window._fgPushWired = true;
+  if(typeof isNative==='function' && isNative()){
+    const M = _nativeMsg(); if(!M) return;
+    try{
+      // Same philosophy as the web: an arrival while the person is LOOKING at
+      // the app becomes a toast, not a banner over their own screen. The OS
+      // handles background arrivals natively — the notification block on the
+      // FCM message displays without any code here running.
+      M.addListener('notificationReceived', function(ev){
+        const n=(ev && ev.notification) || {};
+        const d=(n.data) || {};
+        if(typeof onMessage==='function') onMessage({ title:n.title||d.title, body:n.body||d.body });
+      });
+    }catch(e){ console.warn('[Forge] native foreground push unavailable', e); }
+    return;
+  }
   try{
     const messaging = await _loadMessaging();
     messaging.onMessage(function(payload){
