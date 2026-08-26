@@ -66,8 +66,11 @@ function _ctxEntry(ctx){
   // kmTarget is part of the stamp: the km bonus below reads it, so without it an
   // admin raising or lowering the target would leave every cached score stale
   // until the logs array happened to be replaced.
+  // scoringV2 is part of the stamp: flipping the flag mutates the same season
+  // object in place, so identity checks alone would serve stale cached scores.
   const stamp=[cfg.month,cfg.year,cfg.days,cfg.capTarget,cfg.vcTarget,cfg.minWorkouts,
-               cfg.rolesEnabled,cfg.teamStreakThreshold,cfg.kmTarget,myGC,today.toDateString()].join('|');
+               cfg.rolesEnabled,cfg.teamStreakThreshold,cfg.kmTarget,cfg.scoringV2===true,
+               myGC,today.toDateString()].join('|');
   const hit=_scoreCache.get(logs);
   if(hit && hit.cfg===cfg && hit.rosterRef===roster && hit.twists===twists &&
      hit.bonuses===bonuses && hit.jacks===jacks && hit.ips===ips && hit.tw===tw && hit.stamp===stamp) return hit;
@@ -106,6 +109,14 @@ function _ctxEntry(ctx){
 
   // Team-streak qualifying days, resolved once per team instead of per player.
   const thrFactor=cfg.teamStreakThreshold ?? 0.6;
+  // SCORING V2 — the September switch. Two scoring changes (the personal
+  // streak milestone bonus and the rolling 14-day team denominator) shipped
+  // on 25 Aug 2026 without sign-off, changed live standings mid-month, and
+  // were reverted the next day. Both now sit behind this per-season flag,
+  // OFF by default: absent or false reproduces the pre-25-Aug arithmetic
+  // exactly (verified against the App Store 1.0 engine on live data).
+  // Super admin writes {scoringV2:true} onto a season; rollover carries it.
+  const scoringV2 = cfg.scoringV2 === true;
   const teamCount=new Map();
   // Departed players (deleted accounts, kept on the roster under a Hall of the
   // Departed name so the group's history survives) must NOT count toward the
@@ -175,6 +186,19 @@ function _ctxEntry(ctx){
   const qualByTeam=new Map();
   for(const [t,names] of teamMembers){
     const td=teamDayLog.get(t);
+    if(!scoringV2){
+      // LEGACY DENOMINATOR (the live default): the bar is a fixed fraction of
+      // the FULL roster, all month — byte-for-byte the pre-25-Aug behaviour.
+      const thr=Math.ceil((teamCount.get(t)||0)*thrFactor);
+      const qual=[]; let run=0;
+      for(let d=1; d<=DAYS; d++){
+        const s=(td && td.get(d)) || _EMPTY_SET;
+        if(s.size>=thr){ run++; qual.push({set:s, streakLen:run}); }
+        else run=0;
+      }
+      qualByTeam.set(t,qual);
+      continue;
+    }
     // Per-day headcount via a difference array: each logged day marks its owner
     // present for the next ACTIVE_WINDOW days. O(logs + DAYS) per member rather
     // than scanning the window per day — this runs on every render.
@@ -289,7 +313,7 @@ function _ctxEntry(ctx){
     kmByPlayer, kmByTeam, teamOf,
     bonusWord, friOn, monOn, bossDays, underdogWindows, stepAwards,
     b30Set, jackCnt, ipSum,
-    dowBase, todayDay, isEnd, rosterLen:roster.length,
+    dowBase, todayDay, isEnd, rosterLen:roster.length, scoringV2,
     results:new Map()
   };
   _scoreCache.set(logs, entry);
@@ -350,7 +374,7 @@ function score(playerName, ctx){
   // rule perfect-week already uses, and keeping them consistent matters more
   // than catching the handful of runs that straddle the 1st.
   let sb=0;
-  {
+  if(E.scoringV2){
     const sorted=[...days].sort((a,b)=>a-b);
     let run=0;
     for(let i=0;i<sorted.length;i++){

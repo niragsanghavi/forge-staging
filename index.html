@@ -7666,6 +7666,20 @@ async function loadSuperAdmin(){
   }
   const groups=snap.docs.map(d=>({code:d.id,...d.data()}));
 
+  // Scoring V2 button state. One season read per group, superadmin-only and
+  // only on this rarely-opened page — the button must show the TRUTH, because
+  // this flag changes live standings and a stateless toggle here is how the
+  // 25 Aug unapproved-scoring incident happens again. Failures degrade to
+  // "unknown" (neutral button), never block the page.
+  await Promise.all(groups.map(async g=>{
+    if(!g.currentSeasonId) return;
+    try{
+      const sSnap=await db.collection('groups').doc(g.code)
+        .collection('seasons').doc(g.currentSeasonId).get();
+      g._scoringV2 = sSnap.exists && sSnap.data().scoringV2===true;
+    }catch(e){ g._scoringV2 = undefined; }
+  }));
+
   // ── Cockpit dashboard (5 sections + month selector + drill-down) ──
   // Superseded the old Overview strip + Chart.js baseline trend (which read a
   // hardcoded analytics/baseline-2026-04 doc — the "April data" bug). Everything
@@ -7698,6 +7712,9 @@ async function loadSuperAdmin(){
           <button class="btn ${g.surveyAsk?'btn-gold':'btn-surface'} btn-sm" style="flex:1;margin:0"
             title="One-question survey on next open"
             onclick="event.stopPropagation();toggleSurveyAsk('${g.code}',${g.surveyAsk?'false':'true'})">${g.surveyAsk?'✓ Asking':'Ask survey'}</button>
+          <button class="btn ${g._scoringV2?'btn-gold':'btn-surface'} btn-sm" style="flex:1;margin:0"
+            title="Streak milestone bonus + rolling 14-day team bar. Changes this group's live standings the moment it flips."
+            onclick="event.stopPropagation();superToggleScoringV2('${g.code}','${g.currentSeasonId||''}',${g._scoringV2?'false':'true'})">${g._scoringV2?'✓ V2 pts':'V2 pts'}</button>
         </div>
       </div>`).join('');
 }
@@ -7720,6 +7737,27 @@ async function toggleSurveyAsk(code, on){
              : 'Survey off. Nobody new will be asked.', 'success');
     loadSuperAdmin();
   }catch(e){ logErr('toggleSurveyAsk '+code, e); toast('Could not change the survey setting.','error'); }
+}
+
+// ── SCORING V2 SWITCH (superadmin) ──────────────────────────────────────────
+// The September switch for the two scoring changes reverted on 26 Aug: the
+// personal streak milestone (+10 per 7-day run) and the rolling 14-day team
+// denominator. Per-SEASON, because scoring is season-scoped and the flag must
+// mean one thing for one month; performRollover carries it forward like
+// stepChallenge, so flipping it mid-September doesn't die on 1 October.
+// Confirm() because this changes the group's live standings the moment it
+// lands — the exact thing that made the unapproved ship an incident.
+async function superToggleScoringV2(code, sid, on){
+  if(!sid){ toast('This group has no active season.','error'); return; }
+  const verb = on ? 'TURN ON' : 'TURN OFF';
+  if(!confirm(`${verb} V2 scoring for ${code} (${sid})?\n\nStreak milestone bonus + rolling team bar. This changes the group's live standings immediately.`)) return;
+  try{
+    await db.collection('groups').doc(code).collection('seasons').doc(sid)
+      .set({ scoringV2: on }, {merge:true});
+    toast(on ? `V2 scoring ON for ${code} — standings recompute on next load.`
+             : `V2 scoring OFF for ${code} — back to classic points.`, 'success');
+    loadSuperAdmin();
+  }catch(e){ logErr('superToggleScoringV2 '+code, e); toast('Could not change scoring for '+code+'.','error'); }
 }
 
 // (Removed: renderSuperDashboard — dead code since the SuperDash cockpit
@@ -8160,6 +8198,10 @@ async function performRollover(code){
       //
       // Carried whole, so a per-season target or bonus override travels with it.
       ...(cur2.stepChallenge ? { stepChallenge: cur2.stepChallenge } : {}),
+      // Same carry rule as stepChallenge, same reason: a season toggle that
+      // silently resets at the month boundary is a support ticket, not a
+      // default. Only carried when explicitly true.
+      ...(cur2.scoringV2===true ? { scoringV2: true } : {}),
       roster: newRoster, status:'active',
       startedAt: firebase.firestore.FieldValue.serverTimestamp(), endedAt: null
     });
