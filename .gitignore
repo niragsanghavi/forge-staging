@@ -90,3 +90,6 @@ firestore.rules
 .idea/
 .claude/
 scripts/
+
+# QA kit is a tracked dev tool, not ops tooling — exempt from the *.mjs rule
+!qa/check.mjs
