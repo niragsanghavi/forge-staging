@@ -363,6 +363,15 @@
       </div>
     </div>
 
+    <!-- ANNOUNCE — the one-time "September is loading" card (1.1 launch).
+         Renders once per announce key, dismissible, then never again. -->
+    <div id="announceCard"></div>
+    <!-- PROMPT DOCK — the staged opt-in asks (notifications, then Health).
+         One at a time, never on a first open, snoozeable, and it stops
+         asking after three snoozes: a permission you nag your way into gets
+         revoked at the OS level, where we can never ask again. -->
+    <div id="promptDock"></div>
+
     <!-- MONDAY RECAP — the week that just ended. Renders nothing except on a
          Monday or Tuesday, and only once per week per group (dismissal is
          stored per group + per week-start so it can never resurface). -->
@@ -724,6 +733,7 @@
     <div id="superDashRoot" style="min-width:0"></div>
     <div id="rolloverNudge" style="margin-top:12px"></div>
     <div class="shdr" style="margin-top:20px">Manage Groups</div>
+    <div id="superAdoption"></div>
     <div style="margin:0 0 10px"><button class="btn btn-surface btn-sm" style="margin:0" onclick="superTestPush()">Send test notification</button></div>
     <div id="superGroupList"></div>
 
@@ -1968,6 +1978,8 @@ async function loadGroup(code, fromCache){
     // And refresh the push token if permission was already granted. Silent:
     // never prompts, never blocks boot. Inert while FEATURE_PUSH is off.
     try{ refreshPushTokenQuietly(); }catch(e){}
+    // Open counter for the staged prompts: one bump per boot, device-local.
+    try{ localStorage.setItem('forgeOpens', String(+(localStorage.getItem('forgeOpens')||0)+1)); }catch(e){}
     // PILOT-ONLY, delete at launch: a home-screen PWA has no address bar, so
     // the ?pushpilot arm can't reach it, and iOS gives every home-screen app
     // its own storage so arming Safari first doesn't carry over. The pilot
@@ -2315,6 +2327,10 @@ function renderHome(){
   catch(e){ logErr('renderGoalRing', e); }
   try { renderTeamCall(); }
   catch(e){ logErr('renderTeamCall', e); }
+  try { renderAnnounceCard(); }
+  catch(e){ logErr('renderAnnounceCard', e); }
+  try { renderPromptDock(); }
+  catch(e){ logErr('renderPromptDock', e); }
   try { renderMondayRecap(); }
   catch(e){ logErr('renderMondayRecap', e); }
   try { renderFounderCard(); }
@@ -4181,6 +4197,12 @@ async function turnOnPush(){
                 renderPushCard(); return; }
     await savePushToken(token);
     window._myPushToken=token;
+    try{ localStorage.setItem('forgePushEnabled','1'); }catch(e){}
+    // Adoption stamp — the only server-visible signal that this PERSON (not
+    // just a token) said yes; the superadmin count reads it. Merge write,
+    // fire-and-forget, never blocks the flow.
+    if(me && me.userId) db.collection('users').doc(me.userId)
+      .set({ pushEnabledAt: firebase.firestore.FieldValue.serverTimestamp() }, {merge:true}).catch(()=>{});
     // Wire the foreground handler NOW. It was only ever registered on boot
     // when permission was ALREADY granted — so in the very session someone
     // opted in, a foreground message arrived and vanished without a trace
@@ -4538,6 +4560,8 @@ async function toggleHealth(){
     const r = await healthConnect();
     if(r === 'granted'){
       setHealthEnabled(true); tap('success');
+      if(me && me.userId) db.collection('users').doc(me.userId)
+        .set({ healthConnectedAt: firebase.firestore.FieldValue.serverTimestamp() }, {merge:true}).catch(()=>{});
       renderHealthCard(); renderHealthSuggestions();
     } else if(r === 'denied'){
       say('Health access is off for Forge. Allow it in Settings > Health > Data Access, then try again.');
@@ -6633,6 +6657,106 @@ function renderLB(){
    "waiting on Siri" is a pile-on, in a group where these people see each other
    every day. Silent when the bar is already met, and silent for solo groups,
    so it stays worth reading. */
+/* ══ ANNOUNCE + STAGED PROMPTS (1.1 launch, 28 Aug 2026) ════════════════════
+   One announcement, then the two permission asks — SEQUENCED, one per open,
+   never on a person's first-ever open. The order is deliberate: tell them
+   what's coming, then ask for the notification, then (native only) Health.
+   Each ask is snoozed by "Later" for three opens and gives up for good after
+   three snoozes: a nagged-into permission gets revoked at the OS level,
+   where no app can ever ask again.
+
+   Native 1.1 ships a FROZEN copy of this file without any of this — these
+   cards reach web/PWA now and the App Store at 1.2. The native notifications
+   card in 1.1 is lit per-user via users/{id}.pushPilot instead. */
+const ANNOUNCE_KEY='forgeAnnounce:2026-09';
+function _openCount(){ try{ return +(localStorage.getItem('forgeOpens')||0); }catch(e){ return 0; } }
+function _lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+function _lsSet(k,v){ try{ localStorage.setItem(k,String(v)); }catch(e){} }
+
+function renderAnnounceCard(){
+  const el=document.getElementById('announceCard'); if(!el) return;
+  el.innerHTML='';
+  if(_lsGet(ANNOUNCE_KEY)==='seen') return;
+  const native=(typeof isNative==='function' && isNative());
+  el.innerHTML=
+    '<div class="card" style="margin-bottom:14px;padding:16px;border:1px solid var(--gold-line,rgba(212,175,55,.35))">'
+    +'<div style="font-size:11px;font-weight:800;letter-spacing:.2em;color:var(--gold)">SEPTEMBER IS LOADING</div>'
+    +'<div style="height:8px;border-radius:99px;background:rgba(255,255,255,.08);margin:10px 0 14px;overflow:hidden">'
+      +'<div style="height:100%;width:82%;border-radius:99px;background:linear-gradient(90deg,#8a5a2a,var(--gold),#ff5a1f)"></div></div>'
+    +'<div style="font-size:13px;line-height:1.75">'
+      +'<div>👟 <b>The Step Challenge</b> — your phone counts, your team wins. No typing, no arguing.</div>'
+      +'<div>🔔 <b>Nudges worth having</b> — one when your team\'s streak is dying tonight. Not one single "go exercise".</div>'
+      +'<div>❤️ <b>One-tap logging</b> — workouts your phone already saw, offered on Home.</div>'
+    +'</div>'
+    +(native
+      ? '<div style="margin-top:12px;font-size:12px;color:var(--muted)">You\'re on the app — you\'re ready. ✓</div>'
+      : '<a class="btn btn-gold" style="display:block;text-align:center;margin:14px 0 0" '
+        +'href="https://apps.apple.com/app/id6802334800" target="_blank" rel="noopener">Get the app — it does the counting</a>')
+    +'<div style="margin-top:10px;text-align:center"><span onclick="dismissAnnounce()" '
+      +'style="font-size:12px;color:var(--muted);cursor:pointer">Got it</span></div>'
+    +'</div>';
+}
+function dismissAnnounce(){ _lsSet(ANNOUNCE_KEY,'seen'); renderAnnounceCard(); renderPromptDock(); }
+
+// One ask at a time. Returns which prompt is due, or null.
+function _duePrompt(){
+  if(_lsGet(ANNOUNCE_KEY)!=='seen') return null;            // announcement first
+  if(_openCount()<2) return null;                           // never on a first open
+  // 1) NOTIFICATIONS — anywhere push is supported and not yet decided.
+  if(window.FEATURE_PUSH && typeof pushSupported==='function' && pushSupported()
+     && _lsGet('forgePushEnabled')!=='1'
+     && pushPermission()!=='denied'
+     && +( _lsGet('forgePushSnooze')||0 ) <= _openCount()
+     && +( _lsGet('forgePushSnoozes')||0 ) < 3) return 'push';
+  // 2) HEALTH — native only, after the push question is settled or given up.
+  const pushSettled = _lsGet('forgePushEnabled')==='1' || pushPermission()==='denied'
+                      || +( _lsGet('forgePushSnoozes')||0 ) >= 3;
+  if(pushSettled && typeof isNative==='function' && isNative()
+     && typeof healthEnabled==='function' && !healthEnabled()
+     && +( _lsGet('forgeHealthSnooze')||0 ) <= _openCount()
+     && +( _lsGet('forgeHealthSnoozes')||0 ) < 3) return 'health';
+  return null;
+}
+function renderPromptDock(){
+  const el=document.getElementById('promptDock'); if(!el) return;
+  el.innerHTML='';
+  const due=_duePrompt(); if(!due) return;
+  if(due==='push'){
+    el.innerHTML=
+      '<div class="card" style="margin-bottom:14px;padding:16px">'
+      +'<div style="font-size:14px;font-weight:800">🔔 Want to know when it actually matters?</div>'
+      +'<div style="font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.6">'
+      +'One nudge if your team\'s streak is about to break tonight, one when the week\'s recap lands. '
+      +'We will never tell you to go exercise.</div>'
+      +'<button class="btn btn-gold" style="margin:12px 0 0;width:100%" onclick="promptEnablePush()">Turn on notifications</button>'
+      +'<div style="margin-top:8px;text-align:center"><span onclick="snoozePrompt(\'Push\')" '
+      +'style="font-size:12px;color:var(--muted);cursor:pointer">Later</span></div></div>';
+  } else {
+    el.innerHTML=
+      '<div class="card" style="margin-bottom:14px;padding:16px">'
+      +'<div style="font-size:14px;font-weight:800">❤️ Your phone already counts your workouts</div>'
+      +'<div style="font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.6">'
+      +'Connect Apple Health and they show up here for one-tap logging — plus your steps count for the '
+      +'team step challenge. Read-only; your health data never leaves this phone.</div>'
+      +'<button class="btn btn-gold" style="margin:12px 0 0;width:100%" onclick="promptConnectHealth()">Connect Apple Health</button>'
+      +'<div style="margin-top:8px;text-align:center"><span onclick="snoozePrompt(\'Health\')" '
+      +'style="font-size:12px;color:var(--muted);cursor:pointer">Later</span></div></div>';
+  }
+}
+function snoozePrompt(which){
+  _lsSet('forge'+which+'Snooze', _openCount()+3);
+  _lsSet('forge'+which+'Snoozes', +( _lsGet('forge'+which+'Snoozes')||0 )+1);
+  renderPromptDock();
+}
+async function promptEnablePush(){
+  try{ await turnOnPush(); }catch(e){ logErr('promptEnablePush', e); }
+  renderPromptDock();
+}
+async function promptConnectHealth(){
+  try{ await toggleHealth(); }catch(e){ logErr('promptConnectHealth', e); }
+  renderPromptDock();
+}
+
 function renderTeamCall(){
   const el=document.getElementById('teamCall');
   if(!el) return;
@@ -7700,6 +7824,24 @@ async function loadSuperAdmin(){
     return;
   }
   const groups=snap.docs.map(d=>({code:d.id,...d.data()}));
+
+  // ADOPTION COUNTS — who has said yes to push / Health, and who hasn't.
+  // One users-collection read, superadmin-only, on a rarely-opened page.
+  try{
+    const us=await db.collection('users').get();
+    let people=0, pushPeople=0, pushDevices=0, healthPeople=0;
+    us.docs.forEach(d=>{ const u=d.data();
+      if(u.deletedAt) return; people++;
+      const n=Object.keys(u.pushTokens||{}).length;
+      if(n){ pushPeople++; pushDevices+=n; }
+      if(u.healthConnectedAt) healthPeople++;
+    });
+    const adEl=document.getElementById('superAdoption');
+    if(adEl) adEl.innerHTML=
+      `<div class="tmuted" style="font-size:12px;margin:0 0 10px">`
+      +`🔔 Notifications: <b>${pushPeople}</b> of ${people} people on (${pushDevices} device${pushDevices===1?'':'s'}) · `
+      +`❤️ Health connected: <b>${healthPeople}</b> of ${people}</div>`;
+  }catch(e){ logErr('superAdoption', e); }
 
   // Scoring V2 button state. One season read per group, superadmin-only and
   // only on this rarely-opened page — the button must show the TRUTH, because

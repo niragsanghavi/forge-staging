@@ -629,7 +629,10 @@ window.FEATURE_SERVER_WRITES = false;
 // global flag below remains the launch switch for everyone else.
 // ?pushpilot in the URL arms the same override — a phone has no console, and
 // the pilot's whole point is testing on the devices notifications target.
-window.FEATURE_PUSH = false || (function(){ try{
+// GO-LIVE 28 Aug 2026 (Nirag's call, after the lock-screen test succeeded).
+// The pilot override below is now redundant-but-harmless; native 1.1 still
+// needs users/{id}.pushPilot because ITS bundle compiled this flag as false.
+window.FEATURE_PUSH = true || (function(){ try{
   if(location.search.indexOf('pushpilot')>=0) localStorage.setItem('forgePushPilot','1');
   return localStorage.getItem('forgePushPilot')==='1';
 }catch(e){ return false; } })();
