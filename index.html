@@ -719,11 +719,56 @@
 
 </div>
 
+<!-- ══ SUPER ADMIN — PIN GATE ══
+     Replaces the boot-time prompt(). That prompt had three failure modes which
+     all looked IDENTICAL from the outside: a wrong PIN, a dismissed dialog, and
+     Safari muting the page's dialogs (it does that after repeated prompts, then
+     returns null instantly with no box shown at all). All three fell through an
+     `if` with no `else` straight into the normal app, so "superadmin is broken"
+     could never be told apart from "I mistyped it". A real screen can say which.
+     Two things this also buys: the unlock becomes rememberable (superUnlockValid
+     stores a timestamp, never the PIN), and the cockpit becomes reachable in
+     headless QA, where prompt() is unsupported and this path could not be driven.
+     The gate is UI convenience, not a security boundary — the hash ships in a
+     public repo, as documented. Remembering an unlock on this device therefore
+     gives up nothing that was ever actually being protected. -->
+<div class="screen" id="screen-superpin">
+  <div class="ob-logo">FORGE</div>
+  <div class="ob-tag">Super admin</div>
+  <div class="ob-card">
+    <div class="ob-step active">
+      <div class="ob-title">Enter super admin PIN</div>
+      <div class="ob-sub">The cockpit for every group. This is not the PIN you log into your own group with.</div>
+      <!-- No character stripping and a deliberately roomy maxlength: this input
+           must never be able to filter or truncate a valid PIN whose shape it
+           does not know. type=password masks it, which prompt() never did. -->
+      <input class="code-input" id="superPinEntry" type="password" maxlength="32" placeholder="••••" autocomplete="off" onkeydown="if(event.key==='Enter')submitSuperPin()">
+      <div id="superPinError" class="warn-box warn-red hidden" style="margin-top:10px"></div>
+      <button class="btn btn-gold" style="margin-top:10px" onclick="submitSuperPin()">Unlock</button>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12px;color:var(--muted);cursor:pointer">
+        <!-- The global `input` rule sets appearance:none for text fields, which
+             also erases a checkbox's native tick (and with it accent-color, which
+             only applies to natively-rendered controls) — leaving a grey pill that
+             looks identical checked and unchecked. Restore the real control here. -->
+        <input type="checkbox" id="superPinStay" checked style="appearance:auto;-webkit-appearance:checkbox;width:16px;height:16px;min-height:0;flex:none;margin:0;padding:0;border:none;border-radius:0;background:none;accent-color:var(--gold)">
+        Stay unlocked on this device for 7 days
+      </label>
+      <div style="margin-top:14px;text-align:center"><span onclick="exitSuper()" style="font-size:12px;color:var(--gold);cursor:pointer">← Back to my group</span></div>
+      <!-- Same escape hatch the login screens carry, for the same reason: a
+           wedged local Firebase state is the other way this page "breaks". -->
+      <div class="ob-fix"><span onclick="confirmConnReset()">Page acting up? Reset the connection</span></div>
+    </div>
+  </div>
+</div>
+
 <!-- ══ SUPER ADMIN ══ -->
 <div class="screen" id="screen-super">
   <nav class="nav">
     <div class="nav-logo" style="font-size:14px">FORGE — SUPER ADMIN</div>
-    <button class="btn btn-surface btn-sm" onclick="exitSuper()" style="margin:0">Exit</button>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="btn btn-surface btn-sm" onclick="lockSuper()" style="margin:0">Lock</button>
+      <button class="btn btn-surface btn-sm" onclick="exitSuper()" style="margin:0">Exit</button>
+    </div>
   </nav>
   <div style="padding:16px;max-width:680px;margin:0 auto;min-width:0;width:100%;box-sizing:border-box">
     <!-- Cockpit dashboard (SuperDash module) renders here. Every date range is
@@ -1391,10 +1436,18 @@ async function bootApp(){
     migrateLegacySession();   // idempotent — the normal path below runs it too
     if(!getSessions().length){ showScreen('create'); return; }
   }
+  // SUPER ADMIN. This branch now ALWAYS returns. Previously a failed gate fell
+  // through to the normal boot below, which is the whole reason a mistyped PIN,
+  // a dismissed dialog and a Safari-muted dialog were indistinguishable from
+  // "the page is broken" — every one of them silently landed on the player's
+  // own group, giving no clue that a gate had even been attempted.
   if(location.search.includes('superadmin')){
-    const pin = prompt('Super admin PIN:');
-    const hash = await sha256hex(pin||'');
-    if(hash === SUPER_PIN_HASH){ showScreen('super'); loadSuperAdmin(); return; }
+    if(superUnlockValid()){ showScreen('super'); loadSuperAdmin(); return; }
+    showScreen('superpin');
+    // Focus only once the screen is actually visible — a display:none input
+    // cannot take focus, and this runs while the class swap is still settling.
+    setTimeout(()=>{ const el=document.getElementById('superPinEntry'); if(el){ try{ el.focus(); }catch(e){} } }, 60);
+    return;
   }
   migrateLegacySession();
   // getSessions() only returns entries with a usable player, so `active.player`
@@ -7791,6 +7844,68 @@ async function applyRebalance(){
 // trend that read a hardcoded analytics/baseline-2026-04 doc. That was the
 // "April data" bug. Replaced by the SuperDash module's Trends section, which
 // derives every range from the live date.)
+
+// ── SUPER ADMIN — PIN GATE ────────────────────────────────────────────────
+// The remembered unlock stores a TIMESTAMP AND NOTHING ELSE. Not the PIN, not
+// its hash, not anything derived from either: the entire content of this key is
+// "somebody cleared this gate before <t>", which is worth nothing off the
+// device it was written on and cannot be replayed anywhere.
+const SUPER_UNLOCK_KEY  = 'forgeSuperUnlock';
+const SUPER_UNLOCK_DAYS = 7;
+function superUnlockValid(){
+  try{ return (+(localStorage.getItem(SUPER_UNLOCK_KEY)||0)) > Date.now(); }
+  catch(e){ return false; }        // storage blocked / private mode → always ask
+}
+function setSuperUnlock(){
+  try{ localStorage.setItem(SUPER_UNLOCK_KEY, String(Date.now() + SUPER_UNLOCK_DAYS*864e5)); }
+  catch(e){ /* not remembering is a downgrade, not a failure — say nothing */ }
+}
+function clearSuperUnlock(){ try{ localStorage.removeItem(SUPER_UNLOCK_KEY); }catch(e){} }
+
+function showSuperPinError(msg){
+  const el = document.getElementById('superPinError');
+  if(!el) return;
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+// No attempt throttling here, on purpose. This gate is client-side UI over a
+// hash that ships in a public repo, so a lockout would buy exactly no security
+// while handing the one person who needs this page a way to lock himself out.
+async function submitSuperPin(){
+  const el  = document.getElementById('superPinEntry');
+  const val = el ? el.value : '';
+  if(!val){ showSuperPinError('Enter the PIN first.'); return; }
+  let hash;
+  try{
+    hash = await sha256hex(val);
+  }catch(e){
+    logErr('submitSuperPin:hash', e);
+    showSuperPinError(e && e.message === 'INSECURE_CONTEXT'
+      ? 'This page is not on https, so PINs cannot be checked here. Open goforge.in directly.'
+      : 'Could not check that PIN. Reload and try again.');
+    return;
+  }
+  if(hash !== SUPER_PIN_HASH){
+    if(el){ el.value=''; try{ el.focus(); }catch(e2){} }
+    showSuperPinError('That PIN is not right. Try again.');
+    return;
+  }
+  const stay = document.getElementById('superPinStay');
+  if(stay && stay.checked) setSuperUnlock();
+  if(el) el.value = '';                      // never leave it sitting in the DOM
+  const err = document.getElementById('superPinError');
+  if(err) err.classList.add('hidden');
+  showScreen('super');
+  loadSuperAdmin();
+}
+
+// End the remembered unlock and come back to the gate. The counterpart to Exit,
+// which leaves the unlock alone and simply returns to the player's own group.
+function lockSuper(){
+  clearSuperUnlock();
+  location.href = location.pathname + '?superadmin';
+}
 
 // ── SUPER ADMIN ───────────────────────────────────────────────────────────
 async function loadSuperAdmin(){
