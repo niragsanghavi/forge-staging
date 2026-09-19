@@ -424,8 +424,8 @@
         <div class="mir-calright">
           <div class="mir-qmark" onclick="document.getElementById('mirLegend').classList.toggle('on')"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-help"/></svg></div>
           <div class="mir-arrows">
-            <div class="mir-arr" id="mirArrPrev" onclick="mirNavMonth(-1)"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-chevL"/></svg></div>
-            <div class="mir-arr off" id="mirArrNext" onclick="mirNavMonth(1)"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-chevR"/></svg></div>
+            <button type="button" class="mir-arr" id="mirArrPrev" aria-label="Previous month" onclick="mirNavMonth(-1)"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-chevL"/></svg></button>
+            <button type="button" class="mir-arr off" id="mirArrNext" aria-label="Next month" onclick="mirNavMonth(1)"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-chevR"/></svg></button>
           </div>
         </div>
       </div>
@@ -440,6 +440,7 @@
       <div class="mir-calfoot" id="mirCalFoot"></div>
       <div id="mirRecap"></div>
     </div>
+    <section id="forgeMonthStory" class="card" aria-label="Selected month breakdown"></section>
 
     <div class="card" id="mirChartCard">
       <div class="row" style="margin-bottom:8px">
@@ -514,6 +515,7 @@
   <!-- FEED -->
   <div class="page" id="page-feed">
     <div class="page-title">Activity Feed</div>
+    <p class="forge-explainer" id="feedContext">Your selected group’s workout history.</p>
     <div class="card" id="feedList">
       <div class="sk-row"><div class="sk sk-av"></div><div class="sk-body"><div class="sk sk-l1" style="width:44%"></div><div class="sk sk-l2"></div></div><div class="sk sk-num"></div></div>
       <div class="sk-row"><div class="sk sk-av"></div><div class="sk-body"><div class="sk sk-l1" style="width:58%"></div><div class="sk sk-l2"></div></div><div class="sk sk-num"></div></div>
@@ -523,18 +525,25 @@
 
   <!-- GLOBAL -->
   <div class="page" id="page-global">
-    <div class="page-title" style="padding-bottom:4px">Global</div>
-    <div class="tmuted" style="margin-bottom:16px;font-size:12px">Across every Forge group</div>
+    <div class="page-title" style="padding-bottom:4px">All Forge</div>
+    <div class="tmuted" style="margin-bottom:16px;font-size:12px">Different groups. The same reason to show up.</div>
+    <div id="globalViews" class="forge-segments" role="group" aria-label="All Forge ranking view">
+      <button type="button" data-global-view="groups" aria-pressed="true" onclick="setGlobalView('groups')">Groups</button>
+      <button type="button" data-global-view="people" aria-pressed="false" onclick="setGlobalView('people')">People</button>
+      <button type="button" data-global-view="today" aria-pressed="false" onclick="setGlobalView('today')">Today</button>
+    </div>
+    <p class="forge-explainer" id="globalMetric">Average season points per roster member, not total group size. Different group rules can affect scores; this is not a fitness ranking.</p>
     <!-- Privacy control for THIS board. Sits above the boards on purpose: the
          opt-out has to be reachable by anyone who is already visible on them.
          Painted by renderGlobalConsent(), called from loadGlobal(). -->
     <div id="globalConsentCard" style="margin-bottom:16px"></div>
-    <div class="shdr">Most Active Groups Today</div>
+    <section data-global-panel="today" hidden><div class="shdr">Most Active Groups Today</div>
     <div class="card" id="globalActive"><div class="tmuted">Open this tab to load…</div></div>
-    <div class="shdr">Top Groups — Avg Points / Player</div>
+    </section><section data-global-panel="groups"><div class="shdr">Top Groups — Avg Points / Player</div>
     <div class="card" id="globalGroups"><div class="tmuted">Open this tab to load…</div></div>
-    <div class="shdr">Points Leaderboard — Top 5</div>
+    </section><section data-global-panel="people" hidden><div class="shdr">Points Leaderboard — Top 5</div>
     <div class="card" id="globalPoints"><div class="tmuted">Open this tab to load…</div></div>
+    </section>
   </div>
 
   <!-- ADMIN -->
@@ -720,6 +729,7 @@
          would not, since the app is bundled precisely so it survives offline.
          Also avoids limitsNavigationsToAppBoundDomains blocking an outbound
          navigation in the webview. -->
+    <section id="forgeFAQ" class="card forge-faq" aria-label="Forge field guide"></section>
     <div class="shdr">Privacy &amp; support</div>
     <div class="card">
       <div class="tmuted" style="font-size:12px;margin-bottom:10px">
@@ -2186,7 +2196,7 @@ function _isGroupSubscriptionCurrent(context){
     context.subscription===_groupSubscriptionGeneration && seasonId===context.seasonId;
 }
 
-async function loadGroup(code, fromCache){
+async function loadGroup(code, fromCache, options={}){
   const context=_newGroupLoadContext(code);
   const playerAtStart=me;
   // On a genuine "this group is gone/broken" error we drop ONLY that group's
@@ -2261,7 +2271,7 @@ async function loadGroup(code, fromCache){
     // never prompts, never blocks boot. Inert while FEATURE_PUSH is off.
     try{ refreshPushTokenQuietly(); }catch(e){}
     // Open counter for the staged prompts: one bump per boot, device-local.
-    try{ localStorage.setItem('forgeOpens', String(+(localStorage.getItem('forgeOpens')||0)+1)); }catch(e){}
+    if(!options.manual){try{ localStorage.setItem('forgeOpens', String(+(localStorage.getItem('forgeOpens')||0)+1)); }catch(e){}}
     // PILOT-ONLY, delete at launch: a home-screen PWA has no address bar, so
     // the ?pushpilot arm can't reach it, and iOS gives every home-screen app
     // its own storage so arming Safari first doesn't carry over. The pilot
@@ -2288,7 +2298,7 @@ async function loadGroup(code, fromCache){
 
     if(gracePinCheckOnResume()) return;
     if(!_isGroupLoadCurrent(context)) return;
-    launchApp();
+    launchApp(options);
   } catch(e){
     if(!_isGroupLoadCurrent(context)) return;
     console.error('loadGroup failed:', e);
@@ -2316,10 +2326,10 @@ function handleDeadGroup(code, msg){
   }
 }
 
-function launchApp(){
+function launchApp(options={}){
   // First-run tour: fires once per device, 1.5s after launch so the calendar
   // exists to be pointed at. Skippable at every step; replay in Profile.
-  setTimeout(()=>{ try{ startTour(false); }catch(e){} }, 1500);
+  if(!options.manual)setTimeout(()=>{ try{ startTour(false); }catch(e){} }, 1500);
   try { localStorage.setItem('forge_seen','1'); } catch(e){}  // durable-ish "has launched before" marker for the session_lost breadcrumb
   window._joinMode = false;
   document.getElementById('joinCancel')?.classList.add('hidden');
@@ -2829,31 +2839,32 @@ function mirCurrentDesc(){
 // merge, no composite index needed. Falls back to a group-month query filtered
 // client-side if the narrow query errors (index safety).
 async function mirLoadMonthLogs(month, year){
-  const key=`${groupCode}_${year}_${month}`;
+  const context={code:groupCode,name:me.name,uid:me.userId||null};
+  const key=`${context.code}_${context.uid||context.name}_${year}_${month}`;
   if(_mirLogCache[key]) return _mirLogCache[key];
   if(_mirInflight['ml_'+key]) return _mirInflight['ml_'+key];
-  const p=_mirLoadMonthLogsInner(month, year, key);
+  const p=_mirLoadMonthLogsInner(month, year, key,context);
   _mirInflight['ml_'+key]=p;
   try{ return await p; } finally { delete _mirInflight['ml_'+key]; }
 }
-async function _mirLoadMonthLogsInner(month, year, key){
+async function _mirLoadMonthLogsInner(month, year, key,context){
   let out=[];
   try{
     const snap=await db.collection('logs')
-      .where('groupCode','==',groupCode).where('year','==',year)
-      .where('month','==',month).where('player','==',me.name).get({source:'default'});
+      .where('groupCode','==',context.code).where('year','==',year)
+      .where('month','==',month).where('player','==',context.name).get({source:'default'});
     out=snap.docs.map(d=>({id:d.id,...d.data()})).filter(l=>!l.voided)
        .map(l=>({day:l.day, workouts:l.workouts||(l.workout?[l.workout]:[]), id:l.id, note:l.note||null}));
     window._mirReadCount=(window._mirReadCount||0)+snap.size;
   }catch(e){
     logErr('mirLoadMonthLogs('+month+'/'+year+')', e);
     try{
-      const snap=await db.collection('logs').where('groupCode','==',groupCode)
+      const snap=await db.collection('logs').where('groupCode','==',context.code)
         .where('year','==',year).where('month','==',month).get();
-      out=snap.docs.map(d=>({id:d.id,...d.data()})).filter(l=>!l.voided && l.player===me.name)
+      out=snap.docs.map(d=>({id:d.id,...d.data()})).filter(l=>!l.voided && l.player===context.name)
          .map(l=>({day:l.day, workouts:l.workouts||(l.workout?[l.workout]:[]), id:l.id, note:l.note||null}));
       window._mirReadCount=(window._mirReadCount||0)+snap.size;
-    }catch(e2){ logErr('mirLoadMonthLogs fallback', e2); }
+    }catch(e2){ logErr('mirLoadMonthLogs fallback', e2); throw new Error('HISTORY_UNAVAILABLE'); }
   }
   _mirLogCache[key]=out;
   return out;
@@ -3007,6 +3018,7 @@ function mirRenderPanels(){
 }
 function mirSyncCalHead(){
   const M=_mirMonths[_mirIdx]; if(!M) return;
+  if(window.ForgeExperience) ForgeExperience.renderMonth(M);
   document.getElementById('mirCalMonth').textContent=`${M.label} ${M.year}`;
   document.getElementById('mirCalRO').textContent=M.readonly?'CLOSED':'';
   document.getElementById('mirCalCount').innerHTML=`<b>${M.count}</b> of ${M.days} days marked`;
@@ -3067,15 +3079,18 @@ function _mirOnScroll(){
   if(track.scrollLeft<=6 && !_mirNoMore && !_mirLoading) mirLoadOlder();
 }
 async function mirNavMonth(dir){
+  const generation=_groupLoadGeneration;
   const track=document.getElementById('mirCaltrack'); if(!track) return;
   if(dir<0){
     if(_mirIdx>0){ mirScrollToIdx(_mirIdx-1,true); }
-    else if(!_mirNoMore){ await mirLoadOlder(); mirScrollToIdx(Math.max(0,_mirIdx-1),true); }
+    else if(!_mirNoMore){ const loaded=await mirLoadOlder(); if(loaded&&generation===_groupLoadGeneration)mirScrollToIdx(Math.max(0,_mirIdx-1),true); }
   } else if(_mirIdx<_mirMonths.length-1){ mirScrollToIdx(_mirIdx+1,true); }
 }
 async function mirLoadOlder(){
   if(_mirLoading||_mirNoMore) return false;
   _mirLoading=true;
+  const generation=_groupLoadGeneration,actor=me.userId||me.name,code=groupCode;
+  const current=()=>generation===_groupLoadGeneration&&code===groupCode&&actor===(me?.userId||me?.name);
   const track=document.getElementById('mirCaltrack');
   try{
     const oldest=_mirMonths[0];
@@ -3101,6 +3116,7 @@ async function mirLoadOlder(){
     if((relax.year<fY)||(relax.year===fY&&relax.month<fM)){ fY=relax.year; fM=relax.month; }
     if((year<fY)||(year===fY&&month<fM)){ _mirNoMore=true; mirSyncCalHead(); return false; }
     const logs=await mirLoadMonthLogs(month,year);
+    if(!current())return false;
     const w=track?track.clientWidth+28:0;
     _mirMonths.unshift(mirMonthDesc(month,year,true,logs));
     _mirIdx++;                                 // the panel in view shifted right by one
@@ -3108,13 +3124,17 @@ async function mirLoadOlder(){
     if(track) track.scrollLeft=_mirIdx*w;      // keep the same panel in view (no visual jump)
     mirSyncCalHead();
     return true;
-  }catch(e){ logErr('mirLoadOlder', e); return false; }
+  }catch(e){ logErr('mirLoadOlder', e); if(current())toast('Could not load that month. Check your connection and try the arrow again.','error');return false; }
   finally{ _mirLoading=false; }
 }
 
 // ── DAY TAP → sheet or day-detail ──
 function mirTapDay(ix, d){
   const M=_mirMonths[ix]; if(!M) return;
+  if(M.byDay[d] && (M.readonly || d<Math.max(1,new Date().getDate()-7))){
+    if(window.ForgeExperience) ForgeExperience.openDay(M,d);
+    return;
+  }
   const el=document.querySelector(`.mir-calpanel[data-idx="${ix}"] [data-day="${d}"]`);
   const shake=()=>{ if(el){ el.classList.add('shake'); setTimeout(()=>el.classList.remove('shake'),320); } };
   if(M.readonly){ shake(); toast('This month is closed.'); return; }
@@ -4934,14 +4954,13 @@ function renderHealthCard(){
     + (on
       ? 'Connected. Workouts recorded on this phone (or your watch) show up on '
         + 'Home for one-tap logging. Nothing is logged without your say-so, and '
-        + 'your health data never leaves this phone.'
+        + 'confirmed Forge logs are shared with your groups. Enabled step challenges also sync daily step totals.'
       : 'See workouts recorded on this phone (or your watch) on your Home screen, '
-        + 'and log them to your group with one tap. Read-only. Your health data '
-        + 'never leaves this phone.')
+        + 'and confirm which ones to log. Confirmed Forge logs are shared with your groups; enabled step challenges also sync daily step totals.')
     + '</div>'
     + '<button class="btn' + (on ? '' : ' btn-gold') + '" id="healthBtn" style="margin:0;'
     + (on ? 'background:var(--bg-card-2);color:var(--text)' : '') + '" '
-    + 'onclick="toggleHealth()">' + (on ? 'Disconnect' : 'Connect Apple Health') + '</button>'
+    + 'onclick="toggleHealth()">' + (on ? 'Disconnect' : 'Connect '+(window.ForgeExperience?ForgeExperience.healthName():'your health app')) + '</button>'
     + '<div id="healthResult" class="tmuted" style="font-size:12px;margin-top:10px"></div>';
 }
 
@@ -7381,7 +7400,7 @@ function _duePrompt(){
      && +( _lsGet('forgePushSnooze')||0 ) <= _openCount()
      && +( _lsGet('forgePushSnoozes')||0 ) < 3) return 'push';
   // 2) HEALTH — native only, after the push question is settled or given up.
-  const pushSettled = _lsGet('forgePushEnabled')==='1' || pushPermission()==='denied'
+  const pushSettled = !window.FEATURE_PUSH || typeof pushSupported!=='function' || !pushSupported() || _lsGet('forgePushEnabled')==='1' || pushPermission()==='denied'
                       || +( _lsGet('forgePushSnoozes')||0 ) >= 3;
   if(pushSettled && typeof isNative==='function' && isNative()
      && typeof healthEnabled==='function' && !healthEnabled()
@@ -7392,11 +7411,12 @@ function _duePrompt(){
 function renderPromptDock(){
   const el=document.getElementById('promptDock'); if(!el) return;
   el.innerHTML='';
+  if(typeof _tour!=='undefined'&&_tour)return;
   const due=_duePrompt(); if(!due) return;
   if(due==='push'){
     el.innerHTML=
       '<div class="card" style="margin-bottom:14px;padding:16px">'
-      +'<div style="font-size:14px;font-weight:800">🔔 Want to know when it actually matters?</div>'
+      +'<div class="forge-reminder-title"><img src="assets/forgeling.webp" alt="Forgeling">A nudge, if you want one.</div>'
       +'<div style="font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.6">'
       +'One nudge if your team\'s streak is about to break tonight, one when the week\'s recap lands. '
       +'We will never tell you to go exercise.</div>'
@@ -7406,11 +7426,10 @@ function renderPromptDock(){
   } else {
     el.innerHTML=
       '<div class="card" style="margin-bottom:14px;padding:16px">'
-      +'<div style="font-size:14px;font-weight:800">❤️ Your phone already counts your workouts</div>'
+      +'<div class="forge-reminder-title"><img src="assets/forgeling.webp" alt="Forgeling">Less typing. Your call.</div>'
       +'<div style="font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.6">'
-      +'Connect Apple Health and they show up here for one-tap logging — plus your steps count for the '
-      +'team step challenge. Read-only; your health data never leaves this phone.</div>'
-      +'<button class="btn btn-gold" style="margin:12px 0 0;width:100%" onclick="promptConnectHealth()">Connect Apple Health</button>'
+      +'Connect '+(window.ForgeExperience?ForgeExperience.healthName():'your health app')+' for workout suggestions you confirm before logging. Confirmed logs are shared with your groups; enabled step challenges also upload daily step totals.</div>'
+      +'<button class="btn btn-gold" style="margin:12px 0 0;width:100%" onclick="promptConnectHealth()">Choose Health connection</button>'
       +'<div style="margin-top:8px;text-align:center"><span onclick="snoozePrompt(\'Health\')" '
       +'style="font-size:12px;color:var(--muted);cursor:pointer">Later</span></div></div>';
   }
@@ -7525,6 +7544,8 @@ function shareMilestones(){
 }
 
 function renderFeed(){
+  const contextEl=document.getElementById('feedContext');
+  if(contextEl)contextEl.textContent=`${groupData?.name||groupCode} · ${MIR_MONTHNAMES[season.month-1]} ${season.year}. Real workouts from your group, newest first.`;
   // PASS-2 FIX 1a — a just-written log's serverTimestamp() is NULL in the local
   // offline echo until the server acks. The old `||0` sorted those brand-new
   // rows to the BOTTOM, where slice(0,60) cut them off entirely in any group
@@ -10616,7 +10637,7 @@ function applyTheme(theme){
   document.documentElement.setAttribute('data-theme', theme);
   try { localStorage.setItem('forge_theme', theme); } catch(e){ logErr('setTheme: storage blocked', e); }
   const btn=document.getElementById('themeToggle');
-  if(btn) btn.textContent = theme==='light' ? '☀️' : '🌙';
+  if(btn){if(window.ForgeExperience)btn.innerHTML=ForgeExperience.icon('theme');else btn.textContent=theme==='light'?'☀️':'🌙';}
 }
 function toggleTheme(){
   const cur=document.documentElement.getAttribute('data-theme')||'dark';
@@ -10696,9 +10717,17 @@ async function loadGlobal(){
     globalDataCache={groups,todayByGroup};
     globalDataCacheTime=Date.now();
     renderGlobalFromCache(globalDataCache);
-  }catch(e){ console.error('loadGlobal failed:',e); actEl.innerHTML='<div class="tmuted">Could not load global stats. Check connection.</div>'; grpEl.innerHTML=''; ptsEl.innerHTML=''; }
+  }catch(e){ console.error('loadGlobal failed:',e); const failed='<p class="tmuted">Could not load these rankings. Nothing here means zero activity.</p><button class="today-button" onclick="loadGlobal()">Try again</button>';actEl.innerHTML=failed;grpEl.innerHTML=failed;ptsEl.innerHTML=failed; }
 }
 
+function setGlobalView(view){
+  const descriptions={groups:'Average season points per roster member, not total group size. Different group rules can affect scores; this is not a fitness ranking.',people:'Opted-in people only. Your best group score counts once, not the sum of your memberships. Equal scores share a rank.',today:'Workout log entries submitted today—not unique people or steps. Larger groups can post more entries.'};
+  if(!descriptions[view])return;
+  document.querySelectorAll('[data-global-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.globalView===view)));
+  document.querySelectorAll('[data-global-panel]').forEach(p=>p.hidden=p.dataset.globalPanel!==view);
+  document.getElementById('globalMetric').textContent=descriptions[view];
+}
+function globalRankAt(rows,index,field){return rows.findIndex(row=>Number(row[field])===Number(rows[index][field]))+1;}
 function renderGlobalFromCache({groups,todayByGroup}){
   const actEl=document.getElementById('globalActive');
   const grpEl=document.getElementById('globalGroups');
@@ -10715,7 +10744,7 @@ function renderGlobalFromCache({groups,todayByGroup}){
     .sort((a,b)=>b.count-a.count).slice(0,5);
   actEl.innerHTML=activeRanked.length===0
     ?'<div class="tmuted">No workouts logged anywhere yet today.</div>'
-    :activeRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(g.name)}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--green)">${g.count}</div><div style="font-size:10px;color:var(--muted)">logs today</div></div></div>`).join('');
+    :activeRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank">${globalRankAt(activeRanked,i,'count')}</div><div class="lbinfo"><div class="lbname">${esc(g.name)}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--green)">${g.count}</div><div style="font-size:10px;color:var(--muted)">logs today</div></div></div>`).join('');
   // Boards "top groups" + "top players": from each group's denormalized
   // globalStats (only when it matches the group's CURRENT season, so a
   // just-rolled-over group doesn't show last season's numbers until recompute).
@@ -10730,7 +10759,7 @@ function renderGlobalFromCache({groups,todayByGroup}){
   const grpRanked=groupAgg.sort((a,b)=>b.avg-a.avg).slice(0,5);
   grpEl.innerHTML=grpRanked.length===0
     ?'<div class="tmuted">No groups yet.</div>'
-    :grpRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(g.name)}</div><div class="lbmeta">${g.count} players · ${g.total} total pts</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${g.avg}</div><div style="font-size:10px;color:var(--muted)">avg/player</div></div></div>`).join('');
+    :grpRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank">${globalRankAt(grpRanked,i,'avg')}</div><div class="lbinfo"><div class="lbname">${esc(g.name)}</div><div class="lbmeta">${g.count} players · ${g.total} total pts</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${g.avg}</div><div style="font-size:10px;color:var(--muted)">avg/player</div></div></div>`).join('');
   // ── ONE ROW PER PERSON, NOT PER MEMBERSHIP ──────────────────────────────
   // This board used to push one entry per (person, group), so anyone in three
   // groups occupied three of the five slots and competed against themselves —
@@ -10758,8 +10787,8 @@ function renderGlobalFromCache({groups,todayByGroup}){
   playerEntries.sort((a,b)=>b.points-a.points);
   const top=playerEntries.slice(0,5);
   ptsEl.innerHTML=top.length===0
-    ?'<div class="tmuted">No one has opted in yet. Turn on "Show me on the global leaderboard" on your Home screen to appear here.</div>'
-    :top.map((e,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(e.name)}</div><div class="lbmeta">${esc(e.group)}${e.groups>1?` · best of ${e.groups}`:''}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${esc(e.points)}</div><div style="font-size:10px;color:var(--muted)">pts</div></div></div>`).join('');
+    ?'<div class="tmuted">No one has opted in yet. Use the visibility control above to choose whether you appear here.</div>'
+    :top.map((e,i)=>`<div class="lbrow"><div class="lbrank">${globalRankAt(top,i,'points')}</div><div class="lbinfo"><div class="lbname">${esc(e.name)}</div><div class="lbmeta">${esc(e.group)}${e.groups>1?` · best of ${e.groups}`:''}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${esc(e.points)}</div><div style="font-size:10px;color:var(--muted)">pts</div></div></div>`).join('');
 }
 
 // R3 BACKFILL — one-time seed of the denormalized rollups from live data using
@@ -11368,57 +11397,74 @@ setInterval(enforceOneAttentionCard, 4000);
    replayable from the profile. Advance is by real tap where the step teaches
    a tap; the spotlighted element stays fully interactive because the shade
    is pointer-events:none — the tour never blocks the app. */
-const TOUR_KEY='forgeTourV1';
+const TOUR_KEY='forgeTourV2';
 let _tour=null;
 function startTour(force){
   try{ if(!force && localStorage.getItem(TOUR_KEY)) return; }catch(e){}
   if(_tour) endTour(false);
+  if(!me||!season)return;
   const steps=[
-    {t:'#mirCaltrack', txt:'Your month lives here. Tap today\u2019s square to log \u2014 two taps and you\u2019re on the board.', pre:()=>showTab('home')},
-    {t:'#tabLb', txt:'Teams and rankings live on the Board. Tap it.', tap:true},
-    {t:'#teamStand', txt:'Team standings. When just over half your team logs on the same day, the streak grows \u2014 that\u2019s where the big points are.'},
-    {t:'#indLb', txt:'Tap any name to see exactly where their points come from.'},
-    {t:'#profileBtn', txt:'Your stats, settings and this tour live behind the avatar. That\u2019s it \u2014 go log something.'}
+    {t:'#forgeToday',page:'home',title:'Hey. I’m Forgeling.',txt:'Small effort. Bigger habit. I’ll show you where to log, see your progress and find your people. No workout required for this tour.'},
+    {t:'.mir-calcard',page:'home',title:'Your month, one square at a time.',txt:'Tap a day to log. The arrows take you to previous months, and recorded days open your workout details. Closed months are read-only.'},
+    {t:'#forgeMonthStory',page:'home',title:'See what actually added up.',txt:'Days, activity types and gym notes for the month you’re viewing. Tap a workout bar for its dates. Two activities can still be one workout day.'},
+    {t:'#forgeTodayActions',page:'home',title:'A quick way to say “done”.',txt:'These workout icons log today. Forge checks your linked groups and shows a receipt. Wait for Confirmed before counting it as saved.'},
+    {t:'#lbViewControls',fallback:'#lbPeoplePanel',page:'lb',title:'Your group. Two perspectives.',txt:'Compare teams or people where both views are available. Tap a person to understand their points. Your group’s season rules decide the score.'},
+    {t:'#feedList',page:'feed',title:'The group is showing up.',txt:'This is your group’s workout history. Read what people did and when. No likes to collect; the effort is the point.'},
+    {t:'#globalViews',page:'global',title:'A wider view of Forge.',txt:'Groups, opted-in people and today’s activity have different measures. Read the metric before comparing. This is not a ranking of fitness.'},
+    {t:'.pfold',page:'profile',settings:true,title:'Make Forge work for you.',txt:'Notifications are your choice. In the phone app, connect Apple Health on iOS or Health Connect on Android. Nothing is enabled by taking this tour.'},
+    {t:'#forgeFAQ',page:'profile',title:'I’m leaving the answers here.',txt:'This illustrated field guide lives in Profile. Come back for points, gym logs, previous months, Health or help—and replay this walk any time. Your turn.'}
   ];
-  _tour={i:0, steps};
+  _tour={i:0,steps,token:0,opener:document.activeElement,context:`${groupCode}|${me.userId||me.name}|${seasonId}`};
+  document.body.classList.add('forge-touring');
+  try{renderPromptDock();}catch(e){}
   const spot=document.createElement('div'); spot.className='tour-spot'; spot.id='tourSpot';
   const bub=document.createElement('div'); bub.className='tour-bubble'; bub.id='tourBubble';
   document.body.appendChild(spot); document.body.appendChild(bub);
+  bub.setAttribute('role','dialog');bub.setAttribute('aria-label','Forgeling app tour');
+  _tour.reposition=()=>_tourPosition();
+  _tour.key=e=>{if(e.key==='Escape'){e.preventDefault();endTour(true);}};
+  window.addEventListener('resize',_tour.reposition);
+  document.addEventListener('scroll',_tour.reposition,true);
+  document.addEventListener('keydown',_tour.key);
   _tourShow();
 }
 function _tourShow(){
   if(!_tour) return;
-  const st=_tour.steps[_tour.i];
-  if(st.pre){ try{ st.pre(); }catch(e){} }
-  // The target may render a beat after a tab switch — try, then retry once.
+  const tour=_tour,token=++tour.token,st=tour.steps[tour.i];
+  if(!document.getElementById('page-'+st.page)?.classList.contains('active'))showTab(st.page,{tour:true});
+  if(st.settings){const settings=document.querySelector('#page-profile .pfold');if(settings)settings.open=true;}
+  if(window.ForgeExperience)ForgeExperience.renderFAQ();
+  const bub=document.getElementById('tourBubble');
+  bub.innerHTML=`<div class="forge-tour-mascot"><img src="assets/forgeling.webp" alt="Forgeling" width="72" height="72"></div><p class="today-kicker">FORGELING’S FIELD TRIP</p><h2>${st.title}</h2><p class="tb-txt">${st.txt}</p><div class="tb-row"><span class="tb-step">${tour.i+1} / ${tour.steps.length}</span><div class="tb-btns"><button class="tb-skip" onclick="endTour(true)">Skip</button>${tour.i?'<button class="tb-skip" onclick="prevTourStep()">Back</button>':''}<button class="tb-next" onclick="nextTourStep()">${tour.i===tour.steps.length-1?'Let’s go':'Next'}</button></div></div>`;
+  bub.querySelector('.tb-next').focus({preventScroll:true});
+  const current=()=>_tour===tour&&tour.token===token;
   const attempt=(n)=>{
-    const el=document.querySelector(st.t);
+    if(!current())return;
+    let el=document.querySelector(st.t);
+    if((!el||!el.getBoundingClientRect().height)&&st.fallback)el=document.querySelector(st.fallback);
     if(!el || !el.getBoundingClientRect().height){
-      if(n<8) return setTimeout(()=>attempt(n+1), 250);
-      return nextTourStep();                     // target never appeared — skip the step
+      if(n<8){tour.timer=setTimeout(()=>attempt(n+1),120);return;}
+      el=document.querySelector('#page-'+st.page);
     }
-    el.scrollIntoView({block:'center', behavior:'auto'});
-    setTimeout(()=>{
-      const r=el.getBoundingClientRect();
-      const spot=document.getElementById('tourSpot'), bub=document.getElementById('tourBubble');
-      if(!spot||!bub||!_tour) return;
-      spot.style.cssText=`left:${r.left-6}px;top:${r.top-6}px;width:${r.width+12}px;height:${r.height+12}px`;
-      const last=_tour.i===_tour.steps.length-1;
-      bub.innerHTML=`<div class="tb-txt">${st.txt}</div>
-        <div class="tb-row"><span class="tb-step">${_tour.i+1} of ${_tour.steps.length}</span>
-        <span class="tb-btns"><button class="tb-skip" onclick="endTour(true)">Skip</button>`+
-        (st.tap?'':`<button class="tb-next" onclick="nextTourStep()">${last?'Done':'Next'}</button>`)+
-        `</span></div>`;
-      const below=r.bottom+12+bub.offsetHeight < window.innerHeight;
-      bub.style.left=Math.max(10, Math.min(window.innerWidth-310, r.left))+'px';
-      bub.style.top=(below? r.bottom+12 : Math.max(10, r.top-bub.offsetHeight-12))+'px';
-      if(st.tap){
-        el.addEventListener('click', ()=>setTimeout(nextTourStep, 350), {once:true, capture:true});
-      }
-    }, 60);
+    tour.target=el;
+    if(el)el.scrollIntoView({block:'start',behavior:'auto'});
+    requestAnimationFrame(()=>{if(current())_tourPosition();});
   };
   attempt(0);
 }
+function _tourPosition(){
+  if(!_tour)return;
+  if(_tour.context!==`${groupCode}|${me?.userId||me?.name}|${seasonId}`){endTour(false);return;}
+  const spot=document.getElementById('tourSpot'),bub=document.getElementById('tourBubble');if(!spot||!bub)return;
+  const r=_tour.target?.getBoundingClientRect();
+  const bottom=window.innerHeight-88;
+  const width=Math.min(360,window.innerWidth-24);
+  bub.style.width=width+'px';bub.style.left=Math.max(12,(window.innerWidth-width)/2)+'px';
+  const h=bub.offsetHeight;
+  bub.style.top=Math.max(12,bottom-h)+'px';
+  if(r){const top=Math.max(64,r.top),height=Math.max(0,Math.min(r.bottom,bottom-h-12)-top);spot.style.cssText=`left:${Math.max(4,r.left-4)}px;top:${top}px;width:${Math.min(window.innerWidth-8,r.width+8)}px;height:${height}px;opacity:${height>0?1:0}`;}
+}
+function prevTourStep(){if(!_tour||!_tour.i)return;clearTimeout(_tour.timer);_tour.i--;_tourShow();}
 function nextTourStep(){
   if(!_tour) return;
   _tour.i++;
@@ -11426,12 +11472,16 @@ function nextTourStep(){
   _tourShow();
 }
 function endTour(remember){
-  ['tourSpot','tourBubble'].forEach(id=>{ const el=document.getElementById(id); if(el) el.remove(); });
+  const tour=_tour;
+  if(tour){clearTimeout(tour.timer);window.removeEventListener('resize',tour.reposition);document.removeEventListener('scroll',tour.reposition,true);document.removeEventListener('keydown',tour.key);}
+  ['tourSpot','tourBubble'].forEach(id=>{ const el=document.getElementById(id); if(el){el.id='';el.style.pointerEvents='none';el.classList.add('forge-tour-exit');setTimeout(()=>el.remove(),250);} });
   _tour=null;
+  document.body.classList.remove('forge-touring');
+  if(tour?.opener?.isConnected&&tour.opener.getClientRects().length)tour.opener.focus({preventScroll:true});
   if(remember){ try{ localStorage.setItem(TOUR_KEY,'done'); }catch(e){} }
 }
 
-async function showTab(t){
+async function showTab(t,options={}){
   // PASS-2 FIX 8 — legacy 'log' route: the Log tab no longer exists, so any
   // surviving caller (deep link, post-onboarding redirect, old bookmark)
   // lands on Home with today's log sheet already open.
@@ -11486,7 +11536,7 @@ async function showTab(t){
   if(t==='profile') renderProfile();
   if(t==='admin'){ try{ renderAdminExtras(); }catch(e){} }
   if(t==='admin') maybeShowRebalanceCard().catch(e=>logErr('maybeShowRebalanceCard',e));
-  trackTabClick(t); // fire-and-forget — no await
+  if(!options.tour)trackTabClick(t); // do not count guided-tour steps as user activity
 }
 
 // ── TAB ANALYTICS ─────────────────────────────────────────────────────────
