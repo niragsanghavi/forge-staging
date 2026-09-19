@@ -333,27 +333,11 @@ window.ensureAuth = function(){
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   GOOGLE SIGN-IN — AUTH PHASE 1 (coexistence)
-   Contract: AUTH_DESIGN_FINAL.md, Option A, locked 25 Jul 2026.
-
-   PHASE 1 CHANGES NOTHING FOR ANYONE. Anonymous boot above is untouched, PIN
-   login is untouched, and every surface below is behind FEATURE_GOOGLE_AUTH,
-   which stays FALSE until two console steps are done that no agent can do:
-     1. Blaze enabled on the project
-     2. Authentication -> Sign-in method -> Google ENABLED, OAuth client created
-   With the flag false these functions are inert and the UI never appears, so
-   this can sit on staging safely until those are ready.
-
-   WHY REDIRECT, NOT POPUP. signInWithPopup is blocked or silently broken inside
-   the Android TWA and in iOS standalone PWAs — the two places most Forge users
-   will be. Redirect works everywhere, at the cost of needing the result picked
-   up on the next page load (consumeGoogleRedirect below).
-
-   WHY LINK BEFORE SIGN-IN. The device already has an anonymous uid that appears
-   in knownDeviceUids and on logs. linkWithCredential UPGRADES that same uid to a
-   Google identity, so nothing already written is orphaned. Only when that
-   Google account is already attached to another Forge identity do we fall back
-   to a plain sign-in, because linking would be a lie about who this is.
+   PROVIDER SIGN-IN — local candidate, release-gated.
+   Web uses explicit popup sign-in; embedded native authentication is blocked
+   until a dedicated bridge and staging configuration pass device testing.
+   Signing in is not ownership of a legacy Forge profile: the server claim
+   endpoint separately verifies the accepted lower-assurance migration PIN.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 window.googleProvider = function(){
@@ -362,74 +346,41 @@ window.googleProvider = function(){
   return p;
 };
 
-// Start the flow. Returns a promise that rejects if the provider is not enabled
-// yet, so the caller can show a real message instead of a dead button.
-// intent: 'link'  — securing the identity you are already using on this device
-//         'login' — arriving on a NEW device to reclaim an identity you own
-//
-// The intent has to be passed in, because the two need OPPOSITE calls and the
-// old code could only ever make one of them. ensureAuth() establishes an
-// anonymous session before any screen paints, so `currentUser.isAnonymous` is
-// ALWAYS true by the time either button is tappable — meaning login took the
-// link branch too. On a second device that Google credential is already bound
-// to the first device's uid, so linking fails with credential-already-in-use
-// and the user is told their own account belongs to someone else. "Continue
-// with Google" could never once have succeeded.
-window.startGoogleSignIn = function(intent){
-  if(!window.FEATURE_GOOGLE_AUTH) return Promise.reject(new Error('FEATURE_OFF'));
-  try{ sessionStorage.setItem('forge_google_pending','1'); }catch(e){}
-  const cur = auth.currentUser;
-  // LOGIN: sign in AS the Google account outright. Discarding this device's
-  // throwaway anonymous uid is the whole point — the identity being reclaimed
-  // lives on the server, keyed by authUid.
-  if(intent === 'login') return auth.signInWithRedirect(window.googleProvider());
-  // LINK: upgrade this device's existing anonymous uid in place, so anything
-  // already written under it (knownDeviceUids, logs) stays attached.
-  if(cur && cur.isAnonymous) return cur.linkWithRedirect(window.googleProvider());
-  return auth.signInWithRedirect(window.googleProvider());
+// Web provider entry. Native OAuth must use a reviewed native bridge rather
+// than launching Google's web flow inside an embedded browser.
+window.startForgeProviderSignIn = async function(provider){
+  if(!window.FEATURE_GOOGLE_AUTH) throw new Error('FEATURE_OFF');
+  if(!['google.com','apple.com'].includes(provider)) throw new Error('INVALID_PROVIDER');
+  if(provider==='apple.com'&&!window.FEATURE_APPLE_AUTH) throw new Error('APPLE_NOT_CONFIGURED');
+  if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()) throw new Error('NATIVE_AUTH_NOT_CONFIGURED');
+  const p=provider==='google.com'?window.googleProvider():new firebase.auth.OAuthProvider('apple.com');
+  if(provider==='apple.com'){p.addScope('email');p.addScope('name');}
+  const result=await auth.signInWithPopup(p);
+  return {uid:result.user.uid,email:result.user.email||null,provider};
 };
 
-// Call once on boot. Resolves to {linked:false} on a normal load — this must be
-// cheap and silent when no redirect happened, because it runs on every launch.
-window.consumeGoogleRedirect = async function(){
-  if(!window.FEATURE_GOOGLE_AUTH) return {linked:false};
-  let pending=false;
-  try{ pending = sessionStorage.getItem('forge_google_pending')==='1'; }catch(e){}
-  try{
-    const res = await auth.getRedirectResult();
-    if(!res || !res.user) return {linked:false};
-    try{ sessionStorage.removeItem('forge_google_pending'); }catch(e){}
-    return { linked:true, uid:res.user.uid, email:res.user.email||null,
-             displayName:res.user.displayName||null, isNewUser: !!(res.additionalUserInfo||{}).isNewUser };
-  }catch(err){
-    try{ sessionStorage.removeItem('forge_google_pending'); }catch(e){}
-    // The Google account is already attached to a different Forge identity.
-    // Linking is refused on purpose (one Google account = one identity, Q2),
-    // so sign in as that identity instead of pretending the link worked.
-    if(err && err.code === 'auth/credential-already-in-use'){
-      // Hand the credential BACK. This is not really a failure: it means the
-      // Google account already owns a Forge identity, which is precisely the
-      // 1:1 rule working. The old code threw err.credential away and left the
-      // caller with nothing but an error string, so the only possible outcome
-      // was telling the user their own account belonged to someone else.
-      // With the credential, signInAsGoogle() below completes the journey.
-      return { linked:false, error:'ALREADY_IN_USE', pending, credential: (err.credential || null) };
-    }
-    if(err && err.code === 'auth/operation-not-allowed'){
-      return { linked:false, error:'PROVIDER_DISABLED', pending };
-    }
-    console.error('Google redirect failed:', err);
-    return { linked:false, error: (err&&err.code)||'UNKNOWN', pending };
+window.confirmForgeAccountDeletion = async function(expectedUid){
+  const user=auth.currentUser;
+  if(!user||user.isAnonymous||user.uid!==expectedUid)throw new Error('SIGN_IN_REQUIRED');
+  if(window.Capacitor?.isNativePlatform?.())throw new Error('NATIVE_AUTH_NOT_CONFIGURED');
+  const apple=user.providerData.some(p=>p.providerId==='apple.com');
+  const provider=apple?new firebase.auth.OAuthProvider('apple.com'):window.googleProvider();
+  const result=await user.reauthenticateWithPopup(provider);
+  if(auth.currentUser?.uid!==expectedUid||result.user.uid!==expectedUid)throw new Error('ACCOUNT_CHANGED');
+  if(apple){
+    const credential=firebase.auth.OAuthProvider.credentialFromResult(result);
+    if(!credential?.accessToken)throw new Error('APPLE_REVOCATION_TOKEN_MISSING');
+    const idToken=await user.getIdToken(true);
+    if(auth.currentUser?.uid!==expectedUid)throw new Error('ACCOUNT_CHANGED');
+    const response=await fetch('https://identitytoolkit.googleapis.com/v2/accounts:revokeToken?key='+encodeURIComponent(firebase.app().options.apiKey),{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({providerId:'apple.com',tokenType:'ACCESS_TOKEN',token:credential.accessToken,idToken})
+    });
+    if(!response.ok)throw new Error('APPLE_REVOCATION_FAILED');
   }
+  if(auth.currentUser?.uid!==expectedUid)throw new Error('ACCOUNT_CHANGED');
 };
 
-// Complete a sign-in from a credential handed back by a refused link. Resolves
-// to the signed-in uid so the caller can look the identity up by authUid.
-window.signInAsGoogle = async function(credential){
-  if(!credential) throw new Error('NO_CREDENTIAL');
-  const res = await auth.signInWithCredential(credential);
-  return { uid: res.user.uid, email: res.user.email || null };
-};
 
 /* ═══════════════════════════════════════════════════════════════════════════
    CALLABLE CLOUD FUNCTIONS — AUTH PHASE 2 (claimIdentity, awardSeasonBadges,

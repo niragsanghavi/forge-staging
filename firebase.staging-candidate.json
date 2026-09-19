@@ -1,0 +1,4 @@
+{
+  "functions": [{"source":"functions-identity","codebase":"identity","ignore":["node_modules",".git","*-debug.log"]}],
+  "firestore": {"rules":"firestore.rules"}
+}

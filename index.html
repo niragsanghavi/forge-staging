@@ -35,7 +35,7 @@
 <title>Forge</title>
 <link rel="stylesheet" href="src/style/main.css">
 <link rel="stylesheet" href="src/style/sports-icons.css">
-<link rel="stylesheet" href="src/style/today.css">
+<link rel="stylesheet" href="src/style/today.css?v=f025-1">
 <meta name="theme-color" content="#0a0a0d">
 <link rel="manifest" href="manifest.json">
 <meta name="mobile-web-app-capable" content="yes">
@@ -195,11 +195,20 @@
 </defs></svg>
 
 <!-- ══ ONBOARDING ══ -->
+<div class="screen" id="screen-solo"><main id="soloRoot" class="solo-shell" aria-live="polite"></main></div>
 <div class="screen active" id="screen-onboard">
   <div class="ob-logo">FORGE</div>
   <div class="ob-tag">Forged by the group.</div>
   <div class="ob-card">
     <div class="ob-step active" id="ob-s1">
+      <section class="solo-choice" aria-label="Choose how to use Forge">
+        <h2>Your effort. Your kind of company.</h2>
+        <p>Train with your people, or make Forge your workout buddy.</p>
+        <div class="solo-doors">
+          <button class="today-button" onclick="document.getElementById('codeInput').focus()">Join my group <span>Team points, shared momentum</span></button>
+          <button class="today-button" onclick="ForgeSolo.open()">Go solo <span>Your calendar, your own leaderboard</span></button>
+        </div>
+      </section>
       <!-- Returning-user door. Hidden unless FEATURE_GOOGLE_AUTH is on (see
            renderGoogleLoginDoor) — the whole Google surface stays invisible
            until the console work is done. Above the code path on purpose:
@@ -207,6 +216,7 @@
            their group code on a new phone (AUTH_DESIGN_FINAL Phase 1). -->
       <div id="googleLoginDoor" style="display:none">
         <button class="btn btn-surface" style="margin:0 0 10px;width:100%" onclick="loginWithGoogle()">Continue with Google</button>
+        <button id="appleLoginDoor" class="btn btn-surface" style="display:none;margin:0 0 10px;width:100%" onclick="loginWithForgeProvider('apple.com')">Continue with Apple</button>
         <div style="display:flex;align-items:center;gap:10px;margin:0 0 14px"><div style="flex:1;height:1px;background:var(--border)"></div><span style="font-size:11px;color:var(--muted)">or</span><div style="flex:1;height:1px;background:var(--border)"></div></div>
       </div>
       <div class="ob-title">Enter your group code</div>
@@ -224,7 +234,7 @@
       <div id="founderDoor">
         <div style="display:flex;align-items:center;gap:10px;margin:14px 0 10px"><div style="flex:1;height:1px;background:var(--border)"></div><span style="font-size:11px;color:var(--muted)">or</span><div style="flex:1;height:1px;background:var(--border)"></div></div>
         <button class="btn btn-surface" style="margin:0;width:100%" onclick="showScreen('create')">Start your own group</button>
-        <div style="margin-top:6px;font-size:11px;color:var(--muted);text-align:center">Works alone from day one. Teams unlock as friends join.</div>
+        <div style="margin-top:6px;font-size:11px;color:var(--muted);text-align:center">Bring your people. Group scoring stays separate from solo.</div>
       </div>
       <div id="joinCancel" class="hidden" style="margin-top:12px;text-align:center"><span onclick="cancelJoin()" style="font-size:12px;color:var(--gold);cursor:pointer">← Back to my group</span></div>
       <!-- The pitch, for the person hesitating between the two doors. This
@@ -649,7 +659,13 @@
 
     <!-- ── ZONE 1: YOU. The reason anyone opens this tab. Always expanded. ── -->
     <div class="card" id="profileStatsCard"><div class="tmuted">Loading&hellip;</div></div>
+    <section class="card forge-recap-card" aria-label="Personal recaps">
+      <p class="today-kicker">THE SHORT VERSION</p><h2>Your effort, in review.</h2>
+      <div class="forge-recap-switch"><button type="button" class="today-button" data-recap-kind="week" aria-pressed="false" onclick="ForgeExperience.openRecap('week')">Weekly recap</button><button type="button" class="today-button" data-recap-kind="month" aria-pressed="false" onclick="ForgeExperience.openRecap('month')">Monthly recap</button></div>
+      <div id="forgePersonalRecap"><p class="today-muted">Choose a recap. See your training days, activity mix and earlier periods across your linked groups.</p></div>
+    </section>
     <div class="shdr">Your Workouts</div>
+    <button type="button" class="today-button today-button-secondary" onclick="ForgeExperience.openSolo()">Explore solo · your own lane →</button>
     <div class="card" id="profileInsightsCard"><div class="tmuted">Loading&hellip;</div></div>
     <div class="shdr">Past Seasons</div>
     <div class="card" id="profileSeasonsCard"><div class="tmuted">Loading&hellip;</div></div>
@@ -869,15 +885,19 @@
       <button class="btn btn-surface btn-sm" onclick="exitSuper()" style="margin:0">Exit</button>
     </div>
   </nav>
-  <div style="padding:16px;max-width:680px;margin:0 auto;min-width:0;width:100%;box-sizing:border-box">
+  <div class="forge-ops-shell" style="padding:16px;max-width:680px;margin:0 auto;min-width:0;width:100%;box-sizing:border-box">
+    <header class="forge-ops-intro"><p class="today-kicker">FORGE OPERATIONS</p><h1>Keep the groups moving.</h1><p>See what needs your attention, then get on with your day. Communications and maintenance live separately below.</p><nav class="forge-ops-nav" aria-label="Operations sections"><a href="#superDashRoot">Overview</a><a href="#forgeOpsGroups">Groups</a><a href="#forgeOpsCommunications" onclick="document.getElementById('forgeOpsCommunications').open=true">Communications</a><a href="#forgeOpsMaintenance" onclick="document.getElementById('forgeOpsMaintenance').open=true">Maintenance</a><a href="#forgeOpsCreate" onclick="document.getElementById('forgeOpsCreate').open=true">New group</a></nav></header>
     <!-- Cockpit dashboard (SuperDash module) renders here. Every date range is
          derived from new Date() at load — no hardcoded months. min-width:0 lets
          this flex-column child shrink so the wide Group Health table scrolls
          inside its own overflow-x card instead of forcing page overflow. -->
     <div id="superDashRoot" style="min-width:0"></div>
     <div id="rolloverNudge" style="margin-top:12px"></div>
-    <div class="shdr" style="margin-top:20px">Manage Groups</div>
+    <div class="shdr forge-ops-section" id="forgeOpsGroups" style="margin-top:20px">Manage Groups</div>
     <div id="superAdoption"></div>
+    <div id="superGroupList"></div>
+    <details class="forge-ops-section" id="forgeOpsCommunications"><summary>Communications &amp; weekly recaps</summary><p class="forge-ops-note">Build a recap, preview an audience, or review the queue. Nothing sends until you explicitly use the existing send controls.</p>
+    <section class="card"><h2>In-app updates</h2><p>Write a popup and let Forgeling guide the next step.</p><button type="button" class="today-button" onclick="ForgeExperience.announcementComposer()">Draft &amp; preview popup</button><p class="today-muted">Local preview only. Publishing is not enabled.</p></section>
     <!-- ══ WEEKLY RECAP IMAGES ══
          One shareable PNG per group, built in the browser from live data.
          Not auto-rendered on page load: it costs a logs query per group, and
@@ -957,7 +977,7 @@
       <div id="noticeQueueList" class="tmuted" style="font-size:12px">Enter the admin key above, then refresh.</div>
       <button class="btn btn-surface btn-sm" style="margin:10px 0 0" onclick="renderNoticeQueue()">Refresh queue</button>
     </div>
-    <div id="superGroupList"></div>
+    </details>
 
     <!-- Edit group settings (hidden until ⚙ Manage) -->
     <div id="editGroupModal" class="hidden" style="margin-top:16px">
@@ -1000,6 +1020,7 @@
       </div>
     </div>
 
+    <details class="forge-ops-section" id="forgeOpsMaintenance"><summary>Maintenance &amp; data tools</summary><p class="forge-ops-note">Occasional work, not daily buttons. Export before changes. Migration and backfill keep their preview-first safeguards.</p>
     <div style="margin-top:24px">
       <div class="shdr">Data Export</div>
       <div class="card" style="border:1px solid var(--purple)">
@@ -1036,6 +1057,8 @@
       </div>
     </div>
 
+    </details>
+    <details class="forge-ops-section" id="forgeOpsCreate"><summary>Create a new group</summary>
     <div style="margin-top:24px">
       <div class="shdr">Create New Group</div>
       <div class="card">
@@ -1078,6 +1101,8 @@
       </div>
     </div>
 
+    </details>
+    <details class="forge-ops-section"><summary>Usage diagnostics</summary>
     <div style="margin-top:24px">
       <div class="shdr">Tab Analytics</div>
       <div class="card">
@@ -1094,6 +1119,7 @@
         <div id="updatesAnalyticsResult"><div class="tmuted">Tap Load to fetch updates-page analytics.</div></div>
       </div>
     </div>
+    </details>
   </div>
 </div>
 
@@ -1788,9 +1814,23 @@ function buildPlayerPicker(players){
     </div>`).join('');
 }
 
-function choosePlayer(name){
+async function choosePlayer(name){
+  const selection=(window._forgePlayerSelection||0)+1;window._forgePlayerSelection=selection;
   const p = (season.roster||[]).find(x=>x.name===name);
   if(!p){ return; }
+  const chosenCode=groupCode, chosenSeason=seasonId;
+  if(p.userId){
+    try{
+      const profile=await db.collection('users').doc(p.userId).get();
+      if(groupCode!==chosenCode||seasonId!==chosenSeason||window._forgePlayerSelection!==selection)return;
+      if(profile.exists&&(profile.data().deletedAt||profile.data().deleted)){toast('This profile is no longer available.','error');return;}
+      if(profile.exists&&profile.data().authUid){
+        if(auth.currentUser&&auth.currentUser.uid===profile.data().authUid&&!auth.currentUser.isAnonymous){await restoreIdentityFromGoogle({uid:auth.currentUser.uid});}
+        else{showObStep(1);renderGoogleLoginDoor();toast('This profile uses Google or Apple. Continue with the account you linked.','default');}
+        return;
+      }
+    }catch(e){toast('Could not check this profile. Try again when connected.','error');return;}
+  }
   // No credential yet → grace flow: set one before entering. "Has a credential"
   // = pinSet:true (new sentinel) OR a legacy plaintext pin (pre-scrub entries).
   if(!p.pin && !p.pinSet){
@@ -1815,6 +1855,7 @@ function choosePlayer(name){
 
 // Stage 3: validate the entered PIN against the player's stored PIN.
 async function submitPinEntry(){
+  const entryCode=groupCode,entrySeason=seasonId;
   const name = window._pinEntryFor;
   const p = (season.roster||[]).find(x=>x.name===name);
   const err = document.getElementById('pinEntryError');
@@ -1831,6 +1872,9 @@ async function submitPinEntry(){
   if(p.userId){
     try {
       const uSnap = await db.collection('users').doc(p.userId).get();
+      if(uSnap.exists&&(uSnap.data().authUid||uSnap.data().deletedAt||uSnap.data().deleted)){
+        err.textContent='This profile cannot use PIN sign-in. Continue with its linked Google or Apple account.';err.classList.remove('hidden');return;
+      }
       verified = uSnap.exists ? (await sha256hex(entered)) === uSnap.data().pinHash : (entered === p.pin);
     } catch(e){
       // A missing crypto.subtle is NOT a failed doc read, and must not take the
@@ -1845,13 +1889,15 @@ async function submitPinEntry(){
         err.classList.remove('hidden');
         return;
       }
-      logErr('submitPinEntry: users doc read failed, falling back to roster.pin', e);
-      verified = (entered === p.pin);
+      logErr('submitPinEntry: profile check unavailable', e);
+      err.textContent='Could not check this profile. Reconnect and try again.';
+      err.classList.remove('hidden');return;
     }
   } else {
     verified = (entered === p.pin);
   }
 
+  if(groupCode!==entryCode||seasonId!==entrySeason||window._pinEntryFor!==name)return;
   if(!verified){
     err.textContent='Incorrect PIN. Try again, or ask your admin to reset it.';
     err.classList.remove('hidden');
@@ -1961,6 +2007,24 @@ async function registerAndJoin(){
   if(existing){ toast(`The name "${formattedName}" is already taken in this group. Please use a different name (e.g. add your surname or initial).`,'error'); return; }
   const teams = teamLettersOf(season);
   const assignedTeam = teams[(season.roster||[]).length % teams.length];
+
+  if(window.FEATURE_GOOGLE_AUTH){
+    if(window._forgeRegistrationBusy)return;
+    const captured={groupCode,seasonId,name:formattedName};
+    window._forgeRegistrationBusy=true;
+    try{
+      let user=auth.currentUser;
+      if(!user||user.isAnonymous){await startForgeProviderSignIn('google.com');user=auth.currentUser;}
+      if(!user||user.isAnonymous)throw new Error('Sign in before joining.');
+      const uid=user.uid;
+      if(groupCode!==captured.groupCode||seasonId!==captured.seasonId)return;
+      await callFunction('joinWithIdentity',captured);
+      if(!auth.currentUser||auth.currentUser.uid!==uid||groupCode!==captured.groupCode||seasonId!==captured.seasonId)return;
+      await restoreIdentityFromGoogle({uid});
+    }catch(e){toast(e.message||'Could not join. Try again.','error');}
+    finally{window._forgeRegistrationBusy=false;}
+    return;
+  }
 
   // Stage the new player and route to PIN-setting. Nothing is written until the
   // PIN is set in submitNewPin() — so a half-finished registration leaves no debris.
@@ -2213,6 +2277,16 @@ async function loadGroup(code, fromCache, options={}){
   // session (handleDeadGroup) and fall back to another joined group — never nuke
   // everything (that caused the mass-lockout). Transient errors just alert.
   try {
+    if(window.FEATURE_GOOGLE_AUTH&&playerAtStart?.userId){
+      const profile=await db.collection('users').doc(playerAtStart.userId).get({source:'server'});
+      if(!_isGroupLoadCurrent(context))return;
+      const owner=profile.exists&&profile.data().authUid;
+      if(!profile.exists||profile.data().deleted||profile.data().deletedAt||
+         (owner&&(!auth.currentUser||auth.currentUser.isAnonymous||auth.currentUser.uid!==owner))){
+        showScreen('onboard');showObStep(1);renderGoogleLoginDoor();
+        toast('Sign in with the Google or Apple account linked to this profile.','default');return;
+      }
+    }
     const gSnap = await db.collection('groups').doc(code).get();
     if(!_isGroupLoadCurrent(context)) return;
     // NEVER destroy a session on evidence that came from the local cache.
@@ -3297,9 +3371,10 @@ function mirOpenLiftStep(w){
   document.getElementById('mirSheetBody').innerHTML=
     `<div class="mir-lift">
        <div class="lf-chips">
-         ${MUSCLE_GROUPS.map(m=>`<button class="lf-chip" data-m="${escForInlineJsAttr(m)}"
-              onclick="mirLiftToggle(this,'${escForInlineJsAttr(m)}')">${esc(m)}</button>`).join('')}
+         ${(window.ForgeExperience?.muscleOptions||MUSCLE_GROUPS).map(m=>`<button type="button" class="lf-chip" aria-pressed="false" data-m="${escForInlineJsAttr(m)}"
+              onclick="mirLiftToggle(this,'${escForInlineJsAttr(m)}')">${window.ForgeExperience?ForgeExperience.muscleIcon(m):''}<span>${esc(m)}</span></button>`).join('')}
        </div>
+       <div id="forgeLiftBadge" class="forge-lift-preview" role="status">${window.ForgeExperience?ForgeExperience.gymBadge([]):''}<span>Tag what you trained. Your day badge builds as you go.</span></div>
        <input type="text" id="mirLiftInp" maxlength="60" placeholder="Anything else? e.g. deadlifts, PB attempt"
               autocomplete="off" onkeydown="if(event.key==='Enter')mirLiftConfirm('${escForInlineJsAttr(w)}')">
        <button class="btn btn-gold lf-go" onclick="mirLiftConfirm('${escForInlineJsAttr(w)}')">Log it</button>
@@ -3312,6 +3387,9 @@ function mirLiftToggle(el, m){
   const i=_liftPicked.indexOf(m);
   if(i>=0){ _liftPicked.splice(i,1); el.classList.remove('on'); }
   else { _liftPicked.push(m); el.classList.add('on'); }
+  el.setAttribute('aria-pressed',String(i<0));
+  const badge=document.getElementById('forgeLiftBadge');
+  if(badge&&window.ForgeExperience)badge.innerHTML=ForgeExperience.gymBadge(_liftPicked)+`<span>${_liftPicked.length?`${_liftPicked.length} muscle ${_liftPicked.length===1?'group':'groups'} tagged`:'No muscle tags selected'}<small>More detail, not more points.</small></span>`;
   tap();
 }
 function _mirLiftGo(w, note){
@@ -3938,7 +4016,7 @@ function _liftStats(logs){
     tagged++;
     recent.push(l);
     String(l.note).split(',').map(s=>s.trim()).filter(Boolean).forEach(part=>{
-      const hit=MUSCLE_GROUPS.find(m=>m.toLowerCase()===part.toLowerCase());
+      const hit=(window.ForgeExperience?.muscleOptions||MUSCLE_GROUPS).find(m=>m.toLowerCase()===part.toLowerCase());
       if(!hit) return;
       const e=groups[hit]||(groups[hit]={n:0,last:null});
       e.n++;
@@ -4004,13 +4082,8 @@ function mirRenderLift(){
   const cSince=_daysSince(coldest.last);
   if(entries.length>1 && cSince!==null && cSince>=4)
     parts.push(`<b>${esc(coldest.k)}</b> hasn't come up in ${cSince} days.`);
-  const shown=r.recent.slice(0,3).map(l=>{
-    const n=_daysSince(l);
-    const when=(n!==null && n<=13) ? _agoLabel(n) : `${MIR_MONTHNAMES[(l.month||1)-1].slice(0,3)} ${l.day}`;
-    return `<div class="lf-histrow"><span class="lf-when">${esc(when)}</span><span class="lf-what">${esc(l.note)}</span></div>`;
-  }).join('');
   nudgeEl.innerHTML=(parts.length?`<div class="lf-cold">${parts.join(' ')}</div>`:'')
-    + (shown?`<div class="lf-hist"><div class="lf-histh">RECENT SESSIONS</div>${shown}</div>`:'');
+    + `<button type="button" class="today-button today-button-secondary" onclick="ForgeExperience.openGymHistory(season.month,season.year)">Open gym calendar · browse every month →</button>`;
 }
 
 // ── CONFIRMED REWARD REPORT (Home log path) ────────────────────────────────
@@ -4469,10 +4542,20 @@ function toggleLinkForm(){
   if(!showing){ const f = document.getElementById('linkGroupCode'); if(f){ try{ f.focus(); }catch(e){} } }
 }
 
+let _profileRenderRequest=0;
 async function renderProfile(){
+  const request=++_profileRenderRequest,actorId=me?.userId;
+  window.ForgeExperience?.cancelRecap();
+  const current=()=>request===_profileRenderRequest&&me?.userId===actorId;
   const statsEl=document.getElementById('profileStatsCard');
   const seasonsEl=document.getElementById('profileSeasonsCard');
   if(!statsEl||!seasonsEl) return;
+  _profileSeasonsCache=[];
+  const recap=document.getElementById('forgePersonalRecap');
+  if(recap)recap.innerHTML='<p class="today-muted">Choose a weekly or monthly recap to explore your recorded effort.</p>';
+  const insights=document.getElementById('profileInsightsCard');if(insights)insights.innerHTML='';
+  const linked=document.getElementById('linkedGroups');if(linked)linked.innerHTML='';
+  document.querySelectorAll('[data-recap-kind]').forEach(b=>b.setAttribute('aria-pressed','false'));
   if(!me||!me.userId){
     statsEl.innerHTML='<div class="tmuted">Still setting up your profile — give it a moment and reopen this tab.</div>';
     seasonsEl.innerHTML='';
@@ -4489,7 +4572,8 @@ async function renderProfile(){
   loadMyAuthState();         // one doc read, only when the flag is on
   renderPushCard();          // inert while FEATURE_PUSH is off
   try{
-    const uSnap = await db.collection('users').doc(me.userId).get();
+    const uSnap = await db.collection('users').doc(actorId).get();
+    if(!current())return;
     const stats = (uSnap.exists && uSnap.data().stats) || {};
 
     // ── WHAT'S ALREADY LINKED ──────────────────────────────────────────────
@@ -4535,29 +4619,12 @@ async function renderProfile(){
     const badgeLines=Object.entries(badgeCounts).filter(([,n])=>n>0)
       .map(([k,n])=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px"><span>${PROFILE_BADGE_LABELS[k]||esc(k)}</span><b style="color:var(--gold)">${n}</b></div>`).join('');
 
-    statsEl.innerHTML=`
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:${badgeLines?'14px':'0'}">
-        <div style="background:var(--gold-l);border-radius:10px;padding:12px;text-align:center">
-          <div style="font-size:24px;font-weight:900;color:var(--gold)">${stats.totalWorkouts||0}</div>
-          <div style="font-size:10px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Workouts logged</div>
-        </div>
-        <div style="background:var(--orange-l);border-radius:10px;padding:12px;text-align:center">
-          <div style="font-size:24px;font-weight:900;color:var(--orange)">${displayedStreak}<span style="font-size:12px"> d</span></div>
-          <div style="font-size:10px;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Current streak</div>
-        </div>
-        <div style="background:var(--green-l);border-radius:10px;padding:12px;text-align:center">
-          <div style="font-size:24px;font-weight:900;color:var(--green)">${stats.longestStreak||0}<span style="font-size:12px"> d</span></div>
-          <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Longest streak</div>
-        </div>
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
-          <div style="font-size:24px;font-weight:900;color:var(--text)">${stats.monthsLogged||0}</div>
-          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Months logged</div>
-        </div>
-      </div>
+    statsEl.innerHTML=`${ForgeExperience.profileStats(stats,displayedStreak,me.name)}
       ${badgeLines?`<div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Badges (${totalBadges})</div>${badgeLines}`:''}
     `;
 
-    const seasonsSnap = await db.collection('users').doc(me.userId).collection('seasons').get();
+    const seasonsSnap = await db.collection('users').doc(actorId).collection('seasons').get();
+    if(!current())return;
     _profileSeasonsCache = seasonsSnap.docs.map(d=>({id:d.id, ...d.data()}))
       .sort((a,b)=> (b.year-a.year) || (b.month-a.month));
     if(!_profileSeasonsCache.length){
@@ -4572,6 +4639,7 @@ async function renderProfile(){
       </div>`;
     }).join('');
   }catch(e){
+    if(!current())return;
     logErr('renderProfile', e);
     statsEl.innerHTML='<div class="tmuted">Could not load profile — check connection.</div>';
     seasonsEl.innerHTML='';
@@ -4762,96 +4830,64 @@ function renderGoogleAuthCard(){
   if(linked){
     el.innerHTML = '<div class="tmuted" style="font-size:12px">'
       + mirIco('g-flame','color:var(--green)')
-      + ' <b>Secured with Google</b>' + (window._myAuthEmail ? (' — ' + esc(window._myAuthEmail)) : '')
+      + ' <b>Sign-in linked</b>' + (window._myAuthEmail ? (' — ' + esc(window._myAuthEmail)) : '')
       + '<br>You can sign in on any device without a PIN. Your streak and history come with you.</div>';
     return;
   }
   // Returned from Google and waiting on the PIN proof.
   if(window._claimPending){
     el.innerHTML = '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
-      + 'Signed in as <b>' + esc(window._claimPending.email || 'your Google account') + '</b>. '
-      + 'Enter your 4-digit Forge PIN to prove this account is yours.</div>'
+      + 'Signed in as <b>' + esc(window._claimPending.email || 'your chosen account') + '</b>. '
+      + 'Confirm your existing Forge PIN to link this profile. Your workouts and groups stay in place.</div>'
       + '<input class="code-input" id="claimPinInput" type="tel" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off" style="margin-bottom:8px" oninput="this.value=this.value.replace(/[^0-9]/g,\'\')">'
       + '<button class="btn btn-gold" style="margin:0" onclick="submitGoogleClaim()">Confirm and secure</button>'
       + '<div id="googleAuthResult" style="margin-top:10px;font-size:13px"></div>';
     return;
   }
   el.innerHTML = '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
-    + 'Right now your account lives on <b>this device</b>. Clear your browser data or change '
-    + 'phone and you have to rejoin each group by hand. Link a Google account and it follows you.</div>'
+    + 'Help protect your workout history and recover it when you change phones. Choose your own Google or Apple account; it does not need to match an earlier email.</div>'
     + '<button class="btn btn-gold" id="googleLinkBtn" style="margin:0" onclick="linkGoogleAccount()">Secure my account with Google</button>'
+    + (window.FEATURE_APPLE_AUTH?'<button class="btn btn-surface" onclick="linkForgeProvider(\'apple.com\')">Continue with Apple</button>':'<p class="tmuted">Apple linking is not available yet.</p>')
     + '<div id="googleAuthResult" style="margin-top:10px;font-size:13px"></div>';
 }
 
 async function linkGoogleAccount(){
-  const out = document.getElementById('googleAuthResult');
-  const say = (m,bad)=>{ if(out){ out.style.color = bad ? 'var(--red)' : 'var(--muted)'; out.textContent = m; } };
-  try{
-    try{ sessionStorage.setItem('forge_google_intent','link'); }catch(e){}
-    say('Opening Google…');
-    await startGoogleSignIn('link');   // navigates away; nothing after this runs
-  }catch(e){
-    if(e && e.message==='FEATURE_OFF'){ say('Google sign-in is not switched on yet.', true); return; }
-    logErr('linkGoogleAccount', e);
-    say('Could not open Google sign-in. Check your connection and try again.', true);
-  }
+  return linkForgeProvider('google.com');
 }
+
+async function linkForgeProvider(provider){
+  if(!me||!me.userId||window._forgeProviderBusy)return;
+  const actorId=me.userId, code=groupCode;
+  window._forgeProviderBusy=true;
+  window._claimPending=null;
+  try{
+    const r=await startForgeProviderSignIn(provider);
+    if(!me||me.userId!==actorId||groupCode!==code)return;
+    window._claimPending={...r,userId:actorId,groupCode:code};
+    renderGoogleAuthCard();
+  }catch(e){
+    if(me&&me.userId===actorId)toast(e.message==='APPLE_NOT_CONFIGURED'?'Apple sign-in is not available yet.':e.message==='NATIVE_AUTH_NOT_CONFIGURED'?'Sign-in is not ready in this test build.':'Sign-in did not finish. Your Forge profile has not been linked.','error');
+  }finally{window._forgeProviderBusy=false;}
+}
+
+
 
 // From the FIRST screen (no session): sign in and restore whatever identity
 // this Google account already owns. No PIN — the claim already happened once.
-async function loginWithGoogle(){
-  try{
-    try{ sessionStorage.setItem('forge_google_intent','login'); }catch(e){}
-    await startGoogleSignIn('login');   // sign IN, never link — see firebase.js
-  }catch(e){
-    if(e && e.message==='FEATURE_OFF'){ toast('Google sign-in is not switched on yet.','error'); return; }
-    logErr('loginWithGoogle', e);
-    toast('Could not open Google sign-in.','error');
-  }
+async function loginWithGoogle(){ return loginWithForgeProvider('google.com'); }
+async function loginWithForgeProvider(provider){
+  if(window._forgeProviderBusy)return;
+  window._forgeProviderBusy=true;
+  try{const r=await startForgeProviderSignIn(provider);await restoreIdentityFromGoogle(r);}
+  catch(e){toast('Sign-in did not finish. Please try again.','error');}
+  finally{window._forgeProviderBusy=false;}
 }
 
 // Called once on boot. Handles BOTH redirect intents. Fire-and-forget by
 // design: it must never be able to block or fail a launch.
 async function finishGoogleLinkIfReturning(){
-  if(!window.FEATURE_GOOGLE_AUTH) return;
-  let intent='link';
-  try{ intent = sessionStorage.getItem('forge_google_intent') || 'link'; }catch(e){}
-  try{
-    let r = await consumeGoogleRedirect();
-    if(r.error === 'ALREADY_IN_USE'){
-      // NOT a failure — it means this Google account already owns a Forge
-      // identity, which is the 1:1 rule working. Previously this dead-ended
-      // with "that account already runs another Forge account", which to the
-      // person reading it says their own account belongs to a stranger.
-      // Finish the journey instead: sign in AS that account and restore it.
-      if(r.credential){
-        try {
-          const signed = await signInAsGoogle(r.credential);
-          try{ sessionStorage.removeItem('forge_google_intent'); }catch(e){}
-          await restoreIdentityFromGoogle(signed);
-          return;
-        } catch(e){ logErr('finishGoogleLinkIfReturning: signInWithCredential', e); }
-      }
-      toast('That Google account is already linked to a Forge account. Use “Continue with Google” on the first screen to sign back in.','error');
-      return;
-    }
-    if(r.error === 'PROVIDER_DISABLED'){
-      logErr('googleAuth', new Error('provider not enabled in the Firebase console'));
-      return;
-    }
-    if(!r.linked) return;
-    try{ sessionStorage.removeItem('forge_google_intent'); }catch(e){}
-
-    if(intent === 'login'){ await restoreIdentityFromGoogle(r); return; }
-
-    // LINK intent: the identity is not bound until claimIdentity verifies the
-    // PIN server-side. Stash the pending state and let the card collect it —
-    // no client write of authUid is possible or attempted (rules forbid it).
-    window._claimPending = { uid:r.uid, email:r.email };
-    renderGoogleAuthCard();
-    showTab('profile');
-    toast('Signed in with Google — confirm your PIN to finish.','default');
-  }catch(e){ logErr('finishGoogleLinkIfReturning', e); }
+  // Previous redirect attempts cannot silently claim a profile in this build.
+  try{sessionStorage.removeItem('forge_google_pending');sessionStorage.removeItem('forge_google_intent');}catch(e){}
 }
 window.finishGoogleLinkIfReturning = finishGoogleLinkIfReturning;
 
@@ -4863,14 +4899,19 @@ async function submitGoogleClaim(){
   const pin = (document.getElementById('claimPinInput')||{}).value || '';
   if(!/^\d{4}$/.test(pin)){ say('Enter your 4-digit PIN.', true); return; }
   if(!me || !groupCode){ say('Still loading — try again in a second.', true); return; }
+  const pending=window._claimPending;
+  if(!pending||pending.userId!==me.userId||pending.groupCode!==groupCode||!auth.currentUser||auth.currentUser.uid!==pending.uid){say('Sign in again for this profile.',true);return;}
+  if(window._forgeClaimBusy)return;
+  window._forgeClaimBusy=true;
   try{
     say('Checking…');
-    await callFunction('claimIdentity', { groupCode, name: me.name, pin });
+    await callFunction('claimIdentity', { userId:pending.userId, pin });
+    if(window._claimPending!==pending||!me||me.userId!==pending.userId||groupCode!==pending.groupCode)return;
     window._claimPending = null;
     // Re-read rather than trust local state — the function is the authority
     // on what was actually bound, and it also refreshes the card.
     await loadMyAuthState();
-    toast('Account secured with Google.','success');
+    toast('Sign-in linked. Your workout history stays with you.','success');
   }catch(e){
     const msg = (e && e.message) || '';
     // Callable errors arrive with the server's message intact — surface it,
@@ -4891,23 +4932,29 @@ async function submitGoogleClaim(){
       logErr('submitGoogleClaim', e);
       say('Could not secure the account — check your connection.', true);
     }
-  }
+  }finally{window._forgeClaimBusy=false;}
 }
 
 // Fresh device: find the identity this Google account owns and rebuild its
 // sessions. Reads users-by-authUid (one indexed query), then each membership's
 // current-season roster to recover the player entry the app expects.
 async function restoreIdentityFromGoogle(r){
+  const stillSignedIn=()=>!!(auth.currentUser&&auth.currentUser.uid===r.uid);
+  if(!stillSignedIn())return;
   try{
     const q = await db.collection('users').where('authUid','==',r.uid).limit(1).get();
+    if(!stillSignedIn())return;
     if(q.empty){
-      toast('No Forge account is linked to that Google sign-in yet. Join with your group code first, then secure it.','error');
+      toast('Signed in. New here? Enter your group code to join. Already a member? Open your existing profile and link it in Profile.','default');
       return;
     }
     const uDoc = q.docs[0], u = uDoc.data();
     if(u.deletedAt){ toast('That account was deleted.','error'); return; }
     const codes = Object.keys(u.memberships || {});
-    if(!codes.length){ toast('That account is not in any group yet.','error'); return; }
+    if(!codes.length){
+      if(u.soloEnabled&&window.ForgeSolo){await ForgeSolo.open();return;}
+      toast('That account is not in any group yet.','error'); return;
+    }
     let restored = 0, firstCode = null;
     for(const code of codes.slice(0, MAX_GROUPS)){
       try{
@@ -4916,8 +4963,9 @@ async function restoreIdentityFromGoogle(r){
         const sid = gS.data().currentSeasonId;
         if(!sid) continue;
         const sS = await db.collection('groups').doc(code).collection('seasons').doc(sid).get();
+        if(!stillSignedIn())return;
         if(!sS.exists) continue;
-        const entry = (sS.data().roster||[]).find(p => p && (p.userId === uDoc.id || (u.name && p.name === u.name)));
+        const entry = (sS.data().roster||[]).find(p => p && p.userId === uDoc.id);
         if(!entry) continue;
         upsertSession(code, entry, gS.data().name);
         if(!firstCode) firstCode = code;
@@ -4925,6 +4973,7 @@ async function restoreIdentityFromGoogle(r){
       }catch(e){ logErr('restoreIdentityFromGoogle:'+code, e); }
     }
     if(!restored){ toast('Could not find your place in those groups — ask your admin.','error'); return; }
+    if(!stillSignedIn())return;
     setActiveCode(firstCode);
     groupCode = firstCode;
     me = getSessions().find(s=>s.code===firstCode).player;
@@ -4942,13 +4991,18 @@ async function restoreIdentityFromGoogle(r){
 function renderGoogleLoginDoor(){
   const el = document.getElementById('googleLoginDoor');
   if(el) el.style.display = window.FEATURE_GOOGLE_AUTH ? '' : 'none';
+  const apple=document.getElementById('appleLoginDoor');
+  if(apple)apple.style.display=window.FEATURE_GOOGLE_AUTH&&window.FEATURE_APPLE_AUTH?'':'none';
 }
 
 // Load the link state for the card. Cheap: one doc read, only when the flag is on.
 async function loadMyAuthState(){
   if(!window.FEATURE_GOOGLE_AUTH || !me || !me.userId) return;
+  const actorId=me.userId;
+  window._myAuthUid=null;window._myAuthEmail=null;
   try{
-    const s = await db.collection('users').doc(me.userId).get();
+    const s = await db.collection('users').doc(actorId).get();
+    if(!me||me.userId!==actorId)return;
     if(s.exists){ const u=s.data(); window._myAuthUid=u.authUid||null; window._myAuthEmail=u.email||null; }
   }catch(e){ logErr('loadMyAuthState', e); }
   renderGoogleAuthCard();
@@ -4997,7 +5051,7 @@ function renderHealthCard(){
   hdr.style.display=''; el.style.display='';
   const on = healthEnabled();
   el.innerHTML =
-    '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
+    '<div class="forge-reminder-title">'+(window.ForgeExperience?ForgeExperience.icon('health')+esc(ForgeExperience.healthName()):'Health connections')+'</div><div class="tmuted" style="font-size:12px;margin-bottom:10px">'
     + (on
       ? 'Connected. Workouts recorded on this phone (or your watch) show up on '
         + 'Home for one-tap logging. Nothing is logged without your say-so, and '
@@ -5130,88 +5184,56 @@ document.addEventListener('visibilitychange', function(){
    history. Missing the app is not the same as missing the steps.
    ───────────────────────────────────────────────────────────────────────── */
 async function fillStepDays(){
-  // Every gate that makes this a no-op, cheapest first. Off-native, signed out,
-  // Health disconnected, or the challenge simply not switched on for this
-  // season — in all of those this function costs nothing and touches nothing.
-  if(!window.isNative || !isNative() || !healthEnabled()) return;
-  if(!season || !seasonId || !groupCode || !me || !me.name) return;
-  if(!isStepChallengeOn(season)) return;
-  if(window._stepFillInFlight) return;          // same re-entrancy shape as submitLog
-  window._stepFillInFlight = true;
+  if(!window.isNative||!isNative()||!healthEnabled())return;
+  if(!season||!seasonId||!groupCode||!me?.name||window._stepFillInFlight)return;
+  const context={code:groupCode,sid:seasonId,season,actor:me.userId||me.name,name:me.name};
+  const current=()=>groupCode===context.code&&seasonId===context.sid&&season===context.season&&(me?.userId||me?.name)===context.actor;
+  window._stepFillInFlight=true;
   try{
-    const now = new Date();
-    // Only ever record days belonging to THIS season's month. A round never
-    // crosses the 1st, so there is no straddling case to handle any more.
-    if(now.getMonth()+1 !== season.month || now.getFullYear() !== season.year) return;
-    const round = stepRoundOfDay(now.getDate(), season);
-    if(!round) return;
-    const monday = new Date(now.getFullYear(), now.getMonth(), round.start);  // round start
-    const yest   = new Date(now.getFullYear(), now.getMonth(), now.getDate()-1);
-    if(yest < monday) return;                   // first day of the round: nothing completed yet
-
-    const week    = stepRoundId(seasonId, round);   // field name kept: the rules bound `week`
-    const docId   = week + '__' + String(me.name).toLowerCase().replace(/[^a-z0-9]+/g,'-');
-    const ref     = db.collection('groups').doc(groupCode).collection('seasons')
-                      .doc(seasonId).collection('stepWeeks').doc(docId);
-
-    // What is already recorded. A read failure must not cause a blind
-    // overwrite, so bail rather than guess — the next foreground retries.
-    let existing = {};
-    try{
-      const snap = await ref.get();
-      if(snap.exists) existing = (snap.data() || {}).days || {};
-    }catch(e){ logErr('fillStepDays: read', e); return; }
-
-    // Which completed days of this week are still missing.
-    const wanted = [];
-    for(let d = new Date(monday); d <= yest; d.setDate(d.getDate()+1)){
-      const key = ymdLocal(d);
-      if(existing[key] == null) wanted.push(key);
+    const now=new Date(),jobs=[{sid:context.sid,s:context.season}];
+    // Always consider last month, even when October's challenge is disabled.
+    if(now.getDate()<=2){
+      let m=now.getMonth(),y=now.getFullYear();if(m===0){m=12;y--;}
+      const sid=seasonIdOf(m,y);
+      if(sid!==context.sid){
+        const snap=await db.collection('groups').doc(context.code).collection('seasons').doc(sid).get();
+        if(!current())return;
+        if(snap.exists)jobs.push({sid,s:snap.data()});
+      }
     }
-    if(!wanted.length) return;
-
-    const steps = await healthDailySteps(monday, yest);
-    // Only the missing days, and only ones Health actually answered for. A day
-    // with no data stays ABSENT rather than being written as 0 — absent means
-    // "not known yet" and can still fill in later, whereas a stored 0 would
-    // freeze a genuine reading out forever.
-    const fresh = {};
-    for(const key of wanted){
-      const n = steps[key];
-      if(Number.isFinite(n) && n > 0) fresh[key] = Math.min(n, window.STEP_DAILY_CAP);
+    let imported=0;
+    for(const {sid,s} of jobs){
+      if(!isStepChallengeOn(s))continue;
+      const player=(s.roster||[]).find(p=>p&&((context.actor!==context.name&&p.userId===context.actor)||(context.actor===context.name&&p.name===context.name)));
+      if(!player)continue;
+      for(const round of stepRoundsOf(s)){
+        const start=new Date(s.year,s.month-1,round.start),last=new Date(s.year,s.month-1,round.end);
+        const yesterday=new Date(now.getFullYear(),now.getMonth(),now.getDate()-1);
+        const end=last<yesterday?last:yesterday;
+        if(end<start||Date.now()>=stepRoundCutoff(s,round))continue;
+        const week=stepRoundId(sid,round),sRef=db.collection('groups').doc(context.code).collection('seasons').doc(sid);
+        const closed=await sRef.collection('twistWindows').doc('step_week_'+week).get();
+        if(!current())return;
+        if(closed.exists&&Array.isArray(closed.data()?.awarded))continue;
+        // Retain existing document identity for upgrade compatibility.
+        const docId=week+'__'+String(player.name).toLowerCase().replace(/[^a-z0-9]+/g,'-');
+        const ref=sRef.collection('stepWeeks').doc(docId);
+        const snap=await ref.get();if(!current())return;
+        const existing=stepValidDays(snap.exists?snap.data()?.days:{},s,round);
+        const fresh=stepValidDays(await healthDailySteps(start,end),s,round);
+        if(!current()||Date.now()>=stepRoundCutoff(s,round))return;
+        const keys=Object.keys(fresh);if(!keys.length)continue;
+        // Refresh completed readings while open; zero is known data, absence isn't.
+        const days={...existing,...fresh};
+        if(JSON.stringify(Object.entries(days).sort())===JSON.stringify(Object.entries(existing).sort()))continue;
+        await ref.set({player:player.name,userId:player.userId||null,team:player.team||null,week,weekStart:ymdLocal(start),days,total:Object.values(days).reduce((a,b)=>a+b,0),source:window.Capacitor?.platform==='android'?'healthconnect':'healthkit',updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+        imported+=keys.length;
+        if(!current())return;
+      }
     }
-    if(!Object.keys(fresh).length) return;
-
-    const days  = Object.assign({}, existing, fresh);
-    const total = Object.values(days).reduce((a,b)=>a+(Number(b)||0), 0);
-    const meRow = (season.roster||[]).find(p=>p && p.name===me.name) || {};
-    try{
-      await ref.set({
-        player: me.name, userId: meRow.userId || null, team: meRow.team || null,
-        week, weekStart: ymdLocal(monday),
-        days, total,
-        source: (window.Capacitor && Capacitor.platform === 'android') ? 'healthconnect' : 'healthkit',
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      }, {merge:true});
-    }catch(e){ logErr('fillStepDays: write', e); return; }
-
-    // Say what landed. One day is the overwhelmingly common case (you opened
-    // the app the morning after); the plural branch is the person coming back
-    // from a few days away, who should be told it caught up rather than left
-    // to wonder.
-    const keys = Object.keys(fresh).sort();
-    if(keys.length === 1){
-      toast('Yesterday’s steps recorded: ' + fresh[keys[0]].toLocaleString('en-IN'), 'success');
-    } else {
-      toast(keys.length + ' days of steps recorded: '
-            + Object.values(fresh).reduce((a,b)=>a+b,0).toLocaleString('en-IN') + ' total', 'success');
-    }
-    if(typeof renderHome === 'function'){ try{ renderHome(); }catch(e){ logErr('fillStepDays: rerender', e); } }
-  }catch(e){
-    logErr('fillStepDays', e);
-  }finally{
-    window._stepFillInFlight = false;
-  }
+    if(imported&&current()){window._stepWeekCache=null;toast('Completed-day steps synced, including any open previous round.','success');}
+  }catch(e){logErr('fillStepDays',e);}
+  finally{window._stepFillInFlight=false;}
 }
 
 /* ── THE STEP CHALLENGE: WEEK RESOLUTION ───────────────────────────────────
@@ -5245,181 +5267,11 @@ async function fillStepDays(){
    it cannot inflate the payout, which part 2 caps at STEP_BONUS_MAX_PER_WEEK. */
 window.STEP_RESOLVE_GRACE_H = 36;
 
-async function resolveStepWeekIfDue(){
-  if(!window.isNative || !isNative()) return;            // no health data source at all
-  if(!season || !seasonId || !groupCode) return;
-  if(!isStepChallengeOn(season)) return;
-  if(window._stepResolveInFlight) return;
-  window._stepResolveInFlight = true;
-  try{
-    const now = new Date();
-    // ROUNDS, NOT WEEKS. The old code found last Monday and then refused to
-    // settle if that Monday sat in a different month from the active season —
-    // which is exactly what happens at both ends of any month not starting on a
-    // Monday, so those rounds were never paid and their data was split across
-    // two seasons. Rounds cannot cross the 1st, so that whole class is gone.
-    if(now.getMonth()+1 !== season.month || now.getFullYear() !== season.year) return;
-    const rounds = stepRoundsOf(season);
-    const today  = now.getDate();
-    // The most recent round that has fully finished.
-    const done = rounds.filter(r => r.end < today).pop();
-
-    // ── THE LAST ROUND OF THE PREVIOUS MONTH ────────────────────────────────
-    // Round 4 ends on the final day of the month, so its grace window falls
-    // AFTER rollover — by the time it is settleable, `season` is next month and
-    // the guard above has already returned. Left alone that silently loses one
-    // round in four, which is the same class of bug as the one this rewrite
-    // exists to remove, just quieter.
-    //
-    // So in the first days of a month, reach back one season and finish it. It
-    // is a CREATE of a window that never existed, not a rewrite of a decided
-    // one — the thing the create-only rule is there to prevent. The bonus lands
-    // in the month the steps were walked, which is where people look for it.
-    if(today <= 4){
-      try{ await settlePrevMonthFinalRound(); }
-      catch(e){ logErr('resolveStepWeek: prev-month round', e); }
-    }
-    if(!done) return;                       // still inside round 1
-
-    // It ended at the close of its last day; settle only once the grace passed.
-    const endedAt = new Date(now.getFullYear(), now.getMonth(), done.end + 1);  // midnight after
-    const settleAfter = new Date(endedAt.getTime() + window.STEP_RESOLVE_GRACE_H*3600000);
-    if(now < settleAfter) return;
-
-    await settleStepRound(seasonId, season, done);
-  }catch(e){
-    logErr('resolveStepWeekIfDue', e);
-  }finally{
-    window._stepResolveInFlight = false;
-  }
-}
-
-// Settle ONE round of ONE season. Split out of resolveStepWeekIfDue so the
-// previous month's final round runs through the identical code path — two
-// implementations of "who won" would drift, and this one is the scoring input.
-async function settleStepRound(sid, seasonData, done){
-    const season = seasonData;
-    const seasonId = sid;
-    const now = new Date();
-    const week   = stepRoundId(seasonId, done);
-    const winId  = 'step_week_' + week;
-    const lastMonday = new Date(season.year, season.month - 1, done.start);
-    const sRef   = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
-    const winRef = sRef.collection('twistWindows').doc(winId);
-
-    // Already settled? One existence check, and the cheap common case.
-    try{
-      const winSnap = await winRef.get();
-      if(winSnap.exists && Array.isArray((winSnap.data()||{}).awarded)) return;
-    }catch(e){ logErr('resolveStepWeek: window read', e); return; }
-
-    // Everyone's steps for that week.
-    let stepDocs = [];
-    try{
-      const q = await sRef.collection('stepWeeks').where('week','==',week).get();
-      stepDocs = q.docs.map(d=>d.data());
-    }catch(e){ logErr('resolveStepWeek: stepWeeks read', e); return; }
-    if(!stepDocs.length) return;                          // nobody logged a step — nothing to settle
-
-    // Per-player total, RE-CLAMPED from the day map (never trust the stored
-    // `total`), keyed by roster name so a forged doc for a non-member is ignored.
-    const roster = (season.roster||[]).filter(p=>p && p.departed!==true);
-    const teamOf = new Map(roster.map(p=>[p.name, p.team]));
-    const byPlayer = new Map();
-    for(const d of stepDocs){
-      if(!d || !teamOf.has(d.player)) continue;           // only current, non-departed members count
-      let t = 0;
-      const days = (d.days && typeof d.days==='object') ? d.days : {};
-      for(const k of Object.keys(days)){
-        const n = Number(days[k]);
-        if(Number.isFinite(n) && n>0) t += Math.min(n, window.STEP_DAILY_CAP);
-      }
-      byPlayer.set(d.player, t);
-    }
-
-    // Team average over the FULL team size (a member who logged nothing counts
-    // as a zero — that is what makes it a team effort, not a top-walker contest).
-    const teamSum = new Map(), teamSize = new Map();
-    for(const p of roster){
-      teamSize.set(p.team, (teamSize.get(p.team)||0)+1);
-      teamSum.set(p.team, (teamSum.get(p.team)||0)+(byPlayer.get(p.name)||0));
-    }
-    const teams = [...teamSize.keys()].map(t=>({
-      team:t, size:teamSize.get(t), sum:teamSum.get(t)||0,
-      avg:(teamSum.get(t)||0)/(teamSize.get(t)||1)
-    })).sort((a,b)=>b.avg-a.avg);
-    if(!teams.length) return;
-
-    // Scales with the round's length: an 8-day round asks 8/7 of the number,
-    // so a longer round is longer, not easier.
-    const target = stepRoundTarget(done, season);
-    let winnerTeam=null, cleared=false;
-    if(teams.length === 1){
-      // Solo / single team: no opponent, so the target IS the contest.
-      if(teams[0].avg >= target){ winnerTeam=teams[0].team; cleared=true; }
-    } else {
-      // Highest average wins. A dead-heat for first pays nobody — a coin-flip
-      // bonus would feel worse than none.
-      if(teams[0].avg > teams[1].avg){
-        winnerTeam = teams[0].team;
-        cleared = teams[0].avg >= target;
-      }
-    }
-
-    const awarded = winnerTeam ? roster.filter(p=>p.team===winnerTeam).map(p=>p.name) : [];
-    const docData = {
-      twist:'step_week', week,
-      monDate:lastMonday.getDate(),
-      sunDate:done.end,
-      month:lastMonday.getMonth()+1, year:lastMonday.getFullYear(),
-      bonus: stepBonusOf(season),
-      winner: winnerTeam, awarded, cleared, target,
-      // A compact record of how it was decided, for the board's "last week" card.
-      standings: teams.map(t=>({team:t.team, avg:Math.round(t.avg)})),
-      resolvedAt: firebase.firestore.FieldValue.serverTimestamp()
-    };
-    try{
-      // .set() on an existing doc is an UPDATE, which the create-only rule
-      // rejects — so a second racer fails here harmlessly. Swallow that; log
-      // anything else.
-      await winRef.set(docData);
-    }catch(e){
-      const msg = String(e && e.message || e);
-      if(!/PERMISSION_DENIED|already exists|Missing or insufficient/i.test(msg)) logErr('resolveStepWeek: write', e);
-      return;
-    }
-
-    if(winnerTeam){
-      const mine = (season.roster||[]).some(p=>p && p.name===me?.name && p.team===winnerTeam);
-      toast(mine ? `Your team won last week’s step challenge — +${stepBonusOf(season)} each 🔥`
-                 : `Team ${winnerTeam} won last week’s step challenge.`, 'success');
-    }
-    if(typeof renderHome === 'function'){ try{ renderHome(); }catch(e){ logErr('resolveStepWeek: rerender', e); } }
-}
-
-// The previous season's round 4, if it never settled. Runs only in the first
-// days of a month and costs one season read when there is nothing to do.
-async function settlePrevMonthFinalRound(){
-  if(!season || !groupCode) return;
-  let pm = season.month - 1, py = season.year;
-  if(pm < 1){ pm = 12; py--; }
-  const prevSid = seasonIdOf(pm, py);
-  let prev;
-  try{
-    const snap = await db.collection('groups').doc(groupCode)
-                         .collection('seasons').doc(prevSid).get();
-    if(!snap.exists) return;
-    prev = snap.data();
-  }catch(e){ logErr('settlePrevMonthFinalRound: season read', e); return; }
-  if(!isStepChallengeOn(prev)) return;          // challenge was off last month
-  const rounds = stepRoundsOf(prev);
-  const last = rounds[rounds.length - 1];
-  // Its grace has to have passed. The round ended at midnight closing the last
-  // day of that month, which is midnight opening the 1st of this one.
-  const endedAt = new Date(season.year, season.month - 1, 1);
-  if(Date.now() < endedAt.getTime() + window.STEP_RESOLVE_GRACE_H*3600000) return;
-  await settleStepRound(prevSid, prev, last);
-}
+// Only the server closes rounds and announces their immutable awards.
+// Older client entry points intentionally remain harmless during rollout.
+async function resolveStepWeekIfDue(){ return; }
+async function settleStepRound(){ return; }
+async function settlePrevMonthFinalRound(){ return; }
 
 // month/year are passed explicitly because the suggestion already knows them:
 // healthRecentWorkouts reads them off the HealthKit sample's own start date. The
@@ -5556,8 +5408,16 @@ async function startAccountDeletion(){
   if(!confirm('This permanently deletes your Forge account and hides all your workouts. It cannot be undone. Continue?')) return;
   const btn=document.getElementById('delAccountBtn');
   if(btn){ btn.disabled=true; btn.style.opacity='.5'; btn.textContent='Deleting…'; }
+  const actorId=me.userId;
   try{
-    await executeAccountDeletion(me.userId, _delSay);
+    const profile=await db.collection('users').doc(actorId).get();
+    if(!me||me.userId!==actorId)throw new Error('ACCOUNT_CHANGED');
+    if(profile.exists&&profile.data().authUid){
+      _delSay('Confirm your sign-in before deleting…');
+      await confirmForgeAccountDeletion(profile.data().authUid);
+    }
+    if(!me||me.userId!==actorId)throw new Error('ACCOUNT_CHANGED');
+    await executeAccountDeletion(actorId, _delSay);
     _delSay('Account deleted. Signing you out…');
     setTimeout(finishAccountDeletionLocally, 1200);
   }catch(e){
@@ -5623,6 +5483,10 @@ async function executeAccountDeletion(userId, say){
   // can differ (each group assigns from its own unused pool), and the account
   // needs exactly one label.
   const acctName = firstDeparted || DELETED_NAME;
+  if(u.authUid){
+    await callFunction('finalizeAccountDeletion',{userId});
+    return true;
+  }
   await uRef.update({
     name: acctName,
     nameLower: acctName.toLowerCase(),
@@ -5770,13 +5634,17 @@ async function renderProfileInsights(){
   const el=document.getElementById('profileInsightsCard');
   if(!el) return;
   if(!me || !me.userId){ el.innerHTML='<div class="tmuted">Insights unlock once your profile finishes setting up.</div>'; return; }
+  const actorId=me.userId,request=_profileRenderRequest;
+  const current=()=>me?.userId===actorId&&request===_profileRenderRequest;
   try{
     let logs=_profileInsights.logs;
     if(_profileInsights.uid!==me.userId || (Date.now()-_profileInsights.ts)>5*60*1000 || !logs){
-      const snap=await db.collection('logs').where('userId','==',me.userId).get();
-      logs=snap.docs.map(d=>d.data()).filter(l=>!l.voided && l.year && l.month && l.day);
-      _profileInsights={uid:me.userId, ts:Date.now(), logs};
+      const snap=await db.collection('logs').where('userId','==',actorId).get();
+      if(!current())return;
+      logs=snap.docs.map(d=>({id:d.id,...d.data()})).filter(l=>!l.voided && l.year && l.month && l.day);
+      _profileInsights={uid:actorId, ts:Date.now(), logs};
     }
+    logs=ForgeExperience.personalSessions(logs);
     if(!logs.length){ el.innerHTML='<div class="tmuted">Log a few workouts and your patterns show up here.</div>'; return; }
     // newest first: workout date, then submit time
     const sorted=[...logs].sort((a,b)=>(b.year-a.year)||(b.month-a.month)||(b.day-a.day)||((b.timestamp?.seconds||0)-(a.timestamp?.seconds||0)));
@@ -5802,11 +5670,11 @@ async function renderProfileInsights(){
     const cnt=ym=>logs.filter(l=>ymOf(l.year,l.month)===ym).length;
     const curN=cnt(curYm), prevN=cnt(ymOf(pmv.y,pmv.m));
     el.innerHTML=`
-      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Workout types · your last ${last.length} workout${last.length===1?'':'s'}</div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Workout types · your last ${last.length} workout${last.length===1?'':'s'}</div><p class="forge-explainer">Profile-linked records. Shared group copies count once; older unlinked records may be missing.</p>
       ${bars}
       ${dist.length?`<div style="display:flex;justify-content:space-between;padding:8px 0 7px;border-top:1px solid var(--border);margin-top:6px;font-size:13px"><span>Most logged</span><b style="color:var(--gold)">${esc(dist[0].label)}</b></div>`:''}
       <div style="display:flex;justify-content:space-between;padding:7px 0 0;font-size:13px"><span>This month vs last</span><b style="color:var(--text)">${curN} <span style="color:var(--muted);font-weight:400">vs</span> ${prevN}</b></div>`;
-  }catch(e){ logErr('renderProfileInsights', e); el.innerHTML='<div class="tmuted">Could not load insights — check connection.</div>'; }
+  }catch(e){ if(!current())return;logErr('renderProfileInsights', e); el.innerHTML='<div class="tmuted">Could not load insights — check connection.</div>'; }
 }
 
 // Maps a users/{userId}/seasons/{code}_{sid} archive doc (S2's snapshot writer
@@ -7074,63 +6942,91 @@ function renderKmGoal(){
    verified without a browser/device (native-only, challenge-on). The markup
    reuses the km card's classes; confirm on a real phone once the app is live.  */
 window._stepWeekCache = null;   // { week, at, teams:[{team,avg,size,members}] }
+let _stepRenderRequest=0;
 async function renderStepChallenge(){
   const el=document.getElementById('stepChallengeCard');
   if(!el) return;
-  if(!(window.isNative && isNative()) || !season || !isStepChallengeOn(season)){ el.innerHTML=''; return; }
+  const request=++_stepRenderRequest;
+  window._stepRecap=null;
+  if(!season){ el.innerHTML=''; return; }
+  const enabled=isStepChallengeOn(season);
+  const cfg=season,code=groupCode,sid=seasonId,actor=me?.userId||me?.name;
+  const current=()=>request===_stepRenderRequest&&season===cfg&&groupCode===code&&seasonId===sid&&(me?.userId||me?.name)===actor;
 
-  const target=stepTargetOf(season);
   const roster=(season.roster||[]).filter(p=>p && p.departed!==true);
   const myTeam=me?me.team:null;
   const nf=n=>Math.round(n).toLocaleString('en-IN');
 
   // LAST week's frozen result — from the already-loaded twistWindows global.
   const now=new Date();
-  const lastMon=new Date(weekMondayOf(now).getTime()-7*86400000);
-  const lastWeek=getISOWeek(lastMon);
-  const resolved=(twistWindows||[]).find(w=>w && w.twist==='step_week' && w.week===lastWeek);
+  // Legacy ISO-week results must never be presented as month-round results.
+  let resolved=(window.twistWindows||[]).filter(w=>w&&w.settledBy==='server-sweep'&&w.month===cfg.month&&w.year===cfg.year&&new RegExp('^'+sid+'-r[1-4]$').test(w.week)&&Array.isArray(w.awarded)).sort((a,b)=>b.sunDate-a.sunDate)[0]||null;
+  if(!resolved&&now.getDate()<=7&&now.getMonth()+1===cfg.month&&now.getFullYear()===cfg.year){
+    let m=cfg.month-1,y=cfg.year;if(m===0){m=12;y--;}
+    const previousSid=y+'-'+String(m).padStart(2,'0');
+    try{
+      const snap=await db.collection('groups').doc(code).collection('seasons').doc(previousSid).collection('twistWindows').doc('step_week_'+previousSid+'-r4').get();
+      if(!current())return;
+      const w=snap.exists?snap.data():null;
+      if(w&&w.settledBy==='server-sweep'&&w.week===previousSid+'-r4'&&Array.isArray(w.awarded))resolved=w;
+    }catch(e){if(!current())return;logErr('Previous step result unavailable',e);}
+  }
   let lastHtml='';
   if(resolved && Array.isArray(resolved.awarded)){
     if(resolved.winner){
       const mineWon=myTeam && resolved.winner===myTeam;
       lastHtml=`<div class="km-rfoot" style="margin-top:10px">
-        <b>Last week:</b> Team ${esc(resolved.winner)} won${resolved.cleared?' and cleared the target':''}
-        — +${resolved.bonus} each${mineWon?' · that was you 🔥':''}</div>`;
+        <b>${esc(PROFILE_MONTH_NAMES[resolved.month-1])} ${resolved.monDate}–${resolved.sunDate}:</b> Team ${esc(resolved.winner)} won${resolved.cleared?' and cleared the target':''}
+        — +${resolved.bonus} each, credited to ${esc(PROFILE_MONTH_NAMES[resolved.month-1])}${mineWon?' · your team':''}</div>`;
     } else {
-      lastHtml=`<div class="km-rfoot" style="margin-top:10px"><b>Last week</b> ended in a dead heat — no bonus.</div>`;
+      lastHtml=`<div class="km-rfoot" style="margin-top:10px"><b>Round closed:</b> ${resolved.status==='no_data'?'No synced step data — no award.':'No winning team — no award.'}</div>`;
     }
+    window._stepRecap={result:resolved,name:window.groupData?.name||code,code,sid,actor};
+    lastHtml+='<button type="button" class="today-button" onclick="shareStepRecap()">Share / download round recap</button>';
   }
+  if(!enabled){el.innerHTML='<div class="card"><h3>Steps Challenge</h3><p>Steps are not enabled for this group’s current season. Four month-contained rounds, scored by average steps per team member.</p>'+lastHtml+'<button class="today-button" onclick="ForgeExperience.openHealth()">Health connection &amp; setup</button><p>The Forge-wide three-person event is still in preparation.</p></div>';return;}
 
   // THIS round's live averages, cached 5 min so repeated renders do not each
   // hit Firestore. Rounds are month-scoped (see stepRoundsOf): four per month,
   // 7 or 8 days each, and never crossing the 1st.
-  const _round=stepRoundOfDay(now.getDate(), season);
+  const seasonStart=new Date(cfg.year,cfg.month-1,1),seasonEnd=new Date(cfg.year,cfg.month,0);
+  const _round=stepRoundOfDay(now>seasonEnd?cfg.days:now<seasonStart?1:now.getDate(), cfg);
   if(!_round){ el.innerHTML=''; return; }
-  const thisWeek=stepRoundId(seasonId, _round);
+  const target=stepRoundTarget(_round,cfg),thisWeek=stepRoundId(sid, _round);
+  const cacheKey=JSON.stringify([code,sid,actor,thisWeek,now.toDateString(),roster.map(p=>[p.name,p.team]),target]);
+  el.innerHTML='<div class="card" role="status">Loading completed-day steps…</div>';
   let teams=[];
   try{
     const c=window._stepWeekCache;
-    if(c && c.week===thisWeek && (Date.now()-c.at)<300000){
+    if(c && c.key===cacheKey && (Date.now()-c.at)<300000){
       teams=c.teams;
     } else {
-      const snap=await db.collection('groups').doc(groupCode).collection('seasons')
-        .doc(seasonId).collection('stepWeeks').where('week','==',thisWeek).get();
+      const snap=await db.collection('groups').doc(code).collection('seasons')
+        .doc(sid).collection('stepWeeks').where('week','==',thisWeek).get();
+      if(!current())return;
       const byPlayer=new Map();
       snap.docs.forEach(d=>{
-        const x=d.data()||{}; if(!x.player) return;
-        let t=0; const days=(x.days&&typeof x.days==='object')?x.days:{};
-        for(const k of Object.keys(days)){ const n=Number(days[k]); if(Number.isFinite(n)&&n>0) t+=Math.min(n,window.STEP_DAILY_CAP); }
-        byPlayer.set(x.player,t);
+        const x=d.data()||{}; if(!roster.some(p=>p.name===x.player)||x.week!==thisWeek)return;
+        const totals=byPlayer.get(x.player)||new Map(),days=(x.days&&typeof x.days==='object')?x.days:{};
+        for(const k of Object.keys(days)){
+          if(!/^\d{4}-\d{2}-\d{2}$/.test(k))continue;
+          const [y,m,day]=k.split('-').map(Number),date=new Date(y,m-1,day),today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+          const n=days[k];
+          if(y!==cfg.year||m!==cfg.month||!Number.isInteger(day)||day<_round.start||day>_round.end||date>=today||date.getMonth()+1!==m||typeof n!=='number'||!Number.isFinite(n)||n<=0)continue;
+          totals.set(k,Math.max(totals.get(k)||0,Math.min(Math.round(n),window.STEP_DAILY_CAP)));
+        }
+        byPlayer.set(x.player,totals);
       });
       const sum=new Map(), size=new Map();
-      roster.forEach(p=>{ size.set(p.team,(size.get(p.team)||0)+1); sum.set(p.team,(sum.get(p.team)||0)+(byPlayer.get(p.name)||0)); });
+      roster.forEach(p=>{ size.set(p.team,(size.get(p.team)||0)+1); sum.set(p.team,(sum.get(p.team)||0)+[...(byPlayer.get(p.name)||new Map()).values()].reduce((a,b)=>a+b,0)); });
       teams=[...size.keys()].map(t=>({team:t, size:size.get(t), avg:(sum.get(t)||0)/(size.get(t)||1)})).sort((a,b)=>b.avg-a.avg);
-      window._stepWeekCache={ week:thisWeek, at:Date.now(), teams };
+      window._stepWeekCache={ key:cacheKey, at:Date.now(), teams };
     }
-  }catch(e){ logErr('renderStepChallenge: read', e); /* fall through to header-only */ }
+  }catch(e){if(current())el.innerHTML='<div class="card"><p>Steps could not be loaded—not zero steps.</p><button class="today-button" onclick="renderStepChallenge()">Try again</button></div>';logErr('renderStepChallenge: read', e);return;}
+  if(!current())return;
 
   const rows=teams.map(t=>{
-    const pct=Math.max(4, Math.min(100, Math.round(t.avg/target*100)));
+    const pct=Math.max(0, Math.min(100, Math.round(t.avg/target*100)));
     const mine=t.team===myTeam;
     return `<div class="km-row${mine?' km-mine':''}${t.avg>=target?' km-done':''}">
       <div class="km-rhead">
@@ -7144,13 +7040,41 @@ async function renderStepChallenge(){
 
   el.innerHTML=`<div class="shdr">Step Challenge — Round ${_round.n} of ${window.STEP_ROUNDS_PER_MONTH} · ${nf(target)}/person</div>
     <div class="card km-card">
-      <div class="km-intro">Every step your phone counts. Highest team <b>average</b> when the round
-        ends wins <b>+${stepBonusOf(season)} points</b> each — a free workout.
+      <div class="km-intro">Completed-day totals from connected phones. Team <b>averages</b> keep different team sizes comparable.
         Round ${_round.n} runs <b>${PROFILE_MONTH_NAMES[season.month-1]} ${_round.start}–${_round.end}</b> (${_round.days} days).
-        Yesterday and earlier only; today keeps climbing.</div>
+        Yesterday and earlier only; today keeps climbing. Provisional until settlement; this display awards no points.</div>
+      <p class="km-rfoot">Open the phone app to sync before the cutoff. Regular rounds allow 36 hours after the last day; the month’s final round closes on the following 1st at <b>6 PM IST</b>. Final-round points stay in the month walked.</p>
       ${rows||'<div class="km-rfoot">No steps in yet this round — open the app tomorrow and yesterday’s land automatically.</div>'}
+      <button type="button" class="today-button today-button-secondary" onclick="ForgeExperience.openHealth()">${window.isNative?.()?'Manage Health connection':'Connect Health in the phone app'} →</button>
       ${lastHtml}
     </div>`;
+}
+
+// User-initiated export only. No automatic messages and no live/provisional awards.
+async function shareStepRecap(){
+  const model=window._stepRecap;
+  if(!model||model.code!==groupCode||model.sid!==seasonId||model.actor!==(me?.userId||me?.name)||model.result.settledBy!=='server-sweep')return;
+  const r=model.result,canvas=document.createElement('canvas');canvas.width=1080;canvas.height=1350;
+  const c=canvas.getContext('2d');if(!c){toast('Image export is not available on this device.','error');return;}
+  c.fillStyle='#f8f6ef';c.fillRect(0,0,1080,1350);
+  const label=(text,y,size=32,color='#242a23')=>{c.fillStyle=color;c.font='700 '+size+'px system-ui';c.fillText(String(text),64,y,952);};
+  label('FORGE / ROUND RECAP',85,24,'#526447');label(model.name,168,46);
+  label(PROFILE_MONTH_NAMES[r.month-1]+' '+r.monDate+'–'+r.sunDate+', '+r.year,220,28,'#596151');
+  label(r.winner?'Team '+r.winner+' takes this round.':r.status==='no_data'?'No synced data this round.':'A shared finish. No winning team.',335,42);
+  let y=415;
+  for(const t of (r.standings||[]).slice(0,8)){
+    c.fillStyle='#e5edd6';c.fillRect(64,y,952,88);label('Team '+t.team+'   '+Math.round(t.avg).toLocaleString('en-IN')+' avg steps',y+57,32);y+=108;
+  }
+  label('Target: '+Number(r.target).toLocaleString('en-IN')+' per person',1168,27,'#596151');
+  label(r.winner?'+'+r.bonus+' points per winner · credited to '+PROFILE_MONTH_NAMES[r.month-1]:'Closed without bonus points.',1220,26,'#526447');
+  label('Settled result · '+r.week,1280,22,'#596151');
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+  if(!blob){toast('Could not generate the recap image. Please retry.','error');return;}
+  const file=new File([blob],'forge-'+r.week+'.png',{type:'image/png'});
+  try{
+    if(navigator.canShare?.({files:[file]})){await navigator.share({files:[file],title:'Forge round recap'});return;}
+    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=file.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
+  }catch(e){if(e.name!=='AbortError')toast('Sharing failed. Please retry from the recap.','error');}
 }
 
 // One breakdown renderer for both surfaces: the Board's own card and the
@@ -7329,9 +7253,10 @@ function renderLB(viewOnly=false){
         <div class="tstand-top"><span class="tstand-name" style="color:${col}">Team ${esc(t.team)}</span>
           ${standing?`<span class="tstand-crown">${standing}</span>`:''}
           <span class="tstand-pts"><span data-num="ts:${esc(t.team)}">${t.score}</span><i>Average points</i></span></div>
-        <div class="tstand-bar" aria-hidden="true"><div class="tstand-fill" style="width:${pct}%;background:${col}"></div></div>
+        <div class="tstand-bar" aria-hidden="true"><div class="tstand-fill" style="width:${pct}%;--team-fill:${col}"></div></div>
+        <p class="lb-team-names">${t.members.map(p=>esc(p.name)).join(' · ')}</p>
         <details class="lb-team-details" data-lb-team="${esc(detailsKey)}"${state.expanded.has(detailsKey)?' open':''}>
-          <summary>${memberLabel}</summary><div class="lb-team-members">${memberRows}</div>
+          <summary>${memberLabel} · View points +</summary><div class="lb-team-members">${memberRows}</div>
         </details>
       </div>
     </article>`;
@@ -7463,7 +7388,7 @@ function renderPromptDock(){
   if(due==='push'){
     el.innerHTML=
       '<div class="card" style="margin-bottom:14px;padding:16px">'
-      +'<div class="forge-reminder-title"><img src="assets/forgeling.webp" alt="Forgeling">A nudge, if you want one.</div>'
+      +'<div class="forge-reminder-title"><img src="assets/forgeling.webp?v=f025-1" alt="Forgeling">A nudge, if you want one.</div>'
       +'<div style="font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.6">'
       +'One nudge if your team\'s streak is about to break tonight, one when the week\'s recap lands. '
       +'We will never tell you to go exercise.</div>'
@@ -7473,7 +7398,7 @@ function renderPromptDock(){
   } else {
     el.innerHTML=
       '<div class="card" style="margin-bottom:14px;padding:16px">'
-      +'<div class="forge-reminder-title"><img src="assets/forgeling.webp" alt="Forgeling">Less typing. Your call.</div>'
+      +'<div class="forge-reminder-title"><img src="assets/forgeling.webp?v=f025-1" alt="Forgeling">Less typing. Your call.</div>'
       +'<div style="font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.6">'
       +'Connect '+(window.ForgeExperience?ForgeExperience.healthName():'your health app')+' for workout suggestions you confirm before logging. Confirmed logs are shared with your groups; enabled step challenges also upload daily step totals.</div>'
       +'<button class="btn btn-gold" style="margin:12px 0 0;width:100%" onclick="promptConnectHealth()">Choose Health connection</button>'
@@ -9579,6 +9504,9 @@ async function writeSeasonSnapshot(code){
   const sSnap = await sRef.get();
   if(!sSnap.exists) return {skipped:true, reason:'SEASON_MISSING'};
   const sData = sSnap.data();
+  // Steps close after rollover. Do not freeze ranks/badges before the server
+  // announces the final result; October may start while September is pending.
+  if(isStepChallengeOn(sData)&&!sData.stepsFinalizedAt)return {skipped:true,reason:'STEPS_PENDING'};
   if(sData.snapshotAt) return {skipped:true, reason:'ALREADY_SNAPSHOTTED'};
 
   const roster = sData.roster||[];
@@ -9744,7 +9672,7 @@ async function performRollover(code){
 
   // Eligible — now it's safe to snapshot.
   const snap = await writeSeasonSnapshot(code);
-  if(snap.skipped && snap.reason!=='ALREADY_SNAPSHOTTED') return { ok:false, reason:snap.reason };
+  if(snap.skipped && !['ALREADY_SNAPSHOTTED','STEPS_PENDING'].includes(snap.reason)) return { ok:false, reason:snap.reason };
 
   let result=null;
   await db.runTransaction(async tx=>{
@@ -11465,6 +11393,7 @@ function startTour(force){
     {t:'#feedList',page:'feed',title:'The group is showing up.',txt:'This is your group’s workout history. Read what people did and when. No likes to collect; the effort is the point.'},
     {t:'#globalViews',page:'global',title:'A wider view of Forge.',txt:'Groups, opted-in people and today’s activity have different measures. Read the metric before comparing. This is not a ranking of fitness.'},
     {t:'.pfold',page:'profile',settings:true,title:'Make Forge work for you.',txt:'Notifications are your choice. In the phone app, connect Apple Health on iOS or Health Connect on Android. Nothing is enabled by taking this tour.'},
+    ...(window.FEATURE_GOOGLE_AUTH?[{t:'#googleAuthCard',fallback:'#forgeFAQ',page:'profile',title:'Keep your effort with you.',txt:'Link Google'+(window.FEATURE_APPLE_AUTH?' or Apple':'')+' in Profile to help protect your workout history and recover it on another phone. Confirm your existing Forge PIN once. Your groups and history stay in place. Taking this tour does not link anything.'}]:[]),
     {t:'#forgeFAQ',page:'profile',title:'I’m leaving the answers here.',txt:'This illustrated field guide lives in Profile. Come back for points, gym logs, previous months, Health or help—and replay this walk any time. Your turn.'}
   ];
   _tour={i:0,steps,token:0,opener:document.activeElement,context:`${groupCode}|${me.userId||me.name}|${seasonId}`};
@@ -11492,7 +11421,7 @@ function _tourShow(){
   const bub=document.getElementById('tourBubble');
   const compact=window.innerHeight<=640||st.t==='.mir-calcard';
   const title=compact&&st.shortTitle?st.shortTitle:st.title,text=compact&&st.shortText?st.shortText:st.txt;
-  bub.innerHTML=`<div class="forge-tour-mascot"><img src="assets/forgeling.webp" alt="Forgeling" width="72" height="72"></div><p class="today-kicker">FORGELING’S FIELD TRIP</p><h2>${st.title}</h2><p class="tb-txt">${st.txt}</p><div class="tb-row"><span class="tb-step">${tour.i+1} / ${tour.steps.length}</span><div class="tb-btns"><button class="tb-skip" onclick="endTour(true)">Skip</button>${tour.i?'<button class="tb-skip" onclick="prevTourStep()">Back</button>':''}<button class="tb-next" onclick="nextTourStep()">${tour.i===tour.steps.length-1?'Let’s go':'Next'}</button></div></div>`;
+  bub.innerHTML=`<div class="forge-tour-mascot"><img src="assets/forgeling.webp?v=f025-1" alt="Forgeling" width="72" height="72"></div><p class="today-kicker">FORGELING’S FIELD TRIP</p><h2>${st.title}</h2><p class="tb-txt">${st.txt}</p><div class="tb-row"><span class="tb-step">${tour.i+1} / ${tour.steps.length}</span><div class="tb-btns"><button class="tb-skip" onclick="endTour(true)">Skip</button>${tour.i?'<button class="tb-skip" onclick="prevTourStep()">Back</button>':''}<button class="tb-next" onclick="nextTourStep()">${tour.i===tour.steps.length-1?'Let’s go':'Next'}</button></div></div>`;
   bub.querySelector('h2').textContent=title;
   bub.querySelector('.tb-txt').textContent=text;
   bub.querySelector('.tb-next').focus({preventScroll:true});
@@ -11607,6 +11536,7 @@ async function showTab(t,options={}){
   if(t==='global') loadGlobal();
   if(t==='pledge') renderIronPledgePage();
   if(t==='profile') renderProfile();
+  if(t==='feed') renderFeed();
   if(t==='admin'){ try{ renderAdminExtras(); }catch(e){} }
   if(t==='admin') maybeShowRebalanceCard().catch(e=>logErr('maybeShowRebalanceCard',e));
   if(!options.tour)trackTabClick(t); // do not count guided-tour steps as user activity
@@ -12601,6 +12531,7 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
   function prevMonth(m,y){ return m===1?{m:12,y:y-1}:{m:m-1,y:y}; }
   function pct(n,d){ return d>0?Math.round(n/d*100):0; }
 
+  var renderRequest=0;
   var state={ selM:null, selY:null, groups:null, data:null, trendMode:'combined', partDenom:'platform', partScope:'', partChart:null,
               woTotals:null, keepWo:false };
   window.SuperDash={ render:render, setMonth:setMonth, player:openPlayer, closePlayer:closePlayer, trendMode:setTrendMode, errmode:setErrMode, errdetail:openError, partScope:setPartScope, partDenom:setPartDenom };
@@ -12614,6 +12545,7 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
 
   async function render(groups){
     var root=document.getElementById('superDashRoot'); if(!root) return;
+    var request=++renderRequest;
     state.groups=groups;
     var now=new Date();
     if(state.selM==null){ state.selM=now.getMonth()+1; state.selY=now.getFullYear(); }
@@ -12622,11 +12554,12 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
       var reuseWo = state.keepWo ? state.woTotals : null;
       state.keepWo = false;
       var data=await fetchAll(groups, state.selM, state.selY, reuseWo);
+      if(request!==renderRequest)return;
       state.data=data; state.woTotals=data.woTotals;
       injectStyle();
       root.innerHTML=buildHTML(data);
       renderPartChart();   // Chart.js needs the canvas in the DOM first (C3)
-    }catch(e){ console.error('[SuperDash]',e); root.innerHTML='<div class="card" style="border:1px solid var(--red)"><div style="color:var(--red)">Cockpit failed to load: '+E(e.message||e)+'</div></div>'; }
+    }catch(e){ if(request!==renderRequest)return;console.error('[SuperDash]',e); root.innerHTML='<div class="card" style="border:1px solid var(--red)"><div style="color:var(--red)">Cockpit failed to load: '+E(e.message||e)+'</div></div>'; }
   }
 
   // ── DATA ───────────────────────────────────────────────────────────────
@@ -12643,17 +12576,17 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
     // R4: each month is ONE monthly rollup doc (analytics/global/monthly/
     // {YYYY-MM}) instead of an all-platform logs query. A missing doc is a
     // month with no data — same as an empty logs query before.
-    var rollups={};   // 'YYYY-MM' -> {code: {days,counts,wo,users,members}}
+    var rollups={},coverage={};   // Missing/failed rollups are not measured zeros.
     await Promise.all(monthList.map(function(mo){
       var key=ymKey(mo.y,mo.m);
       return db.collection('analytics').doc('global').collection('monthly').doc(key).get()
-        .then(function(dd){ rollups[key]=(dd.exists&&dd.data().groups)||{}; })
+        .then(function(dd){coverage[key]=dd.exists?'loaded':'missing';rollups[key]=(dd.exists&&dd.data().groups)||{}; })
         // THIS is the catch that hid the wrong headcount. A failed month became
         // {} indistinguishable from "a month with no activity", so the dashboard
         // rendered a confidently wrong number with nothing logged anywhere. An
         // empty object is still the right fallback — the cockpit must not die
         // because one month is unreadable — but it is no longer a secret.
-        .catch(function(e){ rollups[key]={}; logErr('SuperDash:rollup:'+key, e); });
+        .catch(function(e){coverage[key]='failed';rollups[key]={}; logErr('SuperDash:rollup:'+key, e); });
     }));
     // Flatten into the shapes the build functions consume. gpList: one entry
     // per (group, player-string) with its cross-month workout-day set and the
@@ -12746,13 +12679,13 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
     // empty read leaves woTotals null and the band renders as unavailable,
     // exactly like the errors/users sections degrade.
     var woTotals=cachedWo||null;
-    if(!woTotals){ try{ woTotals=await fetchWorkoutTotals(); }
+    if(!woTotals){ try{ woTotals=await fetchWorkoutTotals(groups); }
       catch(e){ logErr('SuperDash:workoutTotals', e); } }   // headline number silently zeroes without this
 
     return { now:now, todayMid:todayMid, curM:curM, curY:curY, selM:selM, selY:selY,
              isCurrentMonth:(selM===curM&&selY===curY), groups:groups, groupInfo:groupInfo,
              errors:errors, errorsDenied:errorsDenied,
-             monthList:monthList, rollups:rollups, gpList:gpList,
+             monthList:monthList, rollups:rollups, coverage:coverage, gpList:gpList,
              dayAll:dayAll, dayByGroup:dayByGroup, woTotals:woTotals,
              membersCount:membersCount, canonicalCount:canonicalCount, usersDenied:usersDenied };
   }
@@ -12806,11 +12739,12 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
   // activity. So `months` counts months that actually HAVE workouts, not
   // snap.size: staging carries 7 rollup docs of which 6 are empty backfill
   // months, and "7 months tracked" would badly overstate the history.
-  async function fetchWorkoutTotals(){
+  async function fetchWorkoutTotals(groups){
     var snap=await db.collection('analytics').doc('global').collection('monthly').get();
     var allTime=0, byMonth={}, keys=[];
     snap.docs.forEach(function(dd){
-      var wc=mergeWo((dd.data()||{}).groups||{}), n=0;
+      var all=(dd.data()||{}).groups||{},slice={};(groups||[]).forEach(function(g){if(all[g.code])slice[g.code]=all[g.code];});
+      var wc=mergeWo(slice), n=0;
       Object.keys(wc).forEach(function(k){ n+=(wc[k]&&wc[k].n)||0; });
       byMonth[dd.id]=n; allTime+=n;
       if(n>0) keys.push(dd.id);
@@ -12904,15 +12838,18 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
   function buildHTML(data){
     var sets=buildDaySets(data);
     return buildWorkoutCounter(data)
+      + coverageNote(data)
       + monthSelector(data)
       + buildPulse(data,sets)
-      + buildMetrics(data)
-      + buildParticipation(data)
-      + buildNeedsAttention(data,sets)
-      + buildGroupHealth(data,sets)
-      + buildTrends(data)
-      + buildChampions(data,sets)
-      + buildErrors(data);
+      + '<div class="forge-ops-workspace"><section><h2>People to check in with</h2><p class="forge-ops-note">A quiet check-in, not a public call-out. These signals remain live when viewing older months.</p>'
+      + buildNeedsAttention(data,sets)+'</section><section><h2>Group health</h2>'
+      + buildGroupHealth(data,sets)+'</section></div>'
+      + '<details class="forge-ops-section" open><summary>Participation &amp; momentum</summary>'
+      + buildMetrics(data)+buildParticipation(data)+'</details>'
+      + '<details class="forge-ops-section"><summary>Trends &amp; achievements</summary>'
+      + buildTrends(data)+buildChampions(data,sets)+'</details>'
+      + '<details class="forge-ops-section"><summary>App health &amp; errors</summary>'
+      + buildErrors(data)+'</details>';
   }
 
   function monthSelector(data){
@@ -12963,7 +12900,7 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
     // 5-month monthList AND by a silent catch on each rollup fetch, so it is
     // the wrong source for a platform total no matter how it is deduped.
     var reg = data.canonicalCount, peopleN, peopleSub;
-    if(!data.usersDenied && reg > 0){
+    if(!data.usersDenied && Number.isFinite(reg) && reg >= 0){
       peopleN = reg;
       peopleSub = 'registered · merged accounts collapsed';
     } else {
@@ -12976,9 +12913,9 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
     return '<div class="sd-forged">'
       +'<div class="sd-forged-pair">'
         +'<div>'
-          +'<div class="sd-forged-l">Workouts forged</div>'
+          +'<div class="sd-forged-l">Activity records</div>'
           +'<div class="sd-forged-v">'+grp(t.allTime)+'</div>'
-          +'<div class="sd-forged-s">every group · all time</div>'
+          +'<div class="sd-forged-s">rollup activity counts · shared group copies can repeat</div>'
         +'</div>'
         +'<div>'
           +'<div class="sd-forged-l">People</div>'
@@ -13006,6 +12943,7 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
 
   // ── 1. PULSE (always live/today) ──
   function buildPulse(data,sets){
+    if(!recentCoverage(data,14))return '<div class="card sd-chart-unavailable">Live pulse is incomplete: recent rollups are missing. Refresh after data is available; no zero totals are inferred.</div>';
     var tm=data.todayMid, todayStr=ymd(data.now.getFullYear(),data.now.getMonth()+1,data.now.getDate());
     var logsToday=data.dayAll[todayStr]||0, wk=0, lastWk=0, activeWk=new Set();
     Object.keys(data.dayAll).forEach(function(ds){
@@ -13014,27 +12952,30 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
       else if(da>=7&&da<=13) lastWk+=data.dayAll[ds];
     });
     data.gpList.forEach(function(e){
-      if(activeWk.has(e.player)) return;
+      var identity=e.uid||('unlinked:'+e.code+'|'+e.player);
+      if(activeWk.has(identity)) return;
       var hit=false;
       e.days.forEach(function(ds){ if(hit) return; var a=daysAgoOf(ds,tm); if(a>=0&&a<=6) hit=true; });
-      if(hit) activeWk.add(e.player);
+      if(hit) activeWk.add(identity);
     });
     // At-risk: current members whose most-recent log is >=4 days ago (or never).
     var atRisk=computeAtRisk(data,sets).length;
-    var chg=lastWk>0?Math.round((wk-lastWk)/lastWk*100):(wk>0?100:0);
+    var chg=lastWk>0?Math.round((wk-lastWk)/lastWk*100):null;
     var arrow=wk>=lastWk?'▲':'▼', col=wk>=lastWk?'var(--green)':'var(--red)';
     function tile(v,label,sub,c){ return '<div class="sd-tile"><div class="sd-tile-v" style="color:'+(c||'var(--gold)')+'">'+v+'</div><div class="sd-tile-l">'+label+'</div>'+(sub?'<div class="sd-tile-s">'+sub+'</div>':'')+'</div>'; }
     return '<div class="shdr" style="margin-top:0">Pulse <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">· live now</span></div>'
       +'<div class="sd-pulse">'
       + tile(logsToday,'Logs today','all groups')
-      + tile(activeWk.size,'Active this week','unique people')
-      + tile(wk+' <span style="font-size:13px;color:'+col+'">'+arrow+Math.abs(chg)+'%</span>','Logs this week','vs '+lastWk+' last wk')
+      + tile(activeWk.size,'Active this week','IDs deduped · unlinked profiles group-scoped')
+      + tile(wk+(chg==null?'':' <span style="font-size:13px;color:'+col+'">'+arrow+Math.abs(chg)+'%</span>'),'Logs this week','vs '+lastWk+' last wk'+(chg==null?' · no percentage baseline':''))
       + tile(atRisk,'At-risk', '0 logs in 4+ days', atRisk>0?'var(--red)':'var(--green)')
       +'</div>';
   }
 
   // ── 1b. GROWTH & PARTICIPATION METRIC CARDS (deduped by canonical userId) ──
   function buildMetrics(data){
+    var previous=prevMonth(data.curM,data.curY);
+    if(data.coverage&&(data.coverage[ymKey(data.curY,data.curM)]!=='loaded'||data.coverage[ymKey(previous.y,previous.m)]!=='loaded'))return '<p class="sd-chart-unavailable">Month comparison unavailable: both monthly rollups are required.</p>';
     var idx=partIndex(data), tm=data.todayMid;
     // C1 — logs this month-to-date vs the SAME window of last month (like-for-like),
     // e.g. Jul 1–11 vs Jun 1–11, with the FULL previous-month total kept as a muted
@@ -13047,17 +12988,18 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
     var cutoffDay=Math.min(todayDay, prevLastDay);
     function monthLogCount(y,m,maxDay){
       var slice=data.rollups[ymKey(y,m)]||{}, sum=0;
-      Object.keys(slice).forEach(function(code){ var c=(slice[code]||{}).counts||{};
-        Object.keys(c).forEach(function(d){ if(maxDay==null||+d<=maxDay) sum+=c[d]||0; }); });
+      Object.keys(slice).forEach(function(code){if(!data.groups.some(function(g){return g.code===code;}))return; var c=(slice[code]||{}).counts||{};
+        Object.keys(c).forEach(function(d){ if((maxDay==null||+d<=maxDay)&&Number.isFinite(c[d])&&c[d]>0) sum+=c[d]; }); });
       return sum;
     }
     var thisMTD=monthLogCount(data.curY,data.curM,todayDay);
     var prevTotal=monthLogCount(pm.y,pm.m,null);
     var prevMTD=monthLogCount(pm.y,pm.m,cutoffDay);
-    var moChg=prevMTD>0?Math.round((thisMTD-prevMTD)/prevMTD*100):(thisMTD>0?100:0);
-    var moUp=thisMTD>=prevMTD, moArrow=moUp?'▲':'▼', moCol=moUp?'var(--green)':'var(--red)';
+    var comparableMTD=monthLogCount(data.curY,data.curM,cutoffDay);
+    var moChg=prevMTD>0?Math.round((comparableMTD-prevMTD)/prevMTD*100):null;
+    var moUp=comparableMTD>=prevMTD, moArrow=moUp?'▲':'▼', moCol=moUp?'var(--green)':'var(--red)';
     var pmAbbr=MONTHS[pm.m-1].slice(0,3), curAbbr=MONTHS[data.curM-1].slice(0,3);
-    var moSub='vs '+pmAbbr+' 1–'+cutoffDay+' · <span style="opacity:.75">'+pmAbbr+' total: '+prevTotal+'</span>';
+    var moSub='Delta compares days 1–'+cutoffDay+' in both months · <span style="opacity:.75">'+pmAbbr+' total: '+prevTotal+'</span>';
     // C2 — two participation rates, both deduped by canonical userId, averaged over the last 7 days, Δ vs prior 7 days
     var platDenom=partDenom(data,'platform',null), actDenom=partDenom(data,'active',null);
     var platNow=avgPart(data,idx,tm,platDenom,null,0,6), platPrev=avgPart(data,idx,tm,platDenom,null,7,13);
@@ -13065,10 +13007,10 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
     function delta(now,prev){ var d=Math.round((now-prev)*10)/10, up=d>=0; return ' <span style="font-size:12px;color:'+(up?'var(--green)':'var(--red)')+'">'+(up?'▲':'▼')+Math.abs(d)+'pp</span>'; }
     function ptcol(v){ return v>=50?'var(--green)':v>=25?'var(--gold)':'var(--red)'; }
     function t3(v,label,sub,c,tip){ return '<div class="sd-tile" title="'+E(tip||'')+'"><div class="sd-tile-v" style="color:'+(c||'var(--gold)')+'">'+v+'</div><div class="sd-tile-l">'+label+'</div>'+(sub?'<div class="sd-tile-s">'+sub+'</div>':'')+'</div>'; }
-    return '<div class="shdr">Growth &amp; Participation <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">· deduped by user</span></div>'
+    return '<div class="shdr">Momentum &amp; participation <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">· logs and people are separate measures</span></div>'
       +'<div class="sd-metrics3">'
-      + t3(thisMTD+' <span style="font-size:13px;color:'+moCol+'">'+moArrow+Math.abs(moChg)+'%</span>','Logs this month',moSub,null,'Month-to-date logs ('+curAbbr+' 1–'+todayDay+') vs the SAME window last month ('+pmAbbr+' 1–'+cutoffDay+'). % delta is like-for-like; "'+pmAbbr+' total" is the full previous month for reference. Prev window clamps to the shorter month. All groups.')
-      + t3((platDenom>0?Math.round(platNow):'—')+'%'+delta(platNow,platPrev),'Platform participation','of all '+platDenom+' registered',ptcol(platNow),'Avg over the last 7 days of (unique people who logged that day ÷ EVERY registered user). The honest headline number — churned users drag it down. Δ vs the prior 7 days, in percentage points. Deduped by canonical userId.')
+      + t3(thisMTD+(moChg==null?'':' <span style="font-size:13px;color:'+moCol+'">'+moArrow+Math.abs(moChg)+'%</span>'),'Logs this month',moSub+(moChg==null?' · no percentage baseline':''),null,'Month-to-date log entries compared with the same dates in the prior month; group copies can repeat. Not unique people.')
+      + t3((!data.usersDenied&&platDenom>0?Math.round(platNow)+'%'+delta(platNow,platPrev):'—'),'Platform participation',data.usersDenied?'Registered count unavailable':'of all '+platDenom+' registered',ptcol(platNow),'Daily linked people divided by today’s registered count; averaged over seven days. Not cohort retention.')
       + t3((actDenom>0?Math.round(actNow):'—')+'%'+delta(actNow,actPrev),'Active participation','of '+actDenom+' active (30d)',ptcol(actNow),'Same computation, but the denominator is only users with ≥1 log in the last 30 days — "of the people still alive, how many showed up?" If platform falls while this holds, the problem is churn; if both fall, it is engagement.')
       +'</div>';
   }
@@ -13090,40 +13032,44 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
         +'<div style="display:flex;gap:6px">'+db('platform','All users')+db('active','Active users')+'</div>'
         +'<span class="sd-sub" style="margin-left:auto">'+denomNote+'</span>'
       +'</div>'
-      +'<div style="position:relative;height:240px"><canvas id="sdPartCanvas"></canvas></div>'
+      +'<div id="sdPartCanvas" class="sd-chart-host"></div>'
       +'<div id="sdPartSummary" class="sd-sub" style="margin-top:8px;text-align:center"></div>';
   }
+  function coverageNote(data){
+    var missing=Object.keys(data.coverage||{}).filter(function(k){return data.coverage[k]!=='loaded';});
+    return '<div class="sd-data-note" role="status"><strong>Data checked '+E(data.now.toLocaleString('en-GB'))+'</strong><span>'+(missing.length?'Incomplete history: '+missing.map(E).join(', ')+'. Missing rollups are not zero activity; totals and check-in signals may be incomplete.':'Loaded rollups available. Counts reflect recorded activity, not app visits.')+'</span></div>';
+  }
+  function recentCoverage(data,days){
+    if(!data.coverage)return true;
+    for(var n=0;n<days;n++){var date=new Date(data.todayMid);date.setDate(date.getDate()-n);if(data.coverage[ymKey(date.getFullYear(),date.getMonth()+1)]!=='loaded')return false;}return true;
+  }
+  function chartSegments(series){
+    var segments=[],run=[];
+    series.forEach(function(p,i){if(p.pct==null){if(run.length)segments.push(run);run=[];}else run.push([40+i*520/29,180-p.pct*1.5]);});
+    if(run.length)segments.push(run);return segments;
+  }
+  function participationSvg(cur,prev){
+    var grid=[0,25,50,75,100].map(function(v){var y=180-v*1.5;return '<line x1="40" x2="560" y1="'+y+'" y2="'+y+'" class="sd-gridline"/><text x="31" y="'+(y+4)+'" text-anchor="end">'+v+'%</text>';}).join('');
+    function lines(series,cls){return chartSegments(series).map(function(points){var path=points.map(function(p){return p.join(',');}).join(' ');return (cls==='sd-series-current'?'<polygon class="sd-series-area" points="'+points[0][0]+',180 '+path+' '+points[points.length-1][0]+',180"/>':'')+'<polyline class="'+cls+'" points="'+path+'"/>'+points.map(function(p){return '<circle class="'+cls+'" cx="'+p[0]+'" cy="'+p[1]+'" r="2"/>';}).join('');}).join('');}
+    var ticks=[0,7,14,21,29].map(function(i){return '<text x="'+(40+i*520/29)+'" y="207" text-anchor="middle">'+E(cur[i].ds.slice(5))+'</text>';}).join('');
+    return '<svg class="sd-line-chart" viewBox="0 0 600 224" role="img" aria-label="Daily participation. Solid line: current 30 days. Dashed line: previous 30 days aligned by period day. Exact dates and values in the table below.">'+grid+lines(prev,'sd-series-previous')+lines(cur,'sd-series-current')+ticks+'</svg>';
+  }
   function renderPartChart(){
-    var data=state.data; if(!data) return;
-    var cv=document.getElementById('sdPartCanvas'); if(!cv||!window.Chart) return;
-    if(state.partChart){ try{ state.partChart.destroy(); }catch(e){} state.partChart=null; }
-    var idx=partIndex(data), tm=data.todayMid;
-    var scope=state.partScope||null, denomMode=state.partDenom||'platform';
-    var denom=partDenom(data,denomMode,scope);
-    var curEnd=new Date(tm), prevEnd=new Date(tm); prevEnd.setDate(prevEnd.getDate()-30);
-    var cur=dailySeries(idx,curEnd,denom,scope,30), prev=dailySeries(idx,prevEnd,denom,scope,30);
-    var labels=[]; for(var i=1;i<=30;i++) labels.push(String(i));
-    var GOLD='#d4af37', BLUE='#4f9cf7', MUT='#8a8a93';
-    state.partChart=new window.Chart(cv.getContext('2d'), {
-      type:'line',
-      data:{ labels:labels, datasets:[
-        { label:'Last 30 days', data:cur.map(function(p){return p.pct;}), borderColor:GOLD, backgroundColor:'rgba(212,175,55,.12)', borderWidth:2, pointRadius:0, pointHoverRadius:4, tension:.25, fill:true, _meta:cur },
-        { label:'Previous 30 days', data:prev.map(function(p){return p.pct;}), borderColor:BLUE, backgroundColor:'rgba(79,156,247,.08)', borderWidth:2, pointRadius:0, pointHoverRadius:4, tension:.25, fill:false, _meta:prev }
-      ]},
-      options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
-        scales:{ y:{ min:0, max:100, ticks:{ callback:function(v){return v+'%';}, color:MUT }, grid:{color:'rgba(255,255,255,.06)'}, title:{display:true,text:'Participation %',color:MUT} },
-                 x:{ ticks:{ color:MUT, maxTicksLimit:10, autoSkip:true }, grid:{display:false}, title:{display:true,text:'Day of period (1–30, aligned)',color:MUT} } },
-        plugins:{ legend:{ labels:{ color:'#c9c9d1', boxWidth:14, font:{size:11} } },
-          tooltip:{ callbacks:{
-            title:function(items){ return 'Day '+((items&&items[0]?items[0].dataIndex:0)+1)+' of period'; },
-            label:function(it){ var meta=it.dataset._meta; if(meta&&meta[it.dataIndex]){ var m=meta[it.dataIndex]; return it.dataset.label+': '+m.pct+'% · '+m.loggers+' unique logged ('+m.ds+')'; } return it.dataset.label+': '+it.formattedValue+'%'; }
-          } } }
-      }
-    });
+    var data=state.data,cv=document.getElementById('sdPartCanvas');if(!data||!cv)return;
+    if(state.partChart){try{state.partChart.destroy();}catch(e){}state.partChart=null;}
+    var idx=partIndex(data),tm=data.todayMid,scope=state.partScope||null,mode=state.partDenom||'platform';
+    var denom=partDenom(data,mode,scope),prevEnd=new Date(tm);prevEnd.setDate(prevEnd.getDate()-30);
+    var cur=dailySeries(idx,tm,denom,scope,30),prev=dailySeries(idx,prevEnd,denom,scope,30);
+    var denied=mode==='platform'&&!scope&&data.usersDenied;
+    [cur,prev].forEach(function(series){series.forEach(function(p){if(denom<=0||denied||(data.coverage&&data.coverage[p.ds.slice(0,7)]!=='loaded'))p.pct=null;});});
+    var available=cur.filter(function(p){return p.pct!=null;}),prior=prev.filter(function(p){return p.pct!=null;});
+    var mean=function(rows){return rows.length?Math.round(rows.reduce(function(n,p){return n+p.pct;},0)/rows.length*10)/10:null;};
+    var avg=mean(available),old=mean(prior);
+    var figure='<div class="sd-chart-head"><div><span class="today-kicker">DAILY PARTICIPATION</span><strong>'+(avg==null?'—':avg+'%')+'</strong><small>average of '+available.length+' available days · today is partial</small></div><div class="sd-chart-legend"><span class="sd-legend-current">Current 30 days</span><span class="sd-legend-previous">Previous 30 days</span></div></div>';
+    var rows=cur.map(function(p,i){var q=prev[i];return '<tr><td>'+p.ds+'</td><td>'+(p.pct==null?'Unavailable':p.loggers+' · '+p.pct+'%')+'</td><td>'+q.ds+'</td><td>'+(q.pct==null?'Unavailable':q.loggers+' · '+q.pct+'%')+'</td></tr>';}).join('');
+    cv.innerHTML=figure+(available.length||prior.length?participationSvg(cur,prev):'<p class="sd-chart-unavailable">Not enough verified data to draw participation. This is not 0%.</p>')+'<details class="sd-chart-table"><summary>View exact dates &amp; values</summary><div><table><caption>Unique linked people · daily participation</caption><thead><tr><th>Current date</th><th>People · rate</th><th>Previous date</th><th>People · rate</th></tr></thead><tbody>'+rows+'</tbody></table></div></details>';
     var sEl=document.getElementById('sdPartSummary');
-    if(sEl){ var avgCur=cur.reduce(function(s,p){return s+p.pct;},0)/30, avgPrev=prev.reduce(function(s,p){return s+p.pct;},0)/30, d=Math.round((avgCur-avgPrev)*10)/10;
-      sEl.innerHTML=(scope?E(data.groupInfo[scope]?data.groupInfo[scope].name:scope):'All groups')+' · avg '+(Math.round(avgCur*10)/10)+'% now vs '+(Math.round(avgPrev*10)/10)+'% prior · <span style="color:'+(d>=0?'var(--green)':'var(--red)')+'">'+(d>=0?'▲':'▼')+Math.abs(d)+'pp</span> · denominator = '+denom+' '+(denomMode==='platform'?'registered':'active')+' users'
-        +(data.usersDenied?' · <span style="color:var(--orange)">users read denied — denominators may be low</span>':''); }
+    if(sEl)sEl.innerHTML=(old==null?'Previous-period average unavailable.':'Previous-period available-day average: '+old+'%.')+' Today’s denominator ('+denom+' '+(mode==='platform'?(scope?'members':'registered people'):'30-day active people')+') is applied to both periods; this is not cohort retention. Unlinked records are excluded. Gaps mean missing data.';
   }
   function refreshPart(){ var el=document.getElementById('sdPartCard'); if(el&&state.data){ el.innerHTML=buildPartInner(state.data); renderPartChart(); } }
   function setPartScope(v){ state.partScope=v||''; refreshPart(); }
@@ -13166,6 +13112,7 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
   }
   function nameLink(name){ return '<span class="sd-name" onclick="window.SuperDash.player(\''+(window.escForInlineJsAttr?window.escForInlineJsAttr(name):E(name))+'\')">'+E(name)+'</span>'; }
   function buildNeedsAttention(data,sets){
+    if(!recentCoverage(data,14))return '<div class="card sd-chart-unavailable">Check-in signals paused while recent history is incomplete.</div>';
     var risk=computeAtRisk(data,sets), danger=computeDanger(data,sets);
     var riskRows=risk.length? risk.map(function(r){
       return '<div class="sd-row"><div>'+nameLink(r.name)+' <span class="sd-sub">'+E(r.group)+'</span></div>'
@@ -13264,10 +13211,11 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
     var combined=new Array(daysIn+1).fill(0);
     var perGroup={};
     Object.keys(selSlice).forEach(function(code){
+      if(!data.groups.some(function(g){return g.code===code;}))return;
       var c=(selSlice[code]||{}).counts||{};
       Object.keys(c).forEach(function(d){
         var dd=+d, n=c[d]||0;
-        if(!(dd>=1&&dd<=daysIn)||!n) return;
+        if(!Number.isInteger(dd)||!(dd>=1&&dd<=daysIn)||!Number.isFinite(n)||n<=0) return;
         combined[dd]+=n;
         (perGroup[code]||(perGroup[code]=new Array(daysIn+1).fill(0)))[dd]+=n;
       });
@@ -13281,6 +13229,7 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
       var codes=Object.keys(perGroup);
       chart=codes.length? codes.map(function(c){
         var gi=data.groupInfo[c], arr=perGroup[c], mx=Math.max(1,...arr.slice(1));
+        mx=maxC; // Shared scale: group charts must not imply equal volume.
         return '<div style="margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)">'
           +'<div style="font-size:11px;color:var(--muted);margin-bottom:3px">'+E(gi?gi.name:c)+' · '+arr.reduce(function(s,n){return s+n;},0)+' logs</div>'+bars(arr,daysIn,mx)
           +'<div class="sd-subh" style="margin:10px 0 6px">Workout types</div>'+workoutDistHtml((selSlice[c]||{}).wo||{})+'</div>';
@@ -13289,7 +13238,8 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
       chart=bars(combined,daysIn,maxC)+'<div style="font-size:11px;color:var(--muted);margin-top:4px;text-align:center">Logs per day · '+combined.reduce(function(s,n){return s+n;},0)+' total</div>';
     }
     // Workout distribution (combined) — same helper the per-group view now uses (C4)
-    var wdHtml=workoutDistHtml(mergeWo(selSlice));
+    var allowedSlice={};data.groups.forEach(function(g){if(selSlice[g.code])allowedSlice[g.code]=selSlice[g.code];});
+    var wdHtml=workoutDistHtml(mergeWo(allowedSlice));
     // Tab clicks per group (selected month)
     var tabHtml=data.groups.map(function(g){
       var gi=data.groupInfo[g.code]; if(!gi) return '';
@@ -13300,14 +13250,20 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
       return '<div class="sd-tabline"><b>'+E(gi.name)+'</b> '+str+'</div>';
     }).join('');
     // In "By group" mode each group already shows its own split above, so skip the combined one.
+    if(data.coverage&&data.coverage[ymKey(data.selY,data.selM)]!=='loaded')return toggle+'<p class="sd-chart-unavailable">This month’s rollup is unavailable. No zero-activity chart is inferred.</p>';
     return toggle+chart
       +(state.trendMode==='group' ? '' : ('<div class="sd-subh">Workout types · '+MONTHS[data.selM-1]+'</div>'+wdHtml))
       +'<div class="sd-subh">Tab usage · '+MONTHS[data.selM-1]+'</div>'+tabHtml;
   }
   function bars(arr,daysIn,mx){
-    var b='<div class="sd-bars">';
-    for(var d=1; d<=daysIn; d++){ var h=Math.round((arr[d]||0)/mx*100); b+='<div class="sd-bar" title="'+d+': '+(arr[d]||0)+'"><div style="height:'+h+'%"></div></div>'; }
-    return b+'</div>';
+    var b='<div class="sd-daily-heading"><span>Daily log entries</span><span>Scale: 0–'+mx+'</span></div><div class="sd-daily-chart">',rows='',now=new Date();
+    for(var d=1;d<=daysIn;d++){
+      var future=new Date(state.selY,state.selM-1,d)>new Date(now.getFullYear(),now.getMonth(),now.getDate());
+      var value=Number.isFinite(arr[d])?Math.max(0,arr[d]):0,h=Math.min(100,value/mx*100),label=MONTHS[state.selM-1]+' '+d;
+      b+='<div class="sd-daily-column'+(future?' is-future':'')+'" title="'+label+': '+(future?'upcoming':value+' log entries')+'"><span class="sd-daily-track"><i style="height:'+(future?0:h)+'%"></i></span><small>'+(d===1||d===daysIn||d%5===0?d:'')+'</small></div>';
+      rows+='<tr><td>'+label+'</td><td>'+(future?'Upcoming':value)+'</td></tr>';
+    }
+    return b+'</div><details class="sd-chart-table"><summary>View daily counts</summary><div><table><caption>Log entries, not unique people or deduplicated workouts</caption><tbody>'+rows+'</tbody></table></div></details>';
   }
   // Merge per-group {key:{label,n}} workout distributions into one (first label
   // variant wins, counts sum) — feeds the combined Trends split.
@@ -13576,6 +13532,6 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
 })();
 </script>
 <script src="src/ui/sports-icons.js"></script>
-<script src="src/ui/today.js"></script>
+<script src="src/ui/today.js?v=f025-1"></script>
 </body>
 </html>

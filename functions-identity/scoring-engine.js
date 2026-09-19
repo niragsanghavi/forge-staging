@@ -1,3 +1,5 @@
+// Byte-preserved browser scoring engine below; supplied an explicit context on server.
+const window={};
 // Season-only config + roster accessors, now context-aware so the global
 // leaderboard can score players in OTHER groups by passing their data in.
 // Default (no ctx) reads the live globals exactly as before — so every existing
@@ -530,3 +532,4 @@ window.score = score;
 window.teamTotal = teamTotal;
 window.teamKmProgress = teamKmProgress;
 window.KM_CONSTS = { bonus:KM_CONTRIBUTOR_BONUS, min:KM_MIN_CONTRIBUTION, maxPerLog:KM_MAX_PER_LOG };
+module.exports={score:window.score,scoreSoloDays:window.scoreSoloDays};

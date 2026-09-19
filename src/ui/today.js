@@ -85,7 +85,9 @@
     const story=$('forgeMonthStory');if(story&&actions.nextElementSibling!==story)home.insertBefore(story,actions.nextElementSibling);
     const scope=$('forgeTrendScope');if(scope&&window.season)scope.textContent=`Active season: ${MIR_MONTHNAMES[season.month-1]} ${season.year}. Calendar history above has its own month breakdown.`;
     if($('forgeTodayDetails'))return;
-    const details=node('details','today-details');details.id='forgeTodayDetails';details.append(node('summary','','Season points & all-time trends'));
+    const details=node('details','today-details');details.id='forgeTodayDetails';
+    const summary=node('summary','','Season points & all-time trends');
+    summary.append(node('span','forge-expand-open','Explore +'),node('span','forge-expand-close','Close −'));details.append(summary);
     const trendScope=node('p','today-muted','Active-season charts and all-time workout tools. Calendar history above has its own month breakdown.');trendScope.id='forgeTrendScope';details.append(trendScope);
     ['goalRingCard','mirChartCard','mirCaptionCard','mirMixCard','mirLiftCard'].forEach(id=>{const el=$(id);if(el)details.append(el);});
     home.append(details);
@@ -116,11 +118,12 @@
     const groups=button(`Viewing ${(groupData&&groupData.name)||groupCode}`,openGroups,'today-button today-group-control');groups.dataset.todayGroups='';host.append(groups);
     host.append(node('p','today-kicker',now.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'})));
     const hero=node('div','today-hero'),words=node('div','');words.append(node('h1','',pending?'Sending your workout.':myToday.length?'Already moved today?':'What moved you today?'),node('p','today-lede',pending?'Waiting for confirmation. Your receipt is just below.':myToday.length?'A workout is showing here for today. Add another if it happened.':'A walk, a lift, ten quiet minutes. It all counts.'));
-    const mascot=node('img','today-forgeling');mascot.src='assets/forgeling.webp';mascot.alt='Forgeling, Forge’s quiet workout companion';hero.append(words,mascot);host.append(hero);
+    const mascot=node('img','today-forgeling');mascot.src='assets/forgeling.webp?v=f025-1';mascot.alt='Forgeling, Forge’s quiet workout companion';hero.append(words,mascot);host.append(hero);
     const actions=node('div','today-workouts');recent().forEach(w=>{const b=button('',()=>start(w),'today-workout');b.dataset.todayWorkout=w;b.disabled=pending;b.setAttribute('aria-label',pending?`${w} unavailable while the current workout is sending`:`Log ${w} now`);b.append(sport(w),node('span','today-workout-label',w));actions.append(b);});actionsHost.append(actions);
     const full=button(pending?'Waiting for confirmation':'Choose another workout',()=>start(),'today-button today-button-primary');full.dataset.todayFullPicker='';full.disabled=pending;actionsHost.append(full);
     if(window.ForgeExperience){const health=button('',()=>ForgeExperience.openHealth(),'today-button forge-health-shortcut');health.innerHTML=ForgeExperience.icon('health')+`<span>${typeof isNative==='function'&&isNative()?ForgeExperience.healthName():'Health connections'}<small>${typeof isNative==='function'&&isNative()?(healthEnabled()?'Review connection & workout suggestions':'Connect for workout suggestions'):'Apple Health / Health Connect · phone app only'}</small></span>`;actionsHost.append(health);}
     const destination=button(`${sessions().length} log destination${sessions().length===1?'':'s'} · review`,openDestinations,'today-link');destination.dataset.todayDestinations='';actionsHost.append(destination);
+    if(window.ForgeExperience){const steps=button('',()=>{showTab('lb');$('stepChallengeCard')?.scrollIntoView({block:'start',behavior:'auto'});},'today-button forge-steps-button');steps.innerHTML='<svg viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="10" cy="11" rx="4" ry="7" transform="rotate(-20 10 11)"/><ellipse cx="11" cy="23" rx="3" ry="4" transform="rotate(-20 11 23)"/><ellipse cx="23" cy="8" rx="4" ry="7" transform="rotate(20 23 8)"/><ellipse cx="22" cy="20" rx="3" ry="4" transform="rotate(20 22 20)"/></svg><span>Steps Challenge</span><span aria-hidden="true">→</span>';actionsHost.append(steps);}
     const scope=node('section','today-scope');const sc=score(me.name);scope.append(node('p','today-kicker',`${(groupData&&groupData.name)||groupCode} · ${MIR_MONTHNAMES[season.month-1]}`),node('p','today-scope-label','In this group'));
     const stats=node('div','today-stats');[[sc.streak,'day streak'],[sc.total,'points']].forEach(([v,l])=>{const x=node('div','');x.append(node('strong','',String(v)),node('span','',l));stats.append(x);});scope.append(stats);actionsHost.append(scope);
     arrangeDetails();renderReceipt();
@@ -135,7 +138,7 @@
     if(receipt){receipt.hidden=true;receipt.replaceChildren();}
   }
   function init(){enhanceSheet();arrangeDetails();render();}
-  window.ForgeToday={render,clear,renderReceipt,openDestinations,openGroups,openConfirmedReport,openDialog};
+  window.ForgeToday={render,clear,renderReceipt,openDestinations,openGroups,openConfirmedReport,openDialog,closeDialog};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
 
@@ -155,7 +158,59 @@
     theme:'M12 6a6 6 0 0 0 0 12 M12 3v18 M7 4l-1-2 M4 7L2 6 M3 12H1 M4 17l-2 1 M7 20l-1 2 M16 4a8 8 0 0 0 5 14 8 8 0 0 1-5-14',
     health:'M12 21S3 15 3 8a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 7-9 13-9 13 M5 11h4l2-4 3 8 2-4h3'
   };
-  const icon=key=>`<svg class="forge-ui-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="${paths[key]||paths.home}"/></svg>`;
+  const icon=key=>key==='theme'?'<span class="forge-day-night" aria-hidden="true"><span>🌞</span><span>🌚</span></span>':key==='health'?'<span class="forge-health-heart" aria-hidden="true">♥</span>':`<svg class="forge-ui-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="${paths[key]||paths.home}"/></svg>`;
+  // Use only existing approved artwork; adjacent text differentiates muscles
+  // that share an Arms/Upper body illustration. Tags never change scoring.
+  const muscleOptions=['Chest','Back','Shoulders','Arms','Biceps','Triceps','Legs','Core','Glutes','Full body'];
+  const muscleArt={Shoulders:'Upper body',Biceps:'Arms',Triceps:'Arms',Glutes:'Legs','Full body':'Full body workout'};
+  function muscleTags(note){
+    const aliases={bicep:'Biceps',tricep:'Triceps',shoulder:'Shoulders','full body workout':'Full body'};
+    return [...new Set(String(note||'').split(',').map(s=>s.trim().toLowerCase()).map(s=>muscleOptions.find(m=>m.toLowerCase()===s)||aliases[s]).filter(Boolean))];
+  }
+  function muscleIcon(name){return ForgeSports.icon(muscleArt[name]||name);}
+  function gymBadge(tags){
+    const unique=[...new Set(tags)].filter(t=>muscleOptions.includes(t)),tier=Math.min(unique.length,3);
+    const spots={Chest:[50,30],Back:[50,43],Shoulders:[23,24],Arms:[16,46],Biceps:[20,36],Triceps:[81,38],Core:[50,55],Glutes:[68,65],Legs:[35,79],'Full body':[76,87]};
+    return `<span class="forge-gym-badge forge-gym-tier-${tier} forge-anatomy" aria-hidden="true"><svg viewBox="0 0 100 120" fill="none"><circle cx="50" cy="12" r="9"/><path d="M35 28 Q50 22 65 28 L83 56 Q86 62 80 64 L64 43 L62 65 L70 108 Q71 115 64 115 L50 78 L36 115 Q29 115 30 108 L38 65 L36 43 L20 64 Q14 62 17 56 Z"/></svg>${unique.map(tag=>`<span class="forge-anatomy-tag" data-muscle="${esc(tag)}" style="left:${spots[tag][0]}%;top:${spots[tag][1]}%">${muscleIcon(tag)}</span>`).join('')}</span>`;
+  }
+  function gymModel(M){
+    const byDay={},groups=new Map();
+    for(const [key,logs] of Object.entries(M.byDay||{})){
+      const day=Number(key);if(!Number.isInteger(day)||day<1||day>M.days)continue;
+      const lifts=logs.filter(l=>!l.voided&&(l.workouts||[]).some(w=>window.isLiftWorkout?.(w)));
+      if(!lifts.length)continue;
+      const tags=[...new Set(lifts.flatMap(l=>muscleTags(l.note)))];byDay[day]={tags,sessions:lifts.length};
+      for(const tag of tags){const g=groups.get(tag)||{name:tag,days:[],last:day};g.days.push(day);g.last=Math.max(g.last,day);groups.set(tag,g);}
+    }
+    return {byDay,groups:[...groups.values()].sort((a,b)=>b.days.length-a.days.length||a.name.localeCompare(b.name))};
+  }
+  let gymRequest=0;
+  async function openGymHistory(month,year,body){
+    const now=new Date(),date=new Date(Number(year),Number(month)-1,1),latest=new Date(now.getFullYear(),now.getMonth(),1);
+    if(!Number.isFinite(date.getTime())||date>latest)return;
+    if(!body){body=document.createElement('div');body.className='today-dialog-body';ForgeToday.openDialog('Your gym calendar',body);}
+    const request=++gymRequest,version=personalVersion,context=personalContext();
+    const current=()=>request===gymRequest&&version===personalVersion&&context.key===personalContext().key&&body.isConnected;
+    const nav=`<div class="forge-recap-nav"><button type="button" class="today-link" data-gym-prev aria-label="Previous gym month">← Previous month</button><strong>${esc(date.toLocaleDateString('en-GB',{month:'long',year:'numeric'}))}</strong><button type="button" class="today-link" data-gym-next ${+date===+latest?'disabled':''} aria-label="Next gym month">Next →</button></div>`;
+    const bind=()=>{body.querySelector('[data-gym-prev]').onclick=()=>openGymHistory(month-1,year,body);body.querySelector('[data-gym-next]').onclick=()=>openGymHistory(month+1,year,body);};
+    body.innerHTML=nav+'<p role="status">Loading your gym diary…</p>';bind();
+    try{
+      const result=await loadPersonalMonth(context,date.getMonth()+1,date.getFullYear());if(!current())return;
+      if(result.unavailable)throw Error('History unavailable');
+      const M=mirMonthDesc(date.getMonth()+1,date.getFullYear(),true,result.logs);
+      body.innerHTML=nav+gymJournal(M,result.partial)+(result.partial?'<p class="forge-history-warning">Some records could not be checked. This calendar is incomplete.</p>':'')+'<p class="today-muted">Across your linked groups. Tap a recorded day for its workouts. Empty months remain browsable.</p>';bind();
+      body.querySelectorAll('[data-day]').forEach(b=>b.onclick=()=>openDay(M,Number(b.dataset.day)));
+    }catch(e){if(!current())return;body.innerHTML=nav+'<p>History could not be loaded—not zero workouts.</p><button type="button" class="today-button" data-gym-retry>Try again</button>';bind();body.querySelector('[data-gym-retry]').onclick=()=>{invalidateHistory();openGymHistory(month,year,body);};}
+  }
+  function gymJournal(M,partial){
+    const model=gymModel(M),offset=(new Date(M.year,M.month-1,1).getDay()+6)%7;
+    const days=Array.from({length:M.days},(_,i)=>i+1);
+    const today=new Date(),current=M.year===today.getFullYear()&&M.month===today.getMonth()+1;
+    const oldest=model.groups.slice().sort((a,b)=>a.last-b.last)[0];
+    const gap=oldest?today.getDate()-oldest.last:0;
+    const reminder=!partial&&current&&model.groups.length>1&&gap>=4?`<p class="forge-gym-nudge">${esc(oldest.name)} last appeared ${gap} days ago. Still in the rotation? <small>Based on this month’s tags, not a training recommendation.</small></p>`:'';
+    return `${reminder}<p class="forge-explainer">Your training diary. More tagged groups build a fuller badge—not extra points or a workout rating.</p><div class="forge-muscle-summary">${model.groups.map(g=>`<span>${muscleIcon(g.name)}<b>${esc(g.name)}</b><small>${g.days.length} ${g.days.length===1?'day':'days'}</small></span>`).join('')}</div><div class="forge-gym-calendar" aria-label="Gym calendar for ${esc(M.label)} ${M.year}">${['M','T','W','T','F','S','S'].map(d=>`<span class="forge-gym-weekday" aria-hidden="true">${d}</span>`).join('')}${'<span aria-hidden="true"></span>'.repeat(offset)}${days.map(day=>{const entry=model.byDay[day];return entry?`<button type="button" data-day="${day}" aria-label="${esc(M.label)} ${day}: ${entry.sessions} strength ${entry.sessions===1?'session':'sessions'}; ${esc(entry.tags.join(', ')||'muscles not tagged')}"><b>${day}</b>${gymBadge(entry.tags)}</button>`:`<span class="forge-gym-empty"><b>${day}</b><span aria-hidden="true">·</span></span>`;}).join('')}</div>`;
+  }
   function monthStats(M){
     const activities=new Map(),gym=[];let count=0;
     const days=Object.keys(M.byDay||{}).map(Number).filter(d=>Number.isInteger(d)&&d>=1&&d<=M.days).sort((a,b)=>a-b);
@@ -234,7 +289,7 @@
     personalPending.set(key,p);try{return await p;}finally{personalPending.delete(key);}
   }
   function invalidateHistory(){personalVersion++;personalCache.clear();monthRequest++;}
-  function cancelHistory(){monthRequest++;}
+  function cancelHistory(){monthRequest++;gymRequest++;cancelRecap();}
   async function renderMonth(M){
     const host=$('forgeMonthStory');if(!host)return;
     const context=personalContext(),request=++monthRequest,scope=`${context.key}|${M.year}-${M.month}`;
@@ -260,8 +315,9 @@
       <p class="forge-explainer">${M.readonly?'Past month · read-only. ':'Month in progress. '}Your personal workouts across groups linked to this profile. Matching same-day activity entries shared to several groups count once; separate entries within a group remain separate.</p>
       ${partial?'<p class="forge-history-warning" role="status">Partial history: some records could not be checked, or your profile is not linked yet. These are not complete monthly totals.</p><button type="button" class="today-button" data-history-retry>Retry personal history</button>':''}
       <h3>Workout breakdown</h3><div class="forge-activity-bars">${data.activities.length?data.activities.map((a,i)=>`<button type="button" class="forge-activity-row" data-activity="${i}" aria-label="Show ${esc(a.label)} dates in ${esc(label)}">${ForgeSports.icon(a.label)}<span><strong>${esc(a.label)}</strong><span class="forge-bar"><i style="width:${Math.round(a.count/data.count*100)}%"></i></span></span><b>${a.count}<small>${Math.round(a.count/data.count*100)}%</small></b></button>`).join(''):'<p class="today-muted">No recorded workouts for this month. Earlier months are available with the arrows above.</p>'}</div>
-      <details class="forge-gym-details"><summary>Gym & strength journal <span>${data.gym.length} ${data.gym.length===1?'entry':'entries'}</span></summary><p class="forge-explainer">Your logged sessions and optional notes—not inferred sets, reps or muscle groups.</p>${data.gym.length?data.gym.map(g=>`<button type="button" class="forge-journal-row" data-day="${g.day}"><b>${esc(M.label.slice(0,3))} ${g.day}</b><span>${esc(g.note)}</span><span aria-hidden="true">↗</span></button>`).join(''):'<p class="today-muted">No strength sessions recorded this month. Choose Gym when logging to add an optional muscle-group note.</p>'}</details>`;
+      <details class="forge-gym-details"><summary>Gym & strength calendar <span>${data.gym.length} ${data.gym.length===1?'entry':'entries'} · open calendar</span></summary>${gymJournal(M,partial)}<button type="button" class="today-button today-button-secondary" data-gym-history>Browse previous months →</button>${data.gym.length?'':'<p class="today-muted">No strength sessions recorded this month. Choose Gym when logging to add optional muscle tags.</p>'}</details>`;
     host.querySelector('.forge-gym-details').open=!!expanded;
+    host.querySelector('[data-gym-history]')?.addEventListener('click',()=>openGymHistory(M.month,M.year));
     host.querySelector('[data-history-retry]')?.addEventListener('click',()=>{invalidateHistory();renderMonth(M);});
     host.querySelectorAll('[data-day]').forEach(b=>b.addEventListener('click',()=>openDay(M,Number(b.dataset.day))));
     host.querySelectorAll('[data-activity]').forEach(b=>b.addEventListener('click',()=>{
@@ -271,6 +327,86 @@
       ForgeToday.openDialog(`${a.label} · ${M.label}`,body);
     }));
     if(focused){const selector=focused.day?`[data-day="${Number(focused.day)}"]`:focused.activity!=null?`[data-activity="${Number(focused.activity)}"]`:'.forge-gym-details summary';host.querySelector(selector)?.focus({preventScroll:true});}
+  }
+  function recapRange(kind,offset=0,now=new Date()){
+    offset=Math.min(0,Math.trunc(Number(offset)||0));
+    const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    let start,end;
+    if(kind==='week'){
+      start=new Date(today);start.setDate(start.getDate()-(start.getDay()+6)%7+offset*7);
+      end=new Date(start);end.setDate(end.getDate()+6);
+    }else{start=new Date(today.getFullYear(),today.getMonth()+offset,1);end=new Date(start.getFullYear(),start.getMonth()+1,0);}
+    return {start,end,through:end>today?today:end,kind:kind==='week'?'week':'month',offset};
+  }
+  function recapSummary(logs,range){
+    const dayKey=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const byDay=new Map(),types=new Map();let sessions=0;
+    for(const log of personalSessions(logs)){
+      const date=new Date(log.year,log.month-1,log.day);if(date<range.start||date>range.through)continue;
+      sessions++;const key=dayKey(date);byDay.set(key,(byDay.get(key)||0)+1);
+      for(const w of log.workouts||[])types.set(w,(types.get(w)||0)+1);
+    }
+    const days=[];
+    for(let d=new Date(range.start);d<=range.end;d.setDate(d.getDate()+1))days.push({key:dayKey(d),day:d.getDate(),weekday:d.toLocaleDateString('en-GB',{weekday:'short'}),count:byDay.get(dayKey(d))||0,future:d>range.through});
+    return {sessions,activeDays:byDay.size,days,types:[...types].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))};
+  }
+  let recapRequest=0;
+  function cancelRecap(){recapRequest++;}
+  async function openRecap(kind,offset=0){
+    const host=$('forgePersonalRecap');if(!host)return;
+    const request=++recapRequest,version=personalVersion,context=personalContext(),range=recapRange(kind,offset);
+    const current=()=>request===recapRequest&&version===personalVersion&&context.key===personalContext().key&&host.isConnected;
+    host.innerHTML='<p class="today-muted" role="status">Gathering your personal recap…</p>';
+    const fmt=d=>d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+    document.querySelectorAll('[data-recap-kind]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.recapKind===range.kind)));
+    try{
+      const months=[];for(let d=new Date(range.start.getFullYear(),range.start.getMonth(),1);d<=range.through;d.setMonth(d.getMonth()+1))months.push({month:d.getMonth()+1,year:d.getFullYear()});
+      const results=await Promise.all(months.map(m=>loadPersonalMonth(context,m.month,m.year)));if(!current())return;
+      if(results.every(r=>r.unavailable))throw Error('History unavailable');
+      const partial=results.some(r=>r.partial||r.unavailable),data=recapSummary(results.flatMap(r=>r.logs),range);
+      host.innerHTML=`<div class="forge-recap-heading"><div><p class="today-kicker">${range.kind==='week'?'WEEKLY':'MONTHLY'} RECAP · ${offset===0?'SO FAR':'PAST PERIOD'}</p><h3>${esc(fmt(range.start))} – ${esc(fmt(range.end))}</h3></div>${ForgeSports.icon(data.types[0]?.[0]||'Gym')}</div><div class="forge-month-numbers"><div><b>${data.activeDays}</b><span>days you moved</span></div><div><b>${data.sessions}</b><span>workout entries</span></div><div><b>${data.types.length}</b><span>activity types</span></div></div><p class="forge-explainer">Across groups linked to your profile. Shared copies count once. ${partial?'Some history is unavailable; these totals are incomplete.':'Based on recorded workouts—not a fitness score.'}</p><div class="forge-recap-days">${data.days.map(d=>`<span class="${d.count?'is-recorded':''} ${d.future?'is-future':''}" title="${esc(d.key)}: ${d.future?'upcoming':d.count+' workout entries'}"><small>${esc(d.weekday)}</small><b>${d.day}</b><span>${d.future?'–':d.count?'●':'·'}</span></span>`).join('')}</div><div class="forge-recap-mix">${data.types.map(([name,n])=>`<span>${ForgeSports.icon(name)}<b>${esc(name)}</b><small>${n}</small></span>`).join('')||'<p class="today-muted">No workouts recorded in this period. That is a record, not a verdict.</p>'}</div><div class="forge-recap-nav"><button type="button" class="today-link" data-recap-prev>← Previous ${range.kind}</button><button type="button" class="today-link" data-recap-next ${range.offset===0?'disabled':''}>Next ${range.kind} →</button>${partial?'<button type="button" class="today-link" data-recap-retry>Retry missing history</button>':''}</div>`;
+      host.querySelector('[data-recap-prev]').onclick=()=>openRecap(range.kind,range.offset-1);
+      host.querySelector('[data-recap-next]').onclick=()=>openRecap(range.kind,range.offset+1);
+      host.querySelector('[data-recap-retry]')?.addEventListener('click',()=>{invalidateHistory();openRecap(range.kind,range.offset);});
+    }catch(e){if(!current())return;host.innerHTML='<p class="today-muted">The recap could not be loaded. This does not mean zero workouts.</p><button type="button" class="today-link" data-recap-retry>Try again</button>';host.querySelector('[data-recap-retry]').onclick=()=>{invalidateHistory();openRecap(kind,offset);};}
+  }
+  function profileStats(stats,streak,name){
+    const n=v=>Number.isFinite(Number(v))?Math.max(0,Math.trunc(Number(v))):0;
+    return `<div class="forge-profile-heading"><div><p class="today-kicker">YOUR TRAINING RECORD</p><h2>${esc(name||'Your Forge')}</h2><p class="today-muted">Small efforts. A growing story.</p></div><img src="assets/forgeling.webp?v=f025-1" alt="Happy Forgeling"></div><div class="forge-profile-record"><div class="forge-profile-total">${ForgeSports.icon('Gym')}<b>${n(stats.totalWorkouts)}</b><span>workouts logged</span><small>Lifetime profile total</small></div><div class="forge-profile-streak">${ForgeSports.flame()}<b>${n(streak)} <small>days</small></b><span>current streak</span><p>${streak?'One day at a time.':'Your next chapter can start any day.'}</p></div><div class="forge-profile-milestone"><b>${n(stats.longestStreak)} <small>days</small></b><span>longest streak</span></div><div class="forge-profile-milestone"><b>${n(stats.monthsLogged)}</b><span>months with a workout</span></div></div>`;
+  }
+  function soloSummary(logs,range){
+    const end=range.through;
+    return {...window.scoreSoloDays(personalSessions(logs),range.start.getFullYear(),range.start.getMonth()+1,end.getDate()),rank:null};
+  }
+  let soloRequest=0;
+  async function openSolo(offset=0,body){
+    if(window.FEATURE_GOOGLE_AUTH&&window.ForgeSolo)return window.ForgeSolo.open();
+    if(!body){body=document.createElement('div');body.className='today-dialog-body';ForgeToday.openDialog('Solo · your own lane',body);}
+    const request=++soloRequest,version=personalVersion,context=personalContext(),range=recapRange('month',offset);
+    const current=()=>request===soloRequest&&version===personalVersion&&context.key===personalContext().key&&body.isConnected;
+    body.innerHTML='<p role="status">Gathering your personal workout days…</p>';
+    try{
+      const result=await loadPersonalMonth(context,range.start.getMonth()+1,range.start.getFullYear());if(!current())return;
+      if(result.unavailable)throw Error('History unavailable');
+      const data=soloSummary(result.logs,range);
+      body.innerHTML=`<p class="today-kicker">SOLO · ${esc(range.start.toLocaleDateString('en-GB',{month:'long',year:'numeric'}))}</p><h2>Your effort. Your own lane.</h2><div class="forge-month-numbers"><div><b>${data.days}</b><span>workout days</span></div><div><b>${data.base}</b><span>base points · 4 per day</span></div><div><b>${data.bonus}</b><span>streak points · +1, +2, +3 max</span></div></div><p class="forge-history-warning">Personal rules preview · ${data.total} points. Not an active competition or published rank. This never changes your group points and never enters a group leaderboard.${result.partial?' Some history is missing; the score is incomplete.':''}</p><p class="today-muted">4 base points per workout day, plus a daily streak bonus of 1, 2, then 3 (capped). A missed day resets the run; each month starts a new run. Uses your existing personal workout history. Standalone solo enrolment and its separate leaderboard are not enabled yet.</p><div class="forge-recap-nav"><button type="button" class="today-link" data-solo-prev>← Previous month</button><button type="button" class="today-link" data-solo-next ${range.offset===0?'disabled':''}>Next month →</button></div>`;
+      body.querySelector('[data-solo-prev]').onclick=()=>openSolo(range.offset-1,body);body.querySelector('[data-solo-next]').onclick=()=>openSolo(range.offset+1,body);
+    }catch(e){if(!current())return;body.innerHTML='<p>Personal history is unavailable—not zero effort.</p><button class="today-button" data-solo-retry>Try again</button>';body.querySelector('[data-solo-retry]').onclick=()=>{invalidateHistory();openSolo(offset,body);};}
+  }
+  function loggingHelp(){
+    const body=document.createElement('div');body.className='today-dialog-body forge-companion';
+    body.innerHTML='<img src="assets/forgeling.webp?v=f025-1" alt="Happy Forgeling"><h2>One workout. Less paperwork.</h2><ol><li>Pick the day you actually moved.</li><li>Choose your activities. For Gym, add optional muscle tags—the body fills in as you choose.</li><li>Review the destination groups, then save once.</li><li>Wait for the confirmed receipt. Pending means still sending; it is not a second workout.</li></ol><p>Health suggestions follow the same review-and-confirm rule. A connection alone does not prove a workout was logged.</p><button type="button" class="today-button" data-log-guide-close>Got it · back to logging</button>';
+    ForgeToday.openDialog('Forgeling’s logging guide',body);body.querySelector('[data-log-guide-close]').onclick=()=>ForgeToday.closeDialog();
+  }
+  function announcementPreview(title,message,action='none'){
+    const body=document.createElement('div');body.className='today-dialog-body forge-companion';
+    body.innerHTML=`<img src="assets/forgeling.webp?v=f025-1" alt="Happy Forgeling"><p class="today-kicker">LOCAL PREVIEW · NOT SENT</p><h2>${esc(String(title||'A small Forge update').trim().slice(0,60))}</h2><p class="forge-announcement-copy">${esc(String(message||'See what’s new this week.').trim().slice(0,500))}</p><button type="button" class="today-button" data-announcement-action>${action==='guide'?'Show me around':action==='log'?'Help me log':'Got it'}</button><p class="today-muted">Publishing is disabled until a server-authorized announcement channel is ready. This preview reaches only this screen.</p>`;
+    ForgeToday.openDialog('A note from Forge',body);body.querySelector('[data-announcement-action]').onclick=()=>{ForgeToday.closeDialog();if(action==='guide')window.startTour?.(true);else if(action==='log')loggingHelp();};
+  }
+  function announcementComposer(){
+    const body=document.createElement('div');body.className='today-dialog-body';
+    body.innerHTML='<p class="today-kicker">IN-APP ANNOUNCEMENTS · LOCAL DRAFT</p><label for="forgeDraftTitle">Title</label><input id="forgeDraftTitle" maxlength="60" value="A little more Forge"><label for="forgeDraftBody">Message</label><textarea id="forgeDraftBody" maxlength="500" rows="4">Your calendar, gym diary and points report have a new home. Forgeling can show you around.</textarea><label for="forgeDraftAction">Forgeling action</label><select id="forgeDraftAction"><option value="guide">App tour</option><option value="log">Logging help</option><option value="none">Dismiss only</option></select><button class="today-button" data-announcement-preview>Preview popup</button><p class="forge-history-warning">Not saved or sent. Publishing requires server authorization, audience rules, expiry and per-person dismissal. A founder PIN alone must not grant publishing rights.</p>';
+    ForgeToday.openDialog('Draft an in-app update',body);body.querySelector('[data-announcement-preview]').onclick=()=>announcementPreview(body.querySelector('#forgeDraftTitle').value,body.querySelector('#forgeDraftBody').value,body.querySelector('#forgeDraftAction').value);
   }
   function healthName(){
     const c=window.Capacitor,platform=c&&(typeof c.getPlatform==='function'?c.getPlatform():c.platform);
@@ -283,6 +419,7 @@
   function renderFAQ(){
     const host=$('forgeFAQ');if(!host||host.dataset.ready)return;host.dataset.ready='true';
     const items=[
+      ['Keep your workout history with you','Other',window.FEATURE_GOOGLE_AUTH?'In Profile, link Google'+(window.FEATURE_APPLE_AUTH?' or Apple':'')+' and confirm your existing Forge PIN once. Linking helps protect access to your history and recover it on another phone. Your groups and workouts stay in place. New members start with provider sign-in. Choose your own account; do not share your PIN.':'Google and Apple linking is being prepared. When available, it will help protect access to your workout history and recover it on another phone. Keep using your existing sign-in for now.'],
       ['Log without the homework','Walk','Tap a calendar day or a workout icon. A confirmed receipt lists the groups that received it. “Sending” does not mean saved. Add another activity only if you actually did it.'],
       ['Where are previous months?','Yoga','Use the labelled arrows above your calendar. The workout breakdown follows the month you are viewing. Tap a logged past day to read its activities and notes; closed months cannot be edited.'],
       ['What does the month graph mean?','Run','The cumulative chart counts workout days, not calories, steps or fitness improvement. Multiple activities on one day still count as one day. Its heading identifies the active season; calendar history has its own monthly breakdown.'],
@@ -294,7 +431,7 @@
       ['Who can see me on All Forge?','Team sport','The People board uses explicit visibility consent. Your best group score is used rather than adding all your memberships. Group averages are labelled; different group rules mean this is not a universal fitness ranking.'],
       ['Need a hand?','Other','Replay the Forgeling tour below, or contact team@goforge.in. If data looks stale, use Refresh group first. Connection repair is a separate troubleshooting action, not the normal refresh button.']
     ];
-    host.innerHTML=`<div class="forge-guide-heading"><img src="assets/forgeling.webp" alt="Forgeling"><div><p class="today-kicker">THE FIELD GUIDE</p><h2>A little help. Whenever.</h2><p class="today-muted">The answers stay here after Forgeling hops off.</p></div></div>`+items.map(([title,art,copy])=>`<details class="forge-faq-item"><summary>${ForgeSports.icon(art)}<span>${title}</span></summary><p>${esc(copy)}</p></details>`).join('')+'<div class="forge-help-actions"><button type="button" class="today-button" onclick="startTour(true)">Walk me through Forge</button><button type="button" class="today-link" onclick="confirmConnReset()">Connection troubleshooting</button></div>';
+    host.innerHTML=`<div class="forge-guide-heading"><img src="assets/forgeling.webp?v=f025-1" alt="Forgeling"><div><p class="today-kicker">THE FIELD GUIDE</p><h2>A little help. Whenever.</h2><p class="today-muted">The answers stay here after Forgeling hops off.</p></div></div>`+items.map(([title,art,copy])=>`<details class="forge-faq-item"><summary>${ForgeSports.icon(art)}<span>${title}</span></summary><p>${esc(copy)}</p></details>`).join('')+'<div class="forge-help-actions"><button type="button" class="today-button" onclick="startTour(true)">Walk me through Forge</button><button type="button" class="today-link" onclick="confirmConnReset()">Connection troubleshooting</button></div>';
   }
   function enhanceShell(){
     if(window.IS_STAGING)document.body.classList.add('forge-staging-ui');
@@ -317,6 +454,108 @@
     const theme=$('themeToggle');if(theme){theme.innerHTML=icon('theme');theme.setAttribute('aria-label','Switch light or dark theme');}
     renderFAQ();
   }
-  window.ForgeExperience={monthStats,renderMonth,openDay,healthName,openHealth,renderFAQ,enhanceShell,icon,personalSessions,personalContext,loadPersonalMonth,invalidateHistory,cancelHistory};
+  window.ForgeExperience={monthStats,renderMonth,openDay,healthName,openHealth,renderFAQ,enhanceShell,icon,personalSessions,personalContext,loadPersonalMonth,invalidateHistory,cancelHistory,muscleOptions,muscleTags,muscleIcon,gymBadge,gymModel,gymJournal,openGymHistory,recapRange,recapSummary,openRecap,cancelRecap,profileStats,soloSummary,openSolo,loggingHelp,announcementPreview,announcementComposer};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',enhanceShell);else enhanceShell();
+})();
+
+/* Standalone solo: provider-owned daily records, never group scoring writes. */
+(() => {
+  'use strict';
+  let epoch=0,model=null,scope={},saving=false;
+  const root=()=>document.getElementById('soloRoot');
+  const node=(tag,text,cls='')=>{const n=document.createElement(tag);n.textContent=text||'';if(cls)n.className=cls;return n;};
+  const button=(text,fn)=>{const b=node('button',text,'today-button');b.type='button';b.onclick=fn;return b;};
+  const uid=()=>window.auth?.currentUser&&!auth.currentUser.isAnonymous?auth.currentUser.uid:null;
+  const alive=(token,actor)=>token===epoch&&uid()===actor&&document.getElementById('screen-solo')?.classList.contains('active');
+  const message=text=>{const el=document.getElementById('soloStatus');if(el)el.textContent=text;};
+  function shell(){
+    const el=root();el.replaceChildren();
+    const head=node('header','','solo-heading');head.append(node('h1','Forge · Solo'),button('Group mode',()=>{if(saving)return;epoch++;showScreen('onboard');showObStep(1);}));el.append(head);
+    const status=node('p','','solo-status');status.id='soloStatus';status.setAttribute('role','status');el.append(status);
+    return el;
+  }
+  async function open(nextScope={}){
+    scope={...nextScope};showScreen('solo');const token=++epoch,actor=uid(),el=shell();
+    if(!window.FEATURE_GOOGLE_AUTH){el.append(node('h2','Your own lane, coming into focus.'),node('p','Solo sign-in is waiting for the staging account checks. Group mode is still available.'));return;}
+    if(!actor){
+      el.append(node('h2','A workout buddy. Not another group.'),node('p','Keep a personal calendar and join a separate solo leaderboard. Group scores never mix with solo scores.'));
+      el.append(button('Continue with Google',()=>signIn('google.com')));
+      if(window.FEATURE_APPLE_AUTH)el.append(button('Continue with Apple',()=>signIn('apple.com')));
+      el.append(node('p','Already use Forge with a group? Link that profile in Profile first to keep one account.'));
+      return;
+    }
+    message('Opening your calendar…');
+    try{const result=await callFunction('getSolo',scope);if(!alive(token,actor))return;model=result;message('');if(!result.enrolled)enrollment(el,token,actor);else render(el,token,actor);}
+    catch(e){if(alive(token,actor)){message('Could not open solo. Check your connection and try again.');el.append(button('Try again',()=>open(scope)));}}
+  }
+  async function signIn(provider){
+    if(window._forgeProviderBusy)return;window._forgeProviderBusy=true;const token=epoch;
+    try{await startForgeProviderSignIn(provider);if(token===epoch)await open();}
+    catch(e){if(token===epoch)message('Sign-in did not finish. You can try again.');}
+    finally{window._forgeProviderBusy=false;}
+  }
+  function enrollment(el,token,actor){
+    el.append(node('h2','Make a little room for yourself.'),node('p','4 base points for a workout day, plus a consecutive-day bonus of 1, 2, then 3. A missed day resets the bonus; a new month starts a new score.'));
+    const form=node('form'),label=node('label','Your solo name'),name=node('input');name.required=true;name.minLength=2;name.maxLength=24;label.append(name);
+    const publicLabel=node('label',''),check=node('input');check.type='checkbox';publicLabel.append(check,document.createTextNode(' Show my name, workout-day count and points on the solo leaderboard.'));
+    const save=button('Start my solo calendar',()=>{});save.type='submit';form.append(label,publicLabel,save);el.append(form);
+    form.onsubmit=async e=>{e.preventDefault();if(saving)return;saving=true;save.disabled=true;message('Creating your solo space…');
+      try{await callFunction('enrollSolo',{name:name.value,publicRanking:check.checked});if(alive(token,actor))await open();}
+      catch(e){if(alive(token,actor))message('Could not start solo. Use 2–24 letters or numbers, and try again.');}
+      finally{saving=false;if(save.isConnected)save.disabled=false;}
+    };
+  }
+  function render(el,token,actor){
+    const p=model.period,s=model.score;
+    el.append(node('h2',model.name+'’s month'),node('p','4 base + a 1 / 2 / 3 streak bonus. Separate from every group.'));
+    const metrics=node('div','','solo-metrics');for(const [value,label]of [[s.total,'points'],[s.days,'workout days'],[s.currentStreak,'day streak']]){const card=node('div');card.append(node('strong',String(value)),node('span',label));metrics.append(card);}el.append(metrics);
+    const nav=node('div','','solo-heading'),date=new Date(Date.UTC(p.year,p.month-1,1));
+    const move=delta=>{const d=new Date(Date.UTC(p.year,p.month-1+delta,1));open({year:d.getUTCFullYear(),month:d.getUTCMonth()+1});};
+    nav.append(button('← Previous',()=>move(-1)),node('h3',date.toLocaleDateString('en',{month:'long',year:'numeric',timeZone:'UTC'})));
+    const next=button('Next →',()=>move(1));next.disabled=p.current;nav.append(next);el.append(nav);
+    const grid=node('div','','solo-calendar');for(const name of ['M','T','W','T','F','S','S'])grid.append(node('span',name,'solo-weekday'));
+    for(let i=0;i<(date.getUTCDay()+6)%7;i++)grid.append(node('span'));
+    for(let day=1;day<=new Date(Date.UTC(p.year,p.month,0)).getUTCDate();day++){
+      const log=model.logs.find(l=>l.day===day),b=button(String(day),()=>edit(day,log,token,actor));b.className='solo-day';b.disabled=day>p.throughDay;
+      b.setAttribute('aria-label',`${day} ${date.toLocaleDateString('en',{month:'long',timeZone:'UTC'})}${log?', '+log.workouts.join(', '):', no workout'}`);
+      if(log){b.classList.add('logged');const art=node('span');art.innerHTML=ForgeSports.icon(log.workouts[0],true);b.append(art);}grid.append(b);
+    }el.append(grid,node('p',p.current?'Tap a day to log or edit. Multiple activities still count as one workout day.':'Previous months are read-only.'));
+    const actions=node('div','','solo-actions');actions.append(button('Solo leaderboard',()=>board(token,actor)),button('Sign out',async()=>{if(saving)return;epoch++;try{await auth.signOut();open();}catch(e){message('Sign-out did not finish. Try again.');}}));el.append(actions);
+    el.append(node('p','Solo workouts stay in this calendar; they do not post a workout into your groups.'));
+    el.append(node('p',model.publicRanking?'Your name and monthly totals are visible on the solo board.':'Your solo record is private. You can still view the board.'));
+    if(model.publicRanking)el.append(button('Hide me from solo rankings',async()=>{if(saving)return;try{await callFunction('hideSoloRanking',{});if(alive(token,actor))await open(scope);}catch(e){if(alive(token,actor))message('Could not change visibility. Try again when connected.');}}));
+    el.append(button('Delete my account',async()=>{
+      if(saving)return;
+      if(model.hasGroups){message('This account also belongs to groups. Open Group mode → Profile → Delete account to remove everything together.');return;}
+      if(!confirm('Permanently delete your Forge account, solo workouts and leaderboard entries? This cannot be undone.'))return;
+      saving=true;message('Confirm your sign-in to delete your account…');
+      try{await confirmForgeAccountDeletion(actor);if(!alive(token,actor))return;await callFunction('deleteSoloAccount',{});if(alive(token,actor)){await auth.signOut();await open();message('Your account was deleted.');}}
+      catch(e){if(alive(token,actor))message('Deletion did not finish. Some steps may be complete. Retry when connected, or use the account-deletion support page.');}
+      finally{saving=false;}
+    }));
+  }
+  function edit(day,log,token,actor){
+    const dialog=node('dialog','','today-dialog'),head=node('h2',`${day} · Your workout`),form=node('form'),choices=node('div','','solo-workouts'),selected=new Set(log?.workouts||[]);
+    const close=button('Close',()=>dialog.close());dialog.append(head,close);form.append(choices);
+    for(const sport of ForgeSports.labels){const b=button(sport,()=>{selected.has(sport)?selected.delete(sport):selected.add(sport);b.setAttribute('aria-pressed',String(selected.has(sport)));});b.innerHTML=ForgeSports.icon(sport)+`<span>${sport}</span>`;b.setAttribute('aria-pressed',String(selected.has(sport)));b.disabled=!model.period.current;choices.append(b);}
+    const noteLabel=node('label','Workout note'),note=node('textarea');note.maxLength=500;note.value=log?.note||'';note.disabled=!model.period.current;noteLabel.append(note);form.append(noteLabel);
+    const result=node('p');result.setAttribute('role','status');form.append(result);
+    if(model.period.current){const save=button(log?'Save changes':'Log workout',()=>{});save.type='submit';form.append(save);
+      form.onsubmit=async e=>{e.preventDefault();if(saving||!alive(token,actor))return;if(!selected.size||selected.size>12){result.textContent='Choose between 1 and 12 activities.';return;}saving=true;save.disabled=true;close.disabled=true;result.textContent='Saving your workout…';
+        try{await callFunction('saveSolo',{...model.period,day,workouts:[...selected],note:note.value});if(alive(token,actor)){dialog.close();await open(scope);message('Workout saved. Your monthly points are up to date.');}}
+        catch(e){if(alive(token,actor))result.textContent='Save not confirmed. Reopen this day to check, then retry if needed.';}
+        finally{saving=false;save.disabled=false;close.disabled=false;}
+      };
+    }
+    dialog.addEventListener('cancel',e=>{if(saving)e.preventDefault();});dialog.addEventListener('close',()=>dialog.remove());dialog.append(form);document.body.append(dialog);dialog.showModal();close.focus();
+  }
+  async function board(token,actor){
+    message('Opening solo rankings…');try{const r=await callFunction('soloBoard',scope);if(!alive(token,actor))return;message('');
+      const dialog=node('dialog','','today-dialog');dialog.append(node('h2','Solo leaderboard'),node('p',`${r.period.sid} · Top 100 public solo records. Tied scores share a rank. Group points are never included.`),button('Close',()=>dialog.close()));
+      if(!r.entries.length)dialog.append(node('p','No public solo workouts this month yet. A small start counts.'));
+      for(const row of r.entries){const line=node('div','','solo-rank');line.append(node('strong',String(row.rank)),node('span',row.name),node('span',`${row.total} pts · ${row.days} days`));dialog.append(line);}
+      dialog.addEventListener('close',()=>dialog.remove());document.body.append(dialog);dialog.showModal();
+    }catch(e){if(alive(token,actor))message('Rankings could not load. Your workouts are unchanged.');}
+  }
+  window.ForgeSolo={open};
 })();

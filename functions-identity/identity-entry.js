@@ -1,0 +1,24 @@
+'use strict';
+// Isolated staging account/solo/steps deployment. No admin keys or
+// notification senders are loaded by this entry point.
+const admin=require('firebase-admin');
+const {FieldValue}=require('firebase-admin/firestore');
+const {onCall,HttpsError}=require('firebase-functions/v2/https');
+const {onSchedule}=require('firebase-functions/v2/scheduler');
+const {setGlobalOptions}=require('firebase-functions/v2/options');
+setGlobalOptions({region:'asia-south1',maxInstances:3});
+admin.initializeApp();
+const db=admin.firestore();
+const identity=require('./identity-service')({db,FieldValue,HttpsError,deleteAuthUser:uid=>admin.auth().deleteUser(uid)});
+const solo=require('./solo-service')({db,FieldValue,HttpsError,identity});
+exports.claimIdentity=onCall(r=>identity.claim(r));
+exports.joinWithIdentity=onCall(r=>identity.join(r));
+exports.finalizeAccountDeletion=onCall(r=>identity.finalizeDeletion(r));
+exports.enrollSolo=onCall(r=>solo.enroll(r));
+exports.getSolo=onCall(r=>solo.get(r));
+exports.saveSolo=onCall(r=>solo.save(r));
+exports.soloBoard=onCall(r=>solo.board(r));
+exports.hideSoloRanking=onCall(r=>solo.hide(r));
+exports.deleteSoloAccount=onCall(r=>solo.remove(r));
+exports.retryIdentityDeletions=onSchedule({schedule:'every 60 minutes',timeZone:'Asia/Kolkata'},()=>identity.retryDeletions());
+exports.settleSweep=require('./steps-service')({db,FieldValue,onSchedule,logger:require('firebase-functions').logger});

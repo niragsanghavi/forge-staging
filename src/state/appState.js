@@ -333,7 +333,9 @@ window.STEP_ROUNDS_PER_MONTH = 4;
 window.stepRoundsOf = function(s){
   const season = s || window.season || {};
   // Clamp: a corrupt `days` must not produce zero-length or absurd rounds.
-  const n = Math.min(31, Math.max(28, Number(season.days) || 30));
+  const n = Number.isInteger(season.year)&&Number.isInteger(season.month)&&season.month>=1&&season.month<=12
+    ? new Date(Date.UTC(season.year,season.month,0)).getUTCDate()
+    : Math.floor(Math.min(31,Math.max(28,Number(season.days)||30)));
   const base = Math.floor(n / window.STEP_ROUNDS_PER_MONTH);
   const extra = n % window.STEP_ROUNDS_PER_MONTH;
   const out = [];
@@ -411,7 +413,7 @@ window.healthDailySteps = async function(fromDate, toDate){
                 : (b.values && b.values.steps != null) ? b.values.steps
                 : null;
       const n = Math.round(Number(raw));
-      if(!Number.isFinite(n) || n <= 0) continue;
+      if(raw == null || !Number.isFinite(n) || n < 0) continue;
       out[window.ymdLocal(d)] = Math.min(n, window.STEP_DAILY_CAP);
     }
     return out;
@@ -456,6 +458,26 @@ window.stepBonusOf = function(s){
   const cfg = (s || window.season || {}).stepRounds || {};
   const b = Number(cfg.bonus);
   return (Number.isFinite(b) && b >= 0) ? b : window.STEP_WIN_BONUS;
+};
+
+// A final-round announcement belongs to the month walked, even after rollover.
+// Product decision: last-month sync closes at 18:00 IST on the following 1st.
+// Other rounds retain 36 hours. Use epoch arithmetic, independent of server TZ.
+window.stepRoundCutoff = function(s,r){
+  const end=Date.UTC(s.year,s.month-1,r.end+1)-19800000;
+  return end+(r.end===new Date(Date.UTC(s.year,s.month,0)).getUTCDate()?18:36)*3600000;
+};
+window.stepValidDays = function(days,s,r,now=Date.now()){
+  const out={};
+  if(!days||typeof days!=='object'||Array.isArray(days))return out;
+  for(const [key,n] of Object.entries(days)){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(key)||typeof n!=='number'||!Number.isFinite(n)||n<0||!Number.isInteger(n))continue;
+    const [y,m,d]=key.split('-').map(Number);
+    if(y!==s.year||m!==s.month||d<r.start||d>r.end||new Date(Date.UTC(y,m-1,d)).getUTCDate()!==d)continue;
+    if(Date.UTC(y,m-1,d+1)-19800000>now)continue; // completed IST days only
+    out[key]=Math.min(n,window.STEP_DAILY_CAP);
+  }
+  return out;
 };
 
 // seen = suggested-and-actioned (logged or dismissed). Bounded to the last
@@ -676,11 +698,15 @@ window.seasonIdOf = function(month, year){
 // of which can be automated:
 //   1. Blaze enabled on the project (needed later for claimIdentity(); free)
 //   2. Authentication -> Sign-in method -> Google ENABLED + OAuth client created
-// Flipping this to true is the ONLY code change needed to switch the feature on,
-// and flipping it back to false is a complete, instant rollback — every Google
-// surface is gated on it and the anonymous + PIN paths are untouched underneath.
-// Turn it on for STAGING first; prod stays false until warm-user QA passes.
-window.FEATURE_GOOGLE_AUTH = false;
+// Release gate, NOT a flag-only rollout: deploy reviewed identity endpoints,
+// verify authorization/deletion and configure/test providers before enabling.
+// Native authentication remains blocked until its dedicated bridge is ready.
+// Staging web acceptance candidate only. Production/native remain held.
+window.FEATURE_GOOGLE_AUTH = window.IS_STAGING===true
+  && typeof location!=='undefined' && location.hostname==='niragsanghavi.github.io'
+  && location.pathname.startsWith('/forge-staging/')
+  && !(window.Capacitor?.isNativePlatform?.());
+window.FEATURE_APPLE_AUTH = window.FEATURE_GOOGLE_AUTH;
 
 // SERVER-SIDE PRIVILEGED WRITES (AUTH_PHASE2_NOTES.md). When true, the rollover
 // snapshot hands its foreign user-doc stat increments to the awardSeasonBadges
