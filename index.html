@@ -3096,6 +3096,7 @@ async function mirNavMonth(dir){
     if(_mirIdx>0){ mirScrollToIdx(_mirIdx-1,true); }
     else if(!_mirNoMore){ const loaded=await mirLoadOlder(); if(loaded&&generation===_groupLoadGeneration)mirScrollToIdx(Math.max(0,_mirIdx-1),true); }
   } else if(_mirIdx<_mirMonths.length-1){ mirScrollToIdx(_mirIdx+1,true); }
+  if(generation===_groupLoadGeneration&&typeof _tour!=='undefined'&&_tour?.steps[_tour.i]?.t==='.mir-calcard')_tourAlign();
 }
 async function mirLoadOlder(){
   if(_mirLoading||_mirNoMore) return false;
@@ -4997,7 +4998,7 @@ async function toggleHealth(){
         .set({ healthConnectedAt: firebase.firestore.FieldValue.serverTimestamp() }, {merge:true}).catch(()=>{});
       renderHealthCard(); renderHealthSuggestions();
     } else if(r === 'denied'){
-      say((window.ForgeExperience?.healthName()==='Health Connect')?'Health access is off for Forge. Open Health Connect → App permissions → Forge, then try again.':'Health access is off for Forge. Open Apple Health → Sharing → Apps → Forge, then try again.');
+      say((window.ForgeExperience?.healthName()==='Health Connect')?'Health access is off for Forge. Open Health Connect and review Forge’s app permissions, then try again.':'Health access is off for Forge. Open Apple Health and review Forge’s data access, then try again.');
     } else {
       say('Not available on this device.');
     }
@@ -11444,8 +11445,9 @@ function startTour(force){
   document.body.appendChild(spot); document.body.appendChild(bub);
   bub.setAttribute('role','dialog');bub.setAttribute('aria-label','Forgeling app tour');
   _tour.reposition=()=>_tourPosition();
+  _tour.resize=()=>_tourAlign();
   _tour.key=e=>{if(e.key==='Escape'){e.preventDefault();endTour(true);}};
-  window.addEventListener('resize',_tour.reposition);
+  window.addEventListener('resize',_tour.resize);
   document.addEventListener('scroll',_tour.reposition,true);
   document.addEventListener('keydown',_tour.key);
   _tourShow();
@@ -11479,6 +11481,10 @@ function _tourShow(){
   };
   attempt(0);
 }
+function _tourAlign(){
+  const tour=_tour,token=tour?.token;if(!tour)return;
+  requestAnimationFrame(()=>{if(_tour!==tour||tour.token!==token)return;tour.target?.scrollIntoView({block:'start',behavior:'auto'});_tourPosition();});
+}
 function _tourPosition(){
   if(!_tour)return;
   if(_tour.context!==`${groupCode}|${me?.userId||me?.name}|${seasonId}`){endTour(false);return;}
@@ -11508,7 +11514,7 @@ function nextTourStep(){
 }
 function endTour(remember){
   const tour=_tour;
-  if(tour){clearTimeout(tour.timer);window.removeEventListener('resize',tour.reposition);document.removeEventListener('scroll',tour.reposition,true);document.removeEventListener('keydown',tour.key);}
+  if(tour){clearTimeout(tour.timer);window.removeEventListener('resize',tour.resize);document.removeEventListener('scroll',tour.reposition,true);document.removeEventListener('keydown',tour.key);}
   ['tourSpot','tourBubble'].forEach(id=>{ const el=document.getElementById(id); if(el){el.id='';el.style.pointerEvents='none';el.classList.add('forge-tour-exit');setTimeout(()=>el.remove(),250);} });
   _tour=null;
   document.body.classList.remove('forge-touring');

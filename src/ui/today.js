@@ -194,7 +194,7 @@
   function personalSessions(logs){
     const buckets=new Map(),seen=new Set();
     for(const log of logs){
-      if(log.voided||!Number.isInteger(log.day)||log.day<1||log.day>new Date(log.year,log.month,0).getDate())continue;
+      if(log.voided||log.demo===true||log.groupCode==='FORGE1'||!Number.isInteger(log.day)||log.day<1||log.day>new Date(log.year,log.month,0).getDate())continue;
       const id=log.id&&`${log.groupCode}|${log.id}`;if(id&&seen.has(id))continue;if(id)seen.add(id);
       const workouts=(Array.isArray(log.workouts)?log.workouts:log.workout?[log.workout]:[]).map(w=>String(w).trim()).filter(Boolean);
       if(!workouts.length)continue;
