@@ -644,6 +644,7 @@
   <div class="page" id="page-profile">
     <div class="page-title" style="padding-bottom:4px">Profile</div>
     <div class="tmuted" style="margin-bottom:16px;font-size:12px">Your stats across every group</div>
+    <button type="button" class="today-link" onclick="promptSwitch()">Switch person or leave this group</button>
 
     <!-- ── ZONE 1: YOU. The reason anyone opens this tab. Always expanded. ── -->
     <div class="card" id="profileStatsCard"><div class="tmuted">Loading&hellip;</div></div>
@@ -2184,8 +2185,16 @@ function promptSwitch(){
 // ── LOAD GROUP ────────────────────────────────────────────────────────────
 let _groupLoadGeneration=0;
 let _groupSubscriptionGeneration=0;
-function _invalidateGroupContext(){ _groupLoadGeneration++; }
+function _invalidateGroupContext(){
+  _groupLoadGeneration++;
+  if(typeof _mirMonths!=='undefined'){_mirMonths=[];_mirIdx=0;_mirNoMore=false;_mirLoading=false;_mirBestMonth=null;_mirRanks=null;}
+  if(typeof document!=='undefined'){const grid=document.getElementById('mirCaltrack');if(grid)grid.replaceChildren();}
+  if(window.ForgeToday)ForgeToday.clear();
+}
 function _newGroupLoadContext(code){
+  // A previous history request belongs to the old generation and cannot
+  // release its lock after this reload/rollover. Release it here instead.
+  if(typeof _mirLoading!=='undefined')_mirLoading=false;
   return Object.freeze({generation:++_groupLoadGeneration, code});
 }
 function _isGroupLoadCurrent(context){
@@ -2197,7 +2206,7 @@ function _isGroupSubscriptionCurrent(context){
 }
 
 async function loadGroup(code, fromCache, options={}){
-  const context=_newGroupLoadContext(code);
+  const context=options.manual?Object.freeze({generation:_groupLoadGeneration,code}):_newGroupLoadContext(code);
   const playerAtStart=me;
   // On a genuine "this group is gone/broken" error we drop ONLY that group's
   // session (handleDeadGroup) and fall back to another joined group — never nuke
@@ -2264,6 +2273,7 @@ async function loadGroup(code, fromCache, options={}){
 
     // Finish a half-completed account deletion on session restore too (the PIN
     // login path has its own hook). Fire-and-forget — never blocks boot.
+    if(!options.manual){
     if(me && me.userId){ try{ resumeAccountDeletionIfPending(me.userId); }catch(e){} }
     // Same treatment for a returning Google redirect. Inert while the flag is off.
     try{ finishGoogleLinkIfReturning(); }catch(e){}
@@ -2295,6 +2305,7 @@ async function loadGroup(code, fromCache, options={}){
     // picks up the currentSeasonId change and reloads, same as it already
     // does for every other open client.
     checkAutoRollover(code).catch(e=>logErr('checkAutoRollover',e));
+    }
 
     if(gracePinCheckOnResume()) return;
     if(!_isGroupLoadCurrent(context)) return;
@@ -2885,7 +2896,7 @@ function renderMirrorHome(){
   mirRenderPills(sc);
   // calendar (rebuild current-month panel each render; keep loaded prev panels)
   const cur=mirCurrentDesc();
-  if(!_mirMonths.length){ _mirMonths=[cur]; _mirIdx=0; }
+  if(!_mirMonths.length||_mirMonths[_mirMonths.length-1].sid!==cur.sid){ _mirMonths=[cur]; _mirIdx=0;_mirNoMore=false; }
   else { _mirMonths[_mirMonths.length-1]=cur; }   // replace current with fresh
   mirRenderPanels();
   mirWireScroll();
@@ -3125,7 +3136,7 @@ async function mirLoadOlder(){
     mirSyncCalHead();
     return true;
   }catch(e){ logErr('mirLoadOlder', e); if(current())toast('Could not load that month. Check your connection and try the arrow again.','error');return false; }
-  finally{ _mirLoading=false; }
+  finally{ if(current())_mirLoading=false; }
 }
 
 // ── DAY TAP → sheet or day-detail ──
@@ -4584,7 +4595,7 @@ function renderPushCard(){
 
   if(perm==='denied'){
     el.innerHTML='<div class="tmuted" style="font-size:12px">'
-      + 'Notifications are blocked for Forge in your browser settings. '
+      + (typeof isNative==='function'&&isNative()?'Notifications are blocked for Forge in your phone’s app settings. ':'Notifications are blocked for Forge in your browser settings. ')
       + 'You will need to allow them there first — we cannot ask again from here.</div>';
     return;
   }
@@ -10709,13 +10720,13 @@ async function loadGlobal(){
   try{
     const gSnap=await db.collection('groups').get();                       // G reads
     const groups=gSnap.docs.map(d=>({code:d.id,...d.data()}));
-    let todayByGroup={};
+    let todayByGroup={},todayUnavailable=false;
     try{
       const dSnap=await db.collection('analytics').doc('global').collection('daily').doc(ymdToday()).get();  // 1 read
       if(dSnap.exists) todayByGroup=(dSnap.data().byGroup)||{};
-    }catch(e){ /* board "active today" just renders empty if the rollup is unavailable */ }
-    globalDataCache={groups,todayByGroup};
-    globalDataCacheTime=Date.now();
+    }catch(e){ todayUnavailable=true; }
+    globalDataCache={groups,todayByGroup,todayUnavailable};
+    globalDataCacheTime=todayUnavailable?0:Date.now();
     renderGlobalFromCache(globalDataCache);
   }catch(e){ console.error('loadGlobal failed:',e); const failed='<p class="tmuted">Could not load these rankings. Nothing here means zero activity.</p><button class="today-button" onclick="loadGlobal()">Try again</button>';actEl.innerHTML=failed;grpEl.innerHTML=failed;ptsEl.innerHTML=failed; }
 }
@@ -10728,7 +10739,7 @@ function setGlobalView(view){
   document.getElementById('globalMetric').textContent=descriptions[view];
 }
 function globalRankAt(rows,index,field){return rows.findIndex(row=>Number(row[field])===Number(rows[index][field]))+1;}
-function renderGlobalFromCache({groups,todayByGroup}){
+function renderGlobalFromCache({groups,todayByGroup,todayUnavailable=false}){
   const actEl=document.getElementById('globalActive');
   const grpEl=document.getElementById('globalGroups');
   const ptsEl=document.getElementById('globalPoints');
@@ -10742,7 +10753,9 @@ function renderGlobalFromCache({groups,todayByGroup}){
     .filter(([code,count])=>count>0 && !isDemoCode(code))
     .map(([code,count])=>({name:groups.find(g=>g.code===code)?.name||code,count}))
     .sort((a,b)=>b.count-a.count).slice(0,5);
-  actEl.innerHTML=activeRanked.length===0
+  actEl.innerHTML=todayUnavailable
+    ?'<p class="tmuted">Today’s activity is unavailable—not zero.</p><button class="today-button" onclick="loadGlobal()">Try again</button>'
+    :activeRanked.length===0
     ?'<div class="tmuted">No workouts logged anywhere yet today.</div>'
     :activeRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank">${globalRankAt(activeRanked,i,'count')}</div><div class="lbinfo"><div class="lbname">${esc(g.name)}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--green)">${g.count}</div><div style="font-size:10px;color:var(--muted)">logs today</div></div></div>`).join('');
   // Boards "top groups" + "top players": from each group's denormalized
@@ -11401,11 +11414,12 @@ const TOUR_KEY='forgeTourV2';
 let _tour=null;
 function startTour(force){
   try{ if(!force && localStorage.getItem(TOUR_KEY)) return; }catch(e){}
+  if(!force && (document.querySelector('.mir-sheet.on,.mir-report.on,dialog[open],.bk-overlay,.recap-overlay') || (window._forgeLogReceipt&&_isSubmissionViewCurrent(window._forgeLogReceipt)&&['checking','pending'].includes(window._forgeLogReceipt.state))))return;
   if(_tour) endTour(false);
   if(!me||!season)return;
   const steps=[
     {t:'#forgeToday',page:'home',title:'Hey. I’m Forgeling.',txt:'Small effort. Bigger habit. I’ll show you where to log, see your progress and find your people. No workout required for this tour.'},
-    {t:'.mir-calcard',page:'home',title:'Your month, one square at a time.',txt:'Tap a day to log. The arrows take you to previous months, and recorded days open your workout details. Closed months are read-only.'},
+    {t:'.mir-calcard',page:'home',title:'Your month, one square at a time.',shortTitle:'Your workout calendar.',shortText:'Tap a day for workouts. Use the arrows for earlier months; past months are read-only.',txt:'Tap a day to log. The arrows take you to previous months, and recorded days open your workout details. Closed months are read-only.'},
     {t:'#forgeMonthStory',page:'home',title:'See what actually added up.',txt:'Days, activity types and gym notes for the month you’re viewing. Tap a workout bar for its dates. Two activities can still be one workout day.'},
     {t:'#forgeTodayActions',page:'home',title:'A quick way to say “done”.',txt:'These workout icons log today. Forge checks your linked groups and shows a receipt. Wait for Confirmed before counting it as saved.'},
     {t:'#lbViewControls',fallback:'#lbPeoplePanel',page:'lb',title:'Your group. Two perspectives.',txt:'Compare teams or people where both views are available. Tap a person to understand their points. Your group’s season rules decide the score.'},
@@ -11435,7 +11449,11 @@ function _tourShow(){
   if(st.settings){const settings=document.querySelector('#page-profile .pfold');if(settings)settings.open=true;}
   if(window.ForgeExperience)ForgeExperience.renderFAQ();
   const bub=document.getElementById('tourBubble');
+  const compact=window.innerHeight<=640;
+  const title=compact&&st.shortTitle?st.shortTitle:st.title,text=compact&&st.shortText?st.shortText:st.txt;
   bub.innerHTML=`<div class="forge-tour-mascot"><img src="assets/forgeling.webp" alt="Forgeling" width="72" height="72"></div><p class="today-kicker">FORGELING’S FIELD TRIP</p><h2>${st.title}</h2><p class="tb-txt">${st.txt}</p><div class="tb-row"><span class="tb-step">${tour.i+1} / ${tour.steps.length}</span><div class="tb-btns"><button class="tb-skip" onclick="endTour(true)">Skip</button>${tour.i?'<button class="tb-skip" onclick="prevTourStep()">Back</button>':''}<button class="tb-next" onclick="nextTourStep()">${tour.i===tour.steps.length-1?'Let’s go':'Next'}</button></div></div>`;
+  bub.querySelector('h2').textContent=title;
+  bub.querySelector('.tb-txt').textContent=text;
   bub.querySelector('.tb-next').focus({preventScroll:true});
   const current=()=>_tour===tour&&tour.token===token;
   const attempt=(n)=>{
@@ -11457,7 +11475,7 @@ function _tourPosition(){
   if(_tour.context!==`${groupCode}|${me?.userId||me?.name}|${seasonId}`){endTour(false);return;}
   const spot=document.getElementById('tourSpot'),bub=document.getElementById('tourBubble');if(!spot||!bub)return;
   const r=_tour.target?.getBoundingClientRect();
-  const bottom=window.innerHeight-88;
+  const bottom=window.innerHeight-(window.innerHeight<=640?12:88);
   const width=Math.min(360,window.innerWidth-24);
   bub.style.width=width+'px';bub.style.left=Math.max(12,(window.innerWidth-width)/2)+'px';
   const h=bub.offsetHeight;
@@ -11477,6 +11495,7 @@ function endTour(remember){
   ['tourSpot','tourBubble'].forEach(id=>{ const el=document.getElementById(id); if(el){el.id='';el.style.pointerEvents='none';el.classList.add('forge-tour-exit');setTimeout(()=>el.remove(),250);} });
   _tour=null;
   document.body.classList.remove('forge-touring');
+  try{renderPromptDock();}catch(e){}
   if(tour?.opener?.isConnected&&tour.opener.getClientRects().length)tour.opener.focus({preventScroll:true});
   if(remember){ try{ localStorage.setItem(TOUR_KEY,'done'); }catch(e){} }
 }

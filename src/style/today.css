@@ -80,4 +80,7 @@ body::before{background:none}#screen-app .page{max-width:660px;margin-left:auto;
 @media(max-width:600px){#screen-app .nav-nm{display:none}#screen-app .nav-user{display:none}#screen-app .nav-logo>span{font-size:14px;letter-spacing:2px}#screen-app .nav>div{gap:7px!important}}
 #forgeMonthStory.card{padding:18px;margin-top:20px}#forgeMonthStory .forge-section-head h2{font-size:25px}
 .forge-touring .page,.forge-touring .page.fresh .lbrow,.forge-touring .page.fresh .feed-item{animation:none!important;transform:none!important}
+.btn-gold{background:var(--today-sage);color:var(--today-ink);box-shadow:none}.tab-pill{border-color:var(--border)}.mir-day.today{border-color:var(--gold)}
+.forge-staging-ui #screen-app .tabs{bottom:24px}.forge-staging-ui #screen-app .page{padding-bottom:130px}
 @media(max-height:640px){.tour-bubble .forge-tour-mascot,.tour-bubble>.today-kicker{display:none}.tour-bubble{padding:12px 14px}.tour-bubble h2{font-size:18px;margin-bottom:6px}.tour-bubble .tb-txt{font-size:12px;line-height:1.4}.tour-bubble .tb-row{margin-top:8px}}
+@media(max-height:640px){.forge-touring .mir-calcard,.forge-touring #forgeMonthStory,.forge-touring #forgeTodayActions{scroll-margin-top:16px}.forge-touring #screen-app .tabs{visibility:hidden}.tour-bubble .tb-txt{margin:6px 0}.forge-touring .mir-calnav .m{white-space:nowrap;font-size:14px}.forge-touring .mir-calnav{gap:2px}}

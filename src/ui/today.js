@@ -124,6 +124,8 @@
     arrangeDetails();renderReceipt();
   }
   function clear(){
+    closeDialog();
+    const story=$('forgeMonthStory');if(story){story.replaceChildren();story._forgeFingerprint=null;story._forgeScope=null;}
     const host=$('forgeToday'),actions=$('forgeTodayActions'),receipt=$('forgeTodayReceipt');if(!host)return;
     host.replaceChildren();host.append(node('p','today-kicker','TODAY'),node('h1','today-loading','Loading your group…'));
     if(actions)actions.replaceChildren();
@@ -192,7 +194,7 @@
     host.querySelectorAll('[data-day]').forEach(b=>b.addEventListener('click',()=>openDay(M,Number(b.dataset.day))));
     host.querySelectorAll('[data-activity]').forEach(b=>b.addEventListener('click',()=>{
       const a=data.activities[Number(b.dataset.activity)],body=document.createElement('div');body.className='today-dialog-body';
-      const copy=document.createElement('p');copy.className='today-muted';copy.textContent=`${a.count} recorded ${a.label} activities across ${a.days.length} days in ${label}.`;body.append(copy);
+      const copy=document.createElement('p');copy.className='today-muted';copy.textContent=`${a.count} recorded ${a.label} ${a.count===1?'activity':'activities'} across ${a.days.length} ${a.days.length===1?'day':'days'} in ${label}.`;body.append(copy);
       a.days.forEach(day=>{const row=document.createElement('button');row.type='button';row.className='today-button today-button-secondary';row.textContent=`${M.label} ${day} · view recorded workouts`;row.onclick=()=>openDay(M,day);body.append(row);});
       ForgeToday.openDialog(`${a.label} · ${M.label}`,body);
     }));
@@ -219,6 +221,7 @@
     host.innerHTML=`<div class="forge-guide-heading"><img src="assets/forgeling.webp" alt="Forgeling"><div><p class="today-kicker">THE FIELD GUIDE</p><h2>A little help. Whenever.</h2><p class="today-muted">The answers stay here after Forgeling hops off.</p></div></div>`+items.map(([title,art,copy])=>`<details class="forge-faq-item"><summary>${ForgeSports.icon(art)}<span>${title}</span></summary><p>${esc(copy)}</p></details>`).join('')+'<div class="forge-help-actions"><button type="button" class="today-button" onclick="startTour(true)">Walk me through Forge</button><button type="button" class="today-link" onclick="confirmConnReset()">Connection troubleshooting</button></div>';
   }
   function enhanceShell(){
+    if(window.IS_STAGING)document.body.classList.add('forge-staging-ui');
     const labels=['Today','Board','Feed','All Forge','Admin'],keys=['home','board','feed','global','admin'];
     document.querySelectorAll('#screen-app .tabs .tab').forEach((old,i)=>{
       if(i>=5)return;
@@ -230,7 +233,7 @@
     });
     const profile=$('profileBtn');if(profile){profile.innerHTML=icon('profile');profile.setAttribute('aria-label','Profile, history and help');}
     const refresh=$('connResetBtn');if(refresh){refresh.innerHTML=icon('refresh');refresh.style.opacity='1';refresh.title='Refresh group';refresh.setAttribute('aria-label','Refresh group');refresh.onclick=async()=>{
-      if(window._forgeLogReceipt&&['checking','pending'].includes(window._forgeLogReceipt.state)){toast('Let the current workout finish sending first.');return;}
+      if(window._forgeLogReceipt&&typeof _isSubmissionViewCurrent==='function'&&_isSubmissionViewCurrent(window._forgeLogReceipt)&&['checking','pending'].includes(window._forgeLogReceipt.state)){toast('Let the current workout finish sending first.');return;}
       if(!window.groupCode)return;refresh.disabled=true;
       toast('Checking your group for updates…');
       try{await loadGroup(groupCode,true,{manual:true});}catch(e){toast('Could not refresh. Check your connection.','error');}finally{refresh.disabled=false;}
