@@ -239,6 +239,23 @@ body::before{content:'';position:fixed;inset:-10%;z-index:-1;pointer-events:none
 /* ── TYPOGRAPHY ── */
 .page-title{font-size:30px;font-weight:800;letter-spacing:-.022em;line-height:1.12;padding:12px 0 18px}
 .shdr{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin:26px 2px 10px}
+/* Profile's folded settings zone. <details> is used instead of a hand-rolled
+   accordion because it cannot desync from a state variable, it is keyboard
+   accessible for free, and it survives the card-by-card show/hide the render
+   functions already do inside it. */
+.pfold{margin:26px 0 0;border:1px solid var(--hairline);border-radius:var(--r);background:var(--bg-card);overflow:hidden}
+.pfold-sum{list-style:none;cursor:pointer;padding:15px 18px;font-size:13px;font-weight:700;color:var(--text);
+  display:flex;align-items:center;justify-content:space-between;user-select:none}
+.pfold-sum::-webkit-details-marker{display:none}
+.pfold-sum::after{content:'';width:7px;height:7px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);
+  transform:rotate(45deg);transition:transform .18s;margin-right:4px}
+.pfold[open] .pfold-sum::after{transform:rotate(-135deg)}
+.pfold-sum:hover{background:rgba(255,255,255,.03)}
+/* The first .shdr inside the fold would otherwise push a 26px gap under the
+   summary it already sits right beneath. */
+.pfold-body{padding:0 14px 14px}
+.pfold-body .shdr:first-child{margin-top:6px}
+.pfold-body .card{margin-bottom:10px}
 .tmuted{color:var(--muted);font-size:13px;line-height:1.5}
 
 /* ── CARDS — layered depth: hairline + inner edge light + soft shadow ── */
@@ -265,6 +282,17 @@ input,select,textarea{background:rgba(255,255,255,.06);border:1px solid transpar
 :root[data-theme="light"] input,:root[data-theme="light"] select,:root[data-theme="light"] textarea{background:rgba(0,0,0,.05)}
 input:focus,select:focus,textarea:focus{border-color:rgba(212,168,67,.55);box-shadow:0 0 0 3.5px rgba(212,168,67,.16);background:rgba(255,255,255,.08)}
 input::placeholder{color:var(--muted)}
+/* Checkboxes and radios are `input`, so the appearance:none above ERASES their
+   tick — they render as a blank rounded box that looks identical checked and
+   unchecked, and clicking one appears to do nothing. Every checkbox in the
+   super admin season editor was affected; the step-challenge toggle looked
+   dead, so September was rolled over with the challenge off on all five real
+   groups. Restore native rendering and undo the text-input geometry (the
+   width:100% above stretched them across their row). */
+input[type=checkbox],input[type=radio]{
+  -webkit-appearance:auto;appearance:auto;
+  width:auto;padding:0;margin:0;border-radius:0;background:none;
+  accent-color:var(--gold);flex:none}
 label{font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px;display:block}
 
 /* ── ONBOARDING ── */
@@ -570,7 +598,7 @@ svg.mir-bico{fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round
 svg.mir-ico{fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;display:block;stroke:currentColor}
 
 /* header */
-.mir-hdr{display:flex;align-items:center;gap:11px;margin-bottom:14px;padding-top:4px}
+.mir-hdr{display:flex;align-items:center;gap:11px;margin-bottom:10px;padding-top:4px}
 .mir-ava{width:44px;height:44px;border-radius:50%;background:var(--bg-card-2);border:1px solid var(--border);flex:none;display:flex;align-items:center;justify-content:center;color:var(--muted)}
 .mir-ava svg{width:22px;height:22px}
 .mir-id{min-width:0}
@@ -580,7 +608,20 @@ svg.mir-ico{fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:roun
 .mir-flame{display:flex;align-items:center;gap:3px;color:var(--gold);font-weight:800;font-size:14px}
 .mir-flame svg{width:17px;height:17px}
 .mir-flame.cold{color:var(--muted);opacity:.7}
-.mir-pills{display:flex;gap:6px}
+/* GROUP CAROUSEL. The pills were previously inside .mir-right (flex:none), so
+   four groups plus the add button could not shrink and crushed the name column
+   instead. Now their own row: the pills scroll, the add button stays pinned. */
+.mir-groups{display:flex;align-items:center;gap:8px;margin-bottom:14px;min-width:0}
+.mir-pills{display:flex;gap:6px;flex:1;min-width:0;overflow-x:auto;padding:2px 0;
+  scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;
+  scrollbar-width:none;-ms-overflow-style:none}
+.mir-pills::-webkit-scrollbar{display:none}
+.mir-pills .gpill{flex:none;scroll-snap-align:start}
+/* Fade the trailing edge ONLY when there is genuinely more to scroll to, so the
+   hint means something. Toggled by mirRenderPills, which measures after paint. */
+.mir-pills.is-scrollable{
+  -webkit-mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 26px),transparent 100%);
+          mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 26px),transparent 100%)}
 .gpill{min-width:46px;height:46px;border-radius:12px;border:1px solid var(--border);background:var(--bg-card);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:0 8px;transition:.15s;user-select:none}
 .gpill:active{transform:scale(.94)}
 .gpill .gi{font-size:11px;font-weight:800;letter-spacing:.02em;color:var(--muted);line-height:1.1}
@@ -945,3 +986,34 @@ svg.mir-ico{fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:roun
   color:var(--muted);background:var(--green-l);border:1px solid rgba(48,209,88,.22)}
 .linked-note b{color:var(--text)}
 .linked-note svg{flex:none;width:16px;height:16px;margin-top:1px}
+
+
+/* ── SCORE BREAKDOWN SHEET — tap any name on the Board ── */
+.bk-overlay{position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:900;
+  display:flex;align-items:flex-end;justify-content:center;
+  animation:bkFade .18s ease}
+@keyframes bkFade{from{opacity:0}to{opacity:1}}
+.bk-sheet{background:var(--card);border:1px solid var(--border);border-bottom:none;
+  border-radius:18px 18px 0 0;padding:20px 18px calc(18px + env(safe-area-inset-bottom));
+  width:100%;max-width:520px;max-height:78vh;overflow-y:auto;
+  animation:bkUp .22s cubic-bezier(.22,.8,.3,1)}
+@keyframes bkUp{from{transform:translateY(24px);opacity:.4}to{transform:none;opacity:1}}
+.bk-x{background:none;border:none;color:var(--muted);font-size:22px;line-height:1;
+  padding:2px 6px;cursor:pointer}
+@media (prefers-reduced-motion:reduce){.bk-overlay,.bk-sheet{animation:none}}
+
+/* ── APP TOUR — spotlight coach marks ── */
+.tour-spot{position:fixed;z-index:950;pointer-events:none;border-radius:12px;
+  box-shadow:0 0 0 9999px rgba(0,0,0,.74), 0 0 0 3px rgba(212,168,67,.85);
+  transition:all .28s cubic-bezier(.22,.8,.3,1)}
+.tour-bubble{position:fixed;z-index:951;background:var(--card);border:1px solid var(--gold);
+  border-radius:14px;padding:14px 16px;max-width:300px;box-shadow:0 12px 34px rgba(0,0,0,.5)}
+.tour-bubble .tb-txt{font-size:13.5px;line-height:1.55;color:var(--text)}
+.tour-bubble .tb-row{display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:10px}
+.tour-bubble .tb-step{font-size:11px;color:var(--muted)}
+.tour-bubble .tb-btns{display:flex;gap:8px}
+.tour-bubble button{font:inherit;font-size:12.5px;font-weight:600;border-radius:9px;
+  padding:7px 12px;cursor:pointer}
+.tour-bubble .tb-skip{background:none;border:1px solid var(--border);color:var(--muted)}
+.tour-bubble .tb-next{background:var(--gold);border:1px solid var(--gold);color:#1a1400}
+@media (prefers-reduced-motion:reduce){.tour-spot{transition:none}}

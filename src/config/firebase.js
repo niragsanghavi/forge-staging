@@ -1,8 +1,7 @@
-// ── ENVIRONMENT SELECT ──────────────────────────────────────────────
-// One file, two environments. We pick the database by WHERE the app is served:
-//   localhost / 127.0.0.1            → STAGING (testing on your Mac)
-//   any URL containing "forge-staging" → STAGING (the staging website)
-//   anything else (the real /forge/)   → PRODUCTION
+// ── SEPTEMBER INTEGRATION: STAGING ONLY ──────────────────────────────
+// Browser/LAN testing is locked to staging. Native boot is held below until
+// a separate staging shell is reviewed. Release configuration is a separate
+// promotion task; neither hostname nor a URL flag can select production here.
 const PROD_CFG = {
   apiKey: "AIzaSyCIXojxM6N6f6kp10g7zYV5XYTyLJ6pz2g",
   authDomain: "forge-25c8c.firebaseapp.com",
@@ -22,21 +21,13 @@ const STAGING_CFG = {
 };
 // ⬆️⬆️ -------------------------------------------------------------- ⬆️⬆️
 
-// NATIVE FIRST — this check has to come before the hostname one, and the
-// reason is a live footgun found the first time the iOS app booted.
-//
-// Capacitor serves the BUNDLED app from https://localhost. The hostname test
-// below reads that as "a developer's machine" and hands back the STAGING
-// config, so every iOS user would have been reading and writing the test
-// database while the orange STAGING banner sat at the bottom of the screen.
-// It fails silently and it fails for everyone.
-//
-// A native build is always production. If a staging build of the app is ever
-// wanted, it needs its own bundle id and an explicit flag — never an accident
-// of which URL scheme Capacitor happened to choose.
-//
-// No-op on the web: window.Capacitor is undefined in every browser, so the
-// hostname logic below is reached unchanged.
+// SEPTEMBER INTEGRATION ONLY — never promote this file wholesale to release.
+// This isolated working copy must not choose production from a hostname,
+// query parameter, localStorage value, or Capacitor's localhost origin.
+// Native shell Firebase/signing configuration is still inherited from the
+// release source. Until a separate staging shell is prepared and reviewed,
+// fail before JavaScript Firebase initialization on native rather than mix
+// staging Firestore with production native messaging/identity services.
 const IS_NATIVE = !!(window.Capacitor && (
   (typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform())
   || window.Capacitor.platform === 'ios'
@@ -44,13 +35,14 @@ const IS_NATIVE = !!(window.Capacitor && (
 ));
 window.IS_NATIVE = IS_NATIVE;
 
-const IS_STAGING = !IS_NATIVE && (
-  location.hostname === 'localhost' ||
-  location.hostname === '127.0.0.1' ||
-  location.pathname.includes('forge-staging')
-);
+const IS_STAGING = true;
 window.IS_STAGING = IS_STAGING;
-const FB_CFG = IS_STAGING ? STAGING_CFG : PROD_CFG;
+window.FORGE_BUILD_ENV = 'staging-integration';
+const FB_CFG = STAGING_CFG;
+
+if(IS_NATIVE){
+  throw new Error('Forge integration: native testing is held until the staging shell configuration is reviewed.');
+}
 
 firebase.initializeApp(FB_CFG);
 
@@ -581,6 +573,20 @@ window.startForegroundPush = async function(onMessage){
         const n=(ev && ev.notification) || {};
         const d=(n.data) || {};
         if(typeof onMessage==='function') onMessage({ title:n.title||d.title, body:n.body||d.body });
+      });
+      // ── THE TAP ─────────────────────────────────────────────────────────
+      // Missing until 1.2, and it was the weakest part of the whole push
+      // feature: tapping "your team needs one more today" opened the app on
+      // whatever tab you happened to leave it on. The one moment you have
+      // someone's full attention and intent, spent making them navigate.
+      //
+      // Fires for a tap on a BACKGROUNDED app and, on a cold start, once the
+      // plugin replays the notification that launched the process — so the
+      // same handler covers both paths without a separate launch check.
+      M.addListener('notificationActionPerformed', function(ev){
+        const d=((ev && ev.notification) || {}).data || {};
+        try{ window.forgeHandleNotificationTap && window.forgeHandleNotificationTap(d); }
+        catch(e){ console.warn('[Forge] notification tap handler failed', e); }
       });
     }catch(e){ console.warn('[Forge] native foreground push unavailable', e); }
     return;

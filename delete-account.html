@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Delete Your Account — Forge</title>
+<meta name="description" content="How to delete your Forge account and what happens to your data.">
+<meta name="robots" content="index, follow">
+<style>
+:root{
+  --bg:#0a0a0d; --panel:#101016; --line:#26262e;
+  --gold:#d4a843; --gold-hot:#f0c05a; --ember:#ff6a3c;
+  --text:#f2f0ec; --muted:#8f8d98; --faint:#5a5964;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;
+  background:var(--bg);color:var(--text);line-height:1.7;
+  padding:0 20px 80px;-webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:720px;margin:0 auto}
+
+header{padding:56px 0 32px;border-bottom:1px solid var(--line);margin-bottom:40px}
+.logo{font-size:14px;font-weight:900;letter-spacing:.22em;margin-bottom:28px;display:inline-block;color:var(--text);text-decoration:none}
+.logo span{color:var(--gold)}
+h1{font-size:clamp(30px,6vw,42px);font-weight:900;letter-spacing:-.02em;line-height:1.1}
+.updated{font-size:13px;color:var(--faint);margin-top:12px;font-variant-numeric:tabular-nums}
+
+.summary{
+  background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--gold);
+  border-radius:12px;padding:24px 26px;margin-bottom:48px;
+}
+.summary .lbl{font-size:10px;font-weight:800;letter-spacing:.2em;color:var(--gold);text-transform:uppercase;margin-bottom:14px}
+.summary p{font-size:15px;color:var(--muted);margin-bottom:10px}
+.summary p:last-child{margin-bottom:0}
+.summary b{color:var(--text);font-weight:650}
+
+section{margin-bottom:44px}
+h2{font-size:19px;font-weight:800;letter-spacing:-.01em;margin-bottom:14px;color:var(--text)}
+h2 .num{color:var(--gold);font-variant-numeric:tabular-nums;margin-right:10px;font-weight:900}
+h3{font-size:15px;font-weight:750;margin:22px 0 8px;color:var(--gold-hot)}
+p{font-size:15px;color:var(--muted);margin-bottom:14px}
+p:last-child{margin-bottom:0}
+b,strong{color:var(--text);font-weight:650}
+a{color:var(--gold-hot);text-decoration:underline;text-underline-offset:3px}
+
+ol.steps{list-style:none;counter-reset:s;margin:20px 0 0}
+ol.steps li{counter-increment:s;position:relative;padding-left:44px;margin-bottom:22px;font-size:15px;color:var(--muted)}
+ol.steps li:last-child{margin-bottom:0}
+ol.steps li::before{
+  content:counter(s);position:absolute;left:0;top:-1px;
+  width:28px;height:28px;border-radius:50%;
+  background:var(--gold);color:#0a0a0d;
+  font-weight:900;font-size:14px;display:grid;place-items:center;
+}
+/* Only the step's own title goes on its own line. Scoped to first-child
+   because bolded terms INSIDE the step body were also being blocked out,
+   which chopped "include your group code (…) and the player name" into
+   five separate lines. */
+ol.steps li>b:first-child{display:block;color:var(--text);font-weight:700;margin-bottom:2px}
+
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14.5px}
+th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:800}
+td.k{color:var(--text);font-weight:650;white-space:nowrap}
+td.v{color:var(--muted)}
+.tw{overflow-x:auto}
+
+.mailbox{
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:22px 24px;margin:24px 0 0;text-align:center;
+}
+.mailbox .em{font-size:20px;font-weight:800;letter-spacing:-.01em}
+.mailbox .em a{color:var(--gold-hot)}
+.mailbox .note{font-size:13px;color:var(--faint);margin-top:8px}
+
+footer{border-top:1px solid var(--line);padding-top:28px;margin-top:56px;font-size:13px;color:var(--faint)}
+footer a{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <a href="/" class="logo">FOR<span>GE</span></a>
+  <h1>Delete your account</h1>
+  <div class="updated">Last updated 4 August 2026</div>
+</header>
+
+<div class="summary">
+  <div class="lbl">In short</div>
+  <p>This page explains how to delete your <b>Forge</b> account and everything attached to it.</p>
+  <p>Send one email and your account, your name, your PIN and your entire workout history are <b>permanently removed within 30 days</b>. There is no fee and you do not need to give a reason.</p>
+</div>
+
+<section>
+  <h2><span class="num">1</span>How to request deletion</h2>
+  <p>Forge accounts are not tied to an email address — you sign in with a group code, your name and a 4-digit PIN. So deletion is requested by email, and we confirm it's really you before anything is removed.</p>
+
+  <ol class="steps">
+    <li><b>Email us</b>Write to the address below from any email address you can receive replies on.</li>
+    <li><b>Tell us who you are</b>Include your <b>group code</b> (the 6-character code you use to sign in, e.g. BR0RRU) and the <b>player name</b> exactly as it appears in the app.</li>
+    <li><b>Confirm it's you</b>We reply asking you to confirm from within the app or via your group's organiser. This stops anyone deleting someone else's account.</li>
+    <li><b>Done</b>Once confirmed, your account and data are deleted. We email you when it's complete — within 30 days, and usually within a few days.</li>
+  </ol>
+
+  <div class="mailbox">
+    <div class="em"><a href="mailto:team@goforge.in?subject=Delete%20my%20Forge%20account">team@goforge.in</a></div>
+    <div class="note">Subject: Delete my Forge account</div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">2</span>What is deleted</h2>
+  <p>Everything below is erased permanently and cannot be recovered afterwards.</p>
+  <div class="tw"><table>
+    <tr><th>Data</th><th>What it is</th></tr>
+    <tr><td class="k">Account record</td><td class="v">Your Forge account, including your display name and the internal ID that links your activity together.</td></tr>
+    <tr><td class="k">Your PIN</td><td class="v">The scrambled form of your 4-digit sign-in PIN. Forge never stores it in readable form.</td></tr>
+    <tr><td class="k">Workout history</td><td class="v">Every workout you have logged — the type, the date, and any distance or training notes you added.</td></tr>
+    <tr><td class="k">Group membership</td><td class="v">Your entry on every group roster you belong to, including your team and any role.</td></tr>
+    <tr><td class="k">Streaks and stats</td><td class="v">Current and longest streaks, months active, totals and any awards.</td></tr>
+    <tr><td class="k">Device links</td><td class="v">The anonymous identifiers connecting your account to the phones you have signed in on.</td></tr>
+  </table></div>
+</section>
+
+<section>
+  <h2><span class="num">3</span>What is kept, and for how long</h2>
+  <div class="tw"><table>
+    <tr><th>Data</th><th>Why, and for how long</th></tr>
+    <tr><td class="k">Platform totals</td><td class="v">Forge keeps counts such as "total workouts logged across all groups". Your workouts are removed from these figures on deletion; what remains is a number that contains nothing about you and cannot be traced back to you. Kept indefinitely.</td></tr>
+    <tr><td class="k">Your group's history</td><td class="v">Past months already completed by your group remain, with your entries removed. Other members' data is not affected by your deletion.</td></tr>
+    <tr><td class="k">Error reports</td><td class="v">If the app recorded a crash while you were using it, that technical record may persist for up to <b>90 days</b> before being automatically discarded. It contains no name and no workout data.</td></tr>
+    <tr><td class="k">Survey answers</td><td class="v">If you answered an in-app survey, those answers were submitted anonymously and are not linked to your account, so they cannot be located to delete.</td></tr>
+  </table></div>
+  <p>Nothing in this list identifies you.</p>
+</section>
+
+<section>
+  <h2><span class="num">4</span>Deleting only your data, but keeping your account</h2>
+  <p>If you would rather clear your workout history and start fresh without losing your account, say so in the same email and we will remove your logged workouts while leaving your account and group membership in place.</p>
+  <p>You can also remove individual workouts yourself at any time from the Feed screen in the app — tap the ✕ on any entry you logged.</p>
+</section>
+
+<section>
+  <h2><span class="num">5</span>Questions</h2>
+  <p>Any question about deletion, or about what Forge stores, goes to <a href="mailto:team@goforge.in">team@goforge.in</a>. See also our <a href="/privacy">Privacy Policy</a>.</p>
+</section>
+
+<footer>
+  Forge — Forged by the group. · <a href="/">goforge.in</a> · <a href="/privacy">Privacy Policy</a>
+</footer>
+
+</div>
+</body>
+</html>

@@ -307,7 +307,59 @@ window.healthRecentWorkouts = async function(){
    which is what a scoreboard needs.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-window.STEP_PER_MEMBER_TARGET = 70000;   // per member, per week (10k × 7)
+window.STEP_PER_MEMBER_TARGET = 70000;   // per member, per SEVEN DAYS (10k × 7)
+// ── ROUNDS, NOT WEEKS ───────────────────────────────────────────────────────
+// The challenge used ISO Mon–Sun weeks, and that was wrong in a way that only
+// showed up at a month boundary: a week starting 31 Aug settles while September
+// is the active season, so the resolver's "is this week inside this season"
+// guard rejected it and NOBODY was paid. It also split that week's step data
+// across two season documents. Both ends of every month that does not begin on
+// a Monday were affected — six months in seven.
+//
+// The fix is not to work around the boundary but to remove it: divide the month
+// into FOUR rounds and let nothing cross the 1st, which is how every other part
+// of Forge already behaves (seasons, scores, streaks all reset on the 1st).
+//
+// Four, distributing the remainder into the early rounds, gives 7- or 8-day
+// rounds for every possible month length and never a stub:
+//   28d -> 7,7,7,7   29d -> 8,7,7,7   30d -> 8,8,7,7   31d -> 8,8,8,7
+// Fixed 7-day stretches would leave a 1–3 day scrap at month end; merging that
+// scrap into the last round would make a 10-day finale decide the month.
+//
+// They are ROUNDS and not weeks on purpose: round 1 of September runs Tue–Tue,
+// and anything called a "week" invites people to expect Monday–Sunday and
+// report a bug when they do not get it.
+window.STEP_ROUNDS_PER_MONTH = 4;
+window.stepRoundsOf = function(s){
+  const season = s || window.season || {};
+  // Clamp: a corrupt `days` must not produce zero-length or absurd rounds.
+  const n = Math.min(31, Math.max(28, Number(season.days) || 30));
+  const base = Math.floor(n / window.STEP_ROUNDS_PER_MONTH);
+  const extra = n % window.STEP_ROUNDS_PER_MONTH;
+  const out = [];
+  let start = 1;
+  for (let i = 0; i < window.STEP_ROUNDS_PER_MONTH; i++){
+    const len = base + (i < extra ? 1 : 0);
+    out.push({ n: i + 1, start, end: start + len - 1, days: len });
+    start += len;
+  }
+  return out;
+};
+// The round containing a given day-of-month (1-based), or null if out of range.
+window.stepRoundOfDay = function(day, s){
+  const d = Number(day);
+  return window.stepRoundsOf(s).find(r => d >= r.start && d <= r.end) || null;
+};
+// Stable id for a round's docs. Kept at or under 16 characters — the rules
+// bound the field's length.
+window.stepRoundId = function(seasonId, round){ return String(seasonId) + '-r' + round.n; };
+// Target scales with the round's length, so an 8-day round is longer but not
+// easier: the configured per-member number stays "per seven days", which keeps
+// any admin override meaning what it meant before.
+window.stepRoundTarget = function(round, s){
+  const per7 = window.stepTargetOf(s);
+  return Math.round(per7 / 7 * (round && round.days ? round.days : 7));
+};
 window.STEP_WIN_BONUS         = 5;       // points to each member of the winning team
 // Above any real human day (the recorded 24h record is ~100k) and far below the
 // absurd. Applied on READ as well as write, so a forged doc cannot move a board
@@ -369,18 +421,39 @@ window.healthDailySteps = async function(fromDate, toDate){
 // Is the challenge switched on for the season being viewed? Super-admin sets
 // season.stepChallenge.enabled. Absent/false on every season that predates the
 // feature, so nothing changes for anyone until it is deliberately turned on.
+// THE GATE FIELD IS `stepRounds`, NOT `stepChallenge`. This is a deliberate
+// rename, not a tidy-up — it is the whole mechanism that keeps two app versions
+// from scoring the same season by different rules.
+//
+// 1.0/1.1 shipped a frozen www/ bundle that reads `stepChallenge` and settles
+// on Mon-Sun ISO weeks. That logic loses any week straddling a month boundary
+// (the guard compares the week's Monday against the ACTIVE season), which is
+// the first and last week of every month not starting on a Monday — six months
+// in seven. 1.2 replaces it with four balanced in-month rounds (stepRoundsOf).
+//
+// Both versions read the SAME season doc. Had 1.2 kept the old field name, one
+// admin tick would have started two different contests writing to one
+// stepWeeks collection under different key schemes ("2026-W36" vs "2026-09-r1")
+// — invisible to each other, and the older cohort silently scoring lower
+// through no fault of their own. Renaming the gate means an old client asks for
+// `stepRounds`, gets nothing, and correctly concludes the challenge is off: it
+// writes nothing, settles nothing, awards nothing. Visible "update to join"
+// beats an invisible scoring penalty.
+//
+// Do NOT add a `|| s.stepChallenge` fallback here. That single clause would
+// re-admit every 1.1 client to the contest and undo all of the above.
 window.isStepChallengeOn = function(s){
-  const cfg = (s || window.season || {}).stepChallenge;
+  const cfg = (s || window.season || {}).stepRounds;
   return !!(cfg && cfg.enabled === true);
 };
 // Per-season overrides, falling back to the constants above.
 window.stepTargetOf = function(s){
-  const cfg = (s || window.season || {}).stepChallenge || {};
+  const cfg = (s || window.season || {}).stepRounds || {};
   const t = Number(cfg.perMemberTarget);
   return (Number.isFinite(t) && t > 0) ? t : window.STEP_PER_MEMBER_TARGET;
 };
 window.stepBonusOf = function(s){
-  const cfg = (s || window.season || {}).stepChallenge || {};
+  const cfg = (s || window.season || {}).stepRounds || {};
   const b = Number(cfg.bonus);
   return (Number.isFinite(b) && b >= 0) ? b : window.STEP_WIN_BONUS;
 };
@@ -617,6 +690,20 @@ window.FEATURE_GOOGLE_AUTH = false;
 // SAME promotion as the Function deploy + the ownership-rule deploy; false
 // keeps the legacy in-batch client write (unchanged behaviour). Staging-first.
 window.FEATURE_SERVER_WRITES = false;
+
+// ── CLIENT VERSION TELEMETRY ─────────────────────────────────────────────
+// Written to users/{id} as {build, platform} at login and again on every log
+// (the two writes that already happen — this adds fields, never a request).
+// Bump the string once per release, alongside MARKETING_VERSION.
+//
+// The design leans on ABSENCE: 1.0/1.1 bundles predate this constant, so a
+// user doc with NO build field is someone who has not opened an instrumented
+// build. That makes old versions countable without ever having reported —
+// which is the only adoption signal available for sealed native bundles, and
+// the gate for two decisions that must not be guessed: enabling stepRounds
+// per group (needs the group ON 1.2) and App Check enforcement (locks out
+// every pre-App-Check bundle the moment it flips).
+window.FORGE_APP_VERSION = '1.2';
 
 // PUSH NOTIFICATIONS. Needs one console step that cannot be automated:
 //   Firebase console -> Project settings -> Cloud Messaging ->

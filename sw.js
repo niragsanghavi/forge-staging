@@ -2,10 +2,19 @@
 // You deploy often and have been bitten by stale caches before, so this always
 // tries the network first and only falls back to cache when offline.
 // To force every device to refresh, bump CACHE_VERSION (e.g. 'forge-v1' -> 'forge-v2').
-const CACHE_VERSION = 'forge-v71';
+const CACHE_VERSION = 'forge-staging-v79';
 const APP_SHELL = [
   './', './index.html',
   './src/style/main.css',
+  './src/style/today.css',
+  './src/style/sports-icons.css',
+  './src/ui/today.js',
+  './src/ui/sports-icons.js',
+  './assets/sports/soft-sculpt.webp',
+  './assets/sports/fire.webp',
+  './assets/forgeling.webp',
+  './assets/fonts/archivo-800.woff2',
+  './assets/icons/forge-f.svg',
   './src/config/firebase.js',
   './src/state/appState.js',
   './src/services/scoringEngine.js'
@@ -19,7 +28,7 @@ self.addEventListener('install', e=>{
 self.addEventListener('activate', e=>{
   e.waitUntil(
     caches.keys()
-      .then(keys=>Promise.all(keys.filter(k=>k!==CACHE_VERSION).map(k=>caches.delete(k))))
+      .then(keys=>Promise.all(keys.filter(k=>k.startsWith('forge-') && k!==CACHE_VERSION).map(k=>caches.delete(k))))
       .then(()=>self.clients.claim())
   );
 });
@@ -30,7 +39,22 @@ self.addEventListener('fetch', e=>{
   if(new URL(req.url).origin!==location.origin) return; // let Firebase + CDNs go straight to network
   e.respondWith(
     fetch(req)
-      .then(res=>{ const copy=res.clone(); caches.open(CACHE_VERSION).then(c=>c.put(req,copy)).catch(()=>{}); return res; })
-      .catch(()=> caches.match(req).then(r=> r || caches.match('./index.html')))
+      .then(res=>{
+        if(res.ok && res.type!=='opaque'){
+          const copy=res.clone();
+          e.waitUntil(caches.open(CACHE_VERSION).then(c=>c.put(req,copy)).catch(()=>{}));
+        }
+        return res;
+      })
+      .catch(async()=>{
+        const cache=await caches.open(CACHE_VERSION);
+        const cached=await cache.match(req);
+        if(cached)return cached;
+        if(req.mode==='navigate'){
+          const page=await cache.match('./index.html');
+          if(page)return page;
+        }
+        return Response.error();
+      })
   );
 });

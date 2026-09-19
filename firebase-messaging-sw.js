@@ -20,12 +20,9 @@
 importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
 
-// Same rule as firebase.js: localhost or a path containing forge-staging is
-// STAGING, everything else is production.
-var IS_STAGING =
-  self.location.hostname === 'localhost' ||
-  self.location.hostname === '127.0.0.1' ||
-  self.location.pathname.indexOf('forge-staging') !== -1;
+// This integration candidate is staging-only, including background messaging.
+// Hostnames, query strings and service-worker scope cannot select production.
+var IS_STAGING = true;
 
 firebase.initializeApp(IS_STAGING ? {
   apiKey: "AIzaSyD-bFi6X9Hevwmg-p65ajz35G64wco90CA",

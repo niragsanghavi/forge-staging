@@ -1,100 +1,139 @@
 #!/usr/bin/env node
-// Forge QA kit — one read-only pass. Exits non-zero on any failure.
-// Run from either repo root: node qa/check.mjs
+// Forge offline QA — local files and synthetic data only. No network or auth.
 import fs from 'node:fs';
+import path from 'node:path';
 import vm from 'node:vm';
-import { execSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = process.cwd();
-const has = p => fs.existsSync(`${ROOT}/${p}`);
-if (!has('index.html')) { console.error('run from a Forge repo root'); process.exit(2); }
-let fails = 0;
-const P = (ok, msg) => { console.log((ok ? '  \x1b[32m✓\x1b[0m ' : '  \x1b[31m✗\x1b[0m ') + msg); if (!ok) fails++; };
-const section = t => console.log(`\n\x1b[1m${t}\x1b[0m`);
-
-// ─────────────────────────── 1. STATIC ───────────────────────────
-section('1. STATIC');
-const html = fs.readFileSync(`${ROOT}/index.html`, 'utf8');
-P(![...html.split('\n')].some(l => /^(<{7}|={7}|>{7})( |$)/.test(l)), 'no git conflict markers');
-
-const blocks = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1]);
-const mods = ['src/state/appState.js','src/services/scoringEngine.js','src/config/firebase.js']
-  .filter(has).map(p => fs.readFileSync(`${ROOT}/${p}`, 'utf8'));
-let parseOK = true;
-[...blocks, ...mods].forEach((code, i) => {
-  try { new vm.Script(code); } catch (e) { parseOK = false; console.log(`     parse error in unit ${i}: ${e.message}`); }
-});
-P(parseOK, `all ${blocks.length} script blocks + ${mods.length} modules parse`);
-
-const defs = {};
-for (const m of html.matchAll(/^(?:async )?function ([A-Za-z_]\w*)\s*\(/gm)) defs[m[1]] = (defs[m[1]]||0)+1;
-const dups = Object.entries(defs).filter(([,n]) => n > 1).map(([k]) => k);
-P(dups.length === 0, dups.length ? `duplicate functions: ${dups}` : 'no duplicate function definitions');
-
-const allSrc = html + mods.join('\n');
-const called = new Set([...html.matchAll(/on(?:click|change|input|keydown|submit)="(?:if\(event[^"]*?\))?\s*([A-Za-z_]\w*)\s*\(/g)].map(m => m[1]));
-const known = new Set(['this','event','fn']);
-const missing = [...called].filter(c => !defs[c] && !new RegExp(`(?:window\\.)?${c}\\s*=\\s*(?:async )?(?:function|\\()`).test(allSrc) && !known.has(c));
-P(missing.length === 0, missing.length ? `unresolved handlers: ${missing}` : `all ${called.size} onclick handlers resolve`);
-
-// ─────────────────────────── 2. SCORING ──────────────────────────
-section('2. SCORING (live prod data)');
-const cfg = fs.readFileSync(`${ROOT}/src/config/firebase.js`, 'utf8');
-const idx = cfg.indexOf('forge-25c8c');
-const API = cfg.slice(Math.max(0, idx-400), idx+400).match(/apiKey:\s*"([^"]+)"/)[1];
-const B = 'https://firestore.googleapis.com/v1/projects/forge-25c8c/databases/(default)/documents';
-const val = v => { const k = Object.keys(v)[0];
-  if (k==='integerValue') return +v[k]; if (k==='booleanValue') return v[k];
-  if (k==='arrayValue') return (v[k].values||[]).map(val);
-  if (k==='mapValue') { const o={}; for (const [a,b] of Object.entries(v[k].fields||{})) o[a]=val(b); return o; } return v[k]; };
-const docOf = d => { const o={}; for (const [a,b] of Object.entries(d.fields||{})) o[a]=val(b); return o; };
-try {
-  const tok = (await (await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${API}`,
-    { method:'POST', headers:{'Content-Type':'application/json'}, body:'{"returnSecureToken":true}' })).json()).idToken;
-  const H = { 'Content-Type':'application/json', Authorization:'Bearer '+tok };
-  const engineSrc = fs.readFileSync(`${ROOT}/src/services/scoringEngine.js`, 'utf8');
-  const now = new Date(Date.now() + 5.5*3600*1000);
-  const M = now.getUTCMonth()+1, Y = now.getUTCFullYear();
-  for (const gc of ['75EKZT','AJ6W6B','BR0RRU','IPJEGE','LNLNLN']) {
-    const season = docOf(await (await fetch(`${B}/groups/${gc}/seasons/${Y}-${String(M).padStart(2,'0')}`, { headers:H })).json());
-    if (!season.roster) { P(false, `${gc}: no current season doc (${Y}-${M})`); continue; }
-    const q = { structuredQuery: { from:[{collectionId:'logs'}], where:{ compositeFilter:{ op:'AND', filters:[
-      {fieldFilter:{field:{fieldPath:'groupCode'},op:'EQUAL',value:{stringValue:gc}}},
-      {fieldFilter:{field:{fieldPath:'month'},op:'EQUAL',value:{integerValue:String(M)}}},
-      {fieldFilter:{field:{fieldPath:'year'},op:'EQUAL',value:{integerValue:String(Y)}}}]}}, limit:2000 } };
-    const rows = await (await fetch(B+':runQuery', { method:'POST', headers:H, body:JSON.stringify(q) })).json();
-    const logs = rows.filter(r=>r.document).map(r=>docOf(r.document)).filter(l=>l.voided!==true);
-    const run = flag => {
-      const ctx = { window:{}, console, groupCode:gc, seasonId:`${Y}-${M}` };
-      vm.createContext(ctx); vm.runInContext(engineSrc, ctx);
-      const s2 = {...season}; if (flag) s2.scoringV2 = true; else delete s2.scoringV2;
-      const out = {}; let bad = false;
-      for (const p of season.roster) {
-        const r = ctx.window.score(p.name, { season:s2, logs, twistWindows:[], groupCode:gc });
-        out[p.name] = r.total;
-        const sum = r.base+r.sb+r.wb+r.rb+r.tb+r.b30+r.pen+r.bossBonus+r.dayBonuses+r.underdogBonus+r.jackBonus+r.ipBonus+r.kmBonus+(r.stepBonus||0);
-        if (!Number.isFinite(r.total) || r.total !== Math.max(0, sum)) bad = true;
-      }
-      return { out, bad };
-    };
-    const off = run(false), on = run(true);
-    const regress = Object.keys(off.out).filter(n => on.out[n] < off.out[n]);
-    P(!off.bad && !on.bad && regress.length === 0,
-      `${gc}: ${season.roster.length} members — totals reconcile, V2 Pareto`);
-  }
-} catch (e) { P(false, `scoring pass could not reach prod: ${e.message}`); }
-
-// ─────────────────────────── 3. LIVE ─────────────────────────────
-section('3. LIVE SITES');
-for (const site of ['https://goforge.in','https://niragsanghavi.github.io/forge-staging']) {
-  try {
-    const cb = Math.floor(Date.now()/1000);
-    const sw = await (await fetch(`${site}/sw.js?cb=${cb}`)).text();
-    const ver = (sw.match(/CACHE_VERSION\s*=\s*'([^']+)'/) || [])[1] || '?';
-    const rules = await fetch(`${site}/firestore.rules?cb=${cb}`);
-    P(rules.status === 404, `${site.replace('https://','')} — cache ${ver}, rules 404 (not leaked)`);
-  } catch (e) { P(false, `${site}: unreachable — ${e.message}`); }
+const args = process.argv.slice(2);
+if (args.length) {
+  console.error(`Unknown option(s): ${args.join(' ')}\nUsage: node qa/check.mjs`);
+  process.exit(2);
 }
 
-console.log(`\n${fails ? '\x1b[31m'+fails+' FAILURE(S)\x1b[0m' : '\x1b[32mALL CHECKS PASS\x1b[0m'}`);
-process.exit(fails ? 1 : 0);
+const ROOT = process.cwd();
+const ownPath = fileURLToPath(import.meta.url);
+const ownRoot = path.resolve(path.dirname(ownPath), '..');
+if (path.resolve(ROOT) !== ownRoot || !fs.existsSync(path.join(ROOT, 'index.html'))) {
+  console.error('Run from the Forge repository root: node qa/check.mjs');
+  process.exit(2);
+}
+
+let failures = 0;
+let checks = 0;
+const check = (ok, message) => {
+  checks++;
+  console.log(`${ok ? '  ✓' : '  ✗'} ${message}`);
+  if (!ok) failures++;
+};
+const section = title => console.log(`\n${title}`);
+const read = relative => fs.readFileSync(path.join(ROOT, relative), 'utf8');
+
+function parseScript(source, label) {
+  try {
+    new vm.Script(source, { filename: label });
+    return true;
+  } catch (error) {
+    console.log(`     parse error in ${label}: ${error.message}`);
+    return false;
+  }
+}
+
+function fixedDate(iso) {
+  return class FixedDate extends Date {
+    constructor(...args) { super(...(args.length ? args : [iso])); }
+    static now() { return new Date(iso).valueOf(); }
+  };
+}
+
+function fixtureErrors(scenario, index) {
+  const label = `scenario ${index + 1}`;
+  const errors = [];
+  if (!scenario || typeof scenario !== 'object' || Array.isArray(scenario)) return [`${label} is an object`];
+  if (typeof scenario.id !== 'string' || !scenario.id.trim()) errors.push(`${label} has a name`);
+  if (typeof scenario.player !== 'string' || !scenario.player.trim()) errors.push(`${label} has a player`);
+  if (!scenario.season || typeof scenario.season !== 'object' || Array.isArray(scenario.season) || !Array.isArray(scenario.season.roster)) errors.push(`${label} has a season with roster array`);
+  if (!Array.isArray(scenario.logs)) errors.push(`${label} has a logs array`);
+  if (!scenario.expected || typeof scenario.expected !== 'object' || Array.isArray(scenario.expected) || Object.keys(scenario.expected).length === 0) errors.push(`${label} has nonempty explicit expectations`);
+  else if (!Number.isFinite(scenario.expected.total)) errors.push(`${label} has a finite expected total`);
+  return errors;
+}
+
+section('1. OFFLINE STATIC CHECKS');
+const html = read('index.html');
+check(![...html.split('\n')].some(line => /^(<{7}|={7}|>{7})( |$)/.test(line)), 'no git conflict markers');
+
+const scriptSources = [...html.matchAll(/<script[^>]*\bsrc=["']([^"']+)["'][^>]*><\/script>/gi)].map(match => match[1]);
+const localScriptSources = scriptSources.filter(src => !/^(?:https?:)?\/\//i.test(src));
+const remoteScriptSources = scriptSources.filter(src => /^(?:https?:)?\/\//i.test(src));
+const requiredLocal = ['src/config/firebase.js', 'src/state/appState.js', 'src/services/scoringEngine.js'];
+const sourceFiles = [...new Set([...localScriptSources, ...requiredLocal])];
+const missingLocal = sourceFiles.filter(relative => !fs.existsSync(path.join(ROOT, relative)));
+check(missingLocal.length === 0,
+  missingLocal.length ? `missing local script reference(s): ${missingLocal.join(', ')}` : `all ${localScriptSources.length} local script reference(s) exist`);
+check(scriptSources.length > 0, `found ${scriptSources.length} script reference(s); local sources are inspected without fetching`);
+
+const inline = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)].map(match => match[1]);
+let parseOK = true;
+inline.forEach((source, index) => { parseOK = parseScript(source, `index.html inline script ${index + 1}`) && parseOK; });
+for (const relative of sourceFiles) {
+  if (fs.existsSync(path.join(ROOT, relative))) parseOK = parseScript(read(relative), relative) && parseOK;
+}
+check(parseOK, `${inline.length} inline and ${sourceFiles.length} local script unit(s) parse`);
+console.log(`  - Remote script references deliberately not fetched (${remoteScriptSources.length}); deployment/site checks are excluded.`);
+
+const definitions = {};
+for (const match of html.matchAll(/^(?:async )?function ([A-Za-z_]\w*)\s*\(/gm)) definitions[match[1]] = (definitions[match[1]] || 0) + 1;
+const duplicates = Object.entries(definitions).filter(([, count]) => count > 1).map(([name]) => name);
+check(duplicates.length === 0, duplicates.length ? `duplicate functions: ${duplicates.join(', ')}` : 'no duplicate function definitions');
+
+const allLocalSource = html + sourceFiles.filter(relative => fs.existsSync(path.join(ROOT, relative))).map(read).join('\n');
+const called = new Set([...html.matchAll(/on(?:click|change|input|keydown|submit)="(?:if\(event[^"]*?\))?\s*([A-Za-z_]\w*)\s*\(/g)].map(match => match[1]));
+const unresolved = [...called].filter(name => !definitions[name]
+  && !new RegExp(`(?:window\\.)?${name}\\s*=\\s*(?:async )?(?:function|\\()`).test(allLocalSource)
+  && !['this', 'event', 'fn'].includes(name));
+check(unresolved.length === 0,
+  unresolved.length ? `unresolved handlers: ${unresolved.join(', ')}` : `all ${called.size} inline handlers resolve`);
+
+section('2. SYNTHETIC SCORING');
+let fixture;
+try {
+  fixture = JSON.parse(read('qa/fixtures/offline-scoring.json'));
+  check(Array.isArray(fixture.scenarios) && fixture.scenarios.length > 0, 'fixture contains at least one scenario');
+} catch (error) {
+  check(false, `fixture is valid JSON: ${error.message}`);
+}
+
+if (Array.isArray(fixture?.scenarios) && fixture.scenarios.length > 0) {
+  const engineSource = read('src/services/scoringEngine.js');
+  for (const [index, scenario] of fixture.scenarios.entries()) {
+    const before = JSON.stringify(scenario);
+    const errors = fixtureErrors(scenario, index);
+    check(errors.length === 0, errors.length ? errors.join('; ') : `${scenario.id}: fixture schema is complete`);
+    if (errors.length) continue;
+    try {
+      const context = { window: {}, console, Date: fixedDate(scenario.now) };
+      vm.createContext(context);
+      context.__qaScenario = { player: scenario.player, ctx: { season: scenario.season, logs: scenario.logs, twistWindows: scenario.twistWindows || [], groupCode: scenario.groupCode } };
+      vm.runInContext(`${engineSource}\nwindow.__qaResult = window.score(__qaScenario.player, __qaScenario.ctx);`, context, { filename: 'src/services/scoringEngine.js', timeout: 1000 });
+      const actual = context.window.__qaResult;
+      const mismatches = Object.entries(scenario.expected).filter(([key, expected]) => !(key in actual) || actual[key] !== expected);
+      check(mismatches.length === 0,
+        mismatches.length ? `${scenario.id}: expected ${mismatches.map(([key, value]) => `${key}=${value}`).join(', ')}` : `${scenario.id}: expected score fields match`);
+      check(JSON.stringify(scenario) === before, `${scenario.id}: scoring does not mutate fixture input`);
+    } catch (error) {
+      check(false, `${scenario.id || 'unnamed scenario'}: scoring runs (${error.message})`);
+    }
+  }
+}
+
+section('3. EXCLUDED BY DESIGN');
+console.log('  - No Firebase authentication, Firestore reads/writes, HTTP requests, or deployed-site checks run here.');
+console.log('  - Real-device, native build/signing, deployment, and production-data verification remain separate human-gated checks.');
+
+if (checks === 0) {
+  console.error('No-op QA run: no checks executed.');
+  process.exit(2);
+}
+console.log(`\n${failures ? `${failures} FAILURE(S)` : `ALL ${checks} OFFLINE CHECKS PASS`}`);
+process.exit(failures ? 1 : 0);

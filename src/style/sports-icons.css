@@ -1,0 +1,12 @@
+:root{--sport-sheet:url("../../assets/sports/soft-sculpt.webp");--fire-sheet:url("../../assets/sports/fire.webp")}
+.forge-sport{display:inline-block;width:42px;height:42px;flex:none;vertical-align:middle;background-image:var(--sport-sheet);background-size:600% 800%;background-position:var(--sport-x) var(--sport-y);background-repeat:no-repeat}
+.forge-sport-mono{background:currentColor;mask-image:var(--sport-sheet);mask-size:600% 800%;mask-position:var(--sport-x) var(--sport-y);mask-repeat:no-repeat;-webkit-mask-image:var(--sport-sheet);-webkit-mask-size:600% 800%;-webkit-mask-position:var(--sport-x) var(--sport-y);-webkit-mask-repeat:no-repeat;color:var(--today-text,var(--text))}
+.forge-fire{display:inline-block;width:28px;height:28px;flex:none;vertical-align:middle;background-image:var(--fire-sheet);background-size:300% 200%;background-position:0 0;background-repeat:no-repeat;animation:forge-fire-frames 1.2s step-end infinite}
+.forge-fire.flk-s{width:20px;height:20px}.forge-fire.flk-m{width:23px;height:23px}.forge-fire.flk-l{width:28px;height:28px}
+.fi-streak .forge-fire{width:23px;height:23px}.mir-flame .forge-fire{width:20px;height:20px}.mir-rline .forge-fire{width:24px;height:24px}
+.mir-pick .forge-sport{width:40px;height:40px}.mir-frow .forge-sport{width:34px;height:34px}.ddrow .forge-sport{width:36px;height:36px}.mir-bar .forge-sport{width:20px;height:20px}.fi-ico .forge-sport{width:48px;height:48px}
+.mir-day .forge-sport{width:16px;height:16px;margin:0;color:currentColor}.mir-day .forge-sport+.forge-sport{margin-left:-5px}
+.mir-day-marks{display:flex;align-items:center;justify-content:center;gap:1px;width:100%;max-width:100%;margin-top:5px;color:var(--today-text,var(--text));overflow:hidden}.mir-day-more{font-size:9px;font-weight:800;line-height:1;white-space:nowrap}
+@keyframes forge-fire-frames{0%,100%{background-position:0 0}16.666%{background-position:50% 0}33.333%{background-position:100% 0}50%{background-position:0 100%}66.666%{background-position:50% 100%}83.333%{background-position:100% 100%}}
+@media(min-width:390px){.mir-day .forge-sport{width:20px;height:20px}.mir-day .forge-sport+.forge-sport{margin-left:-7px}}
+@media(prefers-reduced-motion:reduce){.forge-fire{animation:none!important;background-position:0 0}}

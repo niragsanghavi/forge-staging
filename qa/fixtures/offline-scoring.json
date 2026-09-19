@@ -1,0 +1,62 @@
+{
+  "scenarios": [
+    {
+      "id": "empty-season",
+      "now": "2026-02-02T12:00:00Z",
+      "groupCode": "SYNTHETIC",
+      "player": "Alex",
+      "season": { "month": 2, "year": 2026, "days": 28, "rolesEnabled": false, "minWorkouts": 0, "teamStreakThreshold": 1, "roster": [{ "name": "Alex", "team": "A" }] },
+      "logs": [],
+      "expected": { "wo": 0, "base": 0, "tb": 0, "total": 0, "streak": 0 }
+    },
+    {
+      "id": "single-member-first-day",
+      "now": "2026-02-02T12:00:00Z",
+      "groupCode": "SYNTHETIC",
+      "player": "Alex",
+      "season": {
+        "month": 2,
+        "year": 2026,
+        "days": 28,
+        "rolesEnabled": false,
+        "minWorkouts": 0,
+        "teamStreakThreshold": 1,
+        "roster": [{ "name": "Alex", "team": "A" }]
+      },
+      "logs": [{
+        "groupCode": "SYNTHETIC",
+        "player": "Alex",
+        "team": "A",
+        "day": 1,
+        "month": 2,
+        "year": 2026,
+        "workouts": ["Run"]
+      }],
+      "expected": { "wo": 1, "base": 5, "tb": 1, "total": 6, "streak": 1 }
+    },
+    {
+      "id": "duplicate-same-day-is-one-scoring-day",
+      "now": "2026-02-02T12:00:00Z",
+      "groupCode": "SYNTHETIC",
+      "player": "Alex",
+      "season": { "month": 2, "year": 2026, "days": 28, "rolesEnabled": false, "minWorkouts": 0, "teamStreakThreshold": 1, "roster": [{ "name": "Alex", "team": "A" }] },
+      "logs": [
+        { "groupCode": "SYNTHETIC", "player": "Alex", "team": "A", "day": 1, "month": 2, "year": 2026, "workouts": ["Run"] },
+        { "groupCode": "SYNTHETIC", "player": "Alex", "team": "A", "day": 1, "month": 2, "year": 2026, "workouts": ["Ride"] }
+      ],
+      "expected": { "wo": 1, "base": 5, "tb": 1, "total": 6, "streak": 1 }
+    },
+    {
+      "id": "two-valid-days-build-streak",
+      "now": "2026-02-02T12:00:00Z",
+      "groupCode": "SYNTHETIC",
+      "player": "Alex",
+      "season": { "month": 2, "year": 2026, "days": 28, "rolesEnabled": false, "minWorkouts": 0, "teamStreakThreshold": 1, "roster": [{ "name": "Alex", "team": "A" }] },
+      "logs": [
+        { "groupCode": "SYNTHETIC", "player": "Alex", "team": "A", "day": 1, "month": 2, "year": 2026, "workouts": ["Run"] },
+        { "groupCode": "SYNTHETIC", "player": "Alex", "team": "A", "day": 2, "month": 2, "year": 2026, "workouts": ["Ride"] }
+      ],
+      "expected": { "wo": 2, "base": 10, "tb": 3, "total": 13, "streak": 2 }
+    }
+  ]
+}
