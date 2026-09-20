@@ -35,7 +35,7 @@
 <title>Forge</title>
 <link rel="stylesheet" href="src/style/main.css">
 <link rel="stylesheet" href="src/style/sports-icons.css">
-<link rel="stylesheet" href="src/style/today.css?v=f025-1">
+<link rel="stylesheet" href="src/style/today.css?v=f026-1">
 <meta name="theme-color" content="#0a0a0d">
 <link rel="manifest" href="manifest.json">
 <meta name="mobile-web-app-capable" content="yes">
@@ -659,6 +659,12 @@
 
     <!-- ── ZONE 1: YOU. The reason anyone opens this tab. Always expanded. ── -->
     <div class="card" id="profileStatsCard"><div class="tmuted">Loading&hellip;</div></div>
+    <section class="card forge-support-card" id="forgeSupportCard">
+      <p class="today-kicker">A HUMAN ON THE OTHER SIDE</p><h2>Talk to Forge.</h2>
+      <p>A bug, a question, an idea. Message Nirag privately and follow its progress.</p>
+      <button type="button" class="today-button today-button-primary" onclick="ForgeSupport.open()">Message Nirag <span id="forgeSupportUnread"></span></button>
+      <p class="today-muted">Your messages are not posted to your group.</p>
+    </section>
     <section class="card forge-recap-card" aria-label="Personal recaps">
       <p class="today-kicker">THE SHORT VERSION</p><h2>Your effort, in review.</h2>
       <div class="forge-recap-switch"><button type="button" class="today-button" data-recap-kind="week" aria-pressed="false" onclick="ForgeExperience.openRecap('week')">Weekly recap</button><button type="button" class="today-button" data-recap-kind="month" aria-pressed="false" onclick="ForgeExperience.openRecap('month')">Monthly recap</button></div>
@@ -897,6 +903,7 @@
     <div id="superAdoption"></div>
     <div id="superGroupList"></div>
     <details class="forge-ops-section" id="forgeOpsCommunications"><summary>Communications &amp; weekly recaps</summary><p class="forge-ops-note">Build a recap, preview an audience, or review the queue. Nothing sends until you explicitly use the existing send controls.</p>
+      <button type="button" class="today-button" onclick="ForgeSupport.inbox()">Private support inbox</button><p class="today-muted">Requires your authorised Google or Apple sign-in. The dashboard PIN does not unlock private messages.</p>
     <section class="card"><h2>In-app updates</h2><p>Write a popup and let Forgeling guide the next step.</p><button type="button" class="today-button" onclick="ForgeExperience.announcementComposer()">Draft &amp; preview popup</button><p class="today-muted">Local preview only. Publishing is not enabled.</p></section>
     <!-- ══ WEEKLY RECAP IMAGES ══
          One shareable PNG per group, built in the browser from live data.
@@ -3115,8 +3122,8 @@ function mirRenderPanels(){
       const dateLabel=`${M.label} ${d}, ${M.year}`;
       if(logged){
         const col=mirColOf((logged[0].workouts||[])[0]||'');
-        const marks=workouts.slice(0,2).map(w=>ForgeSports.icon(w,true)).join('');
-        const more=woCount>2?`<span class="mir-day-more">+${woCount-2}</span>`:'';
+        const marks=workouts.slice(0,1).map(w=>ForgeSports.icon(w,true)).join('');
+        const more=woCount>1?`<span class="mir-day-more">+${woCount-1}</span>`:'';
         const summary=workouts.join(', ');
         cells+=`<button type="button" class="mir-day hit${(!inWin&&isCurrent)?' capped':''}" data-day="${d}" style="background:${mirSoftOf((logged[0].workouts||[])[0]||'')}" onclick="mirTapDay(${ix},${d})" aria-label="${esc(dateLabel+': '+summary)}"><span class="n" style="color:${col}">${d}</span><span class="mir-day-marks" style="color:${col}">${marks}${more}</span></button>`;
       } else if(isCurrent && d===todayD){
@@ -3267,12 +3274,7 @@ function mirTapDay(ix, d){
 
 // ── SHEET: log picker ──
 function mirRecent5(){
-  const mine=(allLogs||[]).filter(l=>l.player===me.name);
-  const lastDay={};
-  mine.forEach(l=>{ (l.workouts||[]).forEach(w=>{ lastDay[w]=Math.max(lastDay[w]||0, l.day||0); }); });
-  let types=Object.keys(lastDay).sort((a,b)=>lastDay[b]-lastDay[a]).slice(0,5);
-  if(types.length<5){ for(const w of ['Walk','Gym','Run','Yoga','Cricket']){ if(types.length>=5) break; if(!types.includes(w)) types.push(w); } }
-  return types.slice(0,5);
+  return window.ForgeExperience?.recommendedWorkouts?.(5)||[];
 }
 // Where this log is actually going. The sheet used to name only the active
 // group, which under-sold what the button does: a submit broadcasts to every
@@ -4544,6 +4546,7 @@ function toggleLinkForm(){
 
 let _profileRenderRequest=0;
 async function renderProfile(){
+  window.ForgeSupport?.refresh();
   const request=++_profileRenderRequest,actorId=me?.userId;
   window.ForgeExperience?.cancelRecap();
   const current=()=>request===_profileRenderRequest&&me?.userId===actorId;
@@ -7388,7 +7391,7 @@ function renderPromptDock(){
   if(due==='push'){
     el.innerHTML=
       '<div class="card" style="margin-bottom:14px;padding:16px">'
-      +'<div class="forge-reminder-title"><img src="assets/forgeling.webp?v=f025-1" alt="Forgeling">A nudge, if you want one.</div>'
+      +'<div class="forge-reminder-title"><img src="assets/forgeling.webp?v=f026-1" alt="Forgeling">A nudge, if you want one.</div>'
       +'<div style="font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.6">'
       +'One nudge if your team\'s streak is about to break tonight, one when the week\'s recap lands. '
       +'We will never tell you to go exercise.</div>'
@@ -7398,7 +7401,7 @@ function renderPromptDock(){
   } else {
     el.innerHTML=
       '<div class="card" style="margin-bottom:14px;padding:16px">'
-      +'<div class="forge-reminder-title"><img src="assets/forgeling.webp?v=f025-1" alt="Forgeling">Less typing. Your call.</div>'
+      +'<div class="forge-reminder-title"><img src="assets/forgeling.webp?v=f026-1" alt="Forgeling">Less typing. Your call.</div>'
       +'<div style="font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.6">'
       +'Connect '+(window.ForgeExperience?ForgeExperience.healthName():'your health app')+' for workout suggestions you confirm before logging. Confirmed logs are shared with your groups; enabled step challenges also upload daily step totals.</div>'
       +'<button class="btn btn-gold" style="margin:12px 0 0;width:100%" onclick="promptConnectHealth()">Choose Health connection</button>'
@@ -11394,7 +11397,8 @@ function startTour(force){
     {t:'#globalViews',page:'global',title:'A wider view of Forge.',txt:'Groups, opted-in people and today’s activity have different measures. Read the metric before comparing. This is not a ranking of fitness.'},
     {t:'.pfold',page:'profile',settings:true,title:'Make Forge work for you.',txt:'Notifications are your choice. In the phone app, connect Apple Health on iOS or Health Connect on Android. Nothing is enabled by taking this tour.'},
     ...(window.FEATURE_GOOGLE_AUTH?[{t:'#googleAuthCard',fallback:'#forgeFAQ',page:'profile',title:'Keep your effort with you.',txt:'Link Google'+(window.FEATURE_APPLE_AUTH?' or Apple':'')+' in Profile to help protect your workout history and recover it on another phone. Confirm your existing Forge PIN once. Your groups and history stay in place. Taking this tour does not link anything.'}]:[]),
-    {t:'#forgeFAQ',page:'profile',title:'I’m leaving the answers here.',txt:'This illustrated field guide lives in Profile. Come back for points, gym logs, previous months, Health or help—and replay this walk any time. Your turn.'}
+    {t:'#forgeSupportCard',page:'profile',title:'There’s a human here, too.',txt:'Tap Message Nirag to text him privately. Your group will not see it. Follow the status from Sent to Acknowledged, Working and Resolved, and reply if you still need help.'},
+    {t:'#forgeFAQ',page:'profile',title:'I’m leaving the answers here.',txt:'This field guide lives in Profile. Come back for points, gym logs, previous months or Health. Still stuck? Talk to Forge is right here too. Your turn.'}
   ];
   _tour={i:0,steps,token:0,opener:document.activeElement,context:`${groupCode}|${me.userId||me.name}|${seasonId}`};
   document.body.classList.add('forge-touring');
@@ -11421,7 +11425,7 @@ function _tourShow(){
   const bub=document.getElementById('tourBubble');
   const compact=window.innerHeight<=640||st.t==='.mir-calcard';
   const title=compact&&st.shortTitle?st.shortTitle:st.title,text=compact&&st.shortText?st.shortText:st.txt;
-  bub.innerHTML=`<div class="forge-tour-mascot"><img src="assets/forgeling.webp?v=f025-1" alt="Forgeling" width="72" height="72"></div><p class="today-kicker">FORGELING’S FIELD TRIP</p><h2>${st.title}</h2><p class="tb-txt">${st.txt}</p><div class="tb-row"><span class="tb-step">${tour.i+1} / ${tour.steps.length}</span><div class="tb-btns"><button class="tb-skip" onclick="endTour(true)">Skip</button>${tour.i?'<button class="tb-skip" onclick="prevTourStep()">Back</button>':''}<button class="tb-next" onclick="nextTourStep()">${tour.i===tour.steps.length-1?'Let’s go':'Next'}</button></div></div>`;
+  bub.innerHTML=`<div class="forge-tour-mascot"><img src="assets/forgeling.webp?v=f026-1" alt="Forgeling" width="72" height="72"></div><p class="today-kicker">FORGELING’S FIELD TRIP</p><h2>${st.title}</h2><p class="tb-txt">${st.txt}</p><div class="tb-row"><span class="tb-step">${tour.i+1} / ${tour.steps.length}</span><div class="tb-btns"><button class="tb-skip" onclick="endTour(true)">Skip</button>${tour.i?'<button class="tb-skip" onclick="prevTourStep()">Back</button>':''}<button class="tb-next" onclick="nextTourStep()">${tour.i===tour.steps.length-1?'Let’s go':'Next'}</button></div></div>`;
   bub.querySelector('h2').textContent=title;
   bub.querySelector('.tb-txt').textContent=text;
   bub.querySelector('.tb-next').focus({preventScroll:true});
@@ -11511,7 +11515,7 @@ async function showTab(t,options={}){
     }
   }
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(x=>{x.classList.remove('active');x.removeAttribute('aria-current');});
   const pg=document.getElementById(`page-${t}`);
   if(pg){
     pg.classList.add('active');
@@ -11529,6 +11533,7 @@ async function showTab(t,options={}){
     }
   }
   document.querySelectorAll('.tab')[TABS.indexOf(t)]?.classList.add('active');
+  document.querySelectorAll('.tab')[TABS.indexOf(t)]?.setAttribute('aria-current','page');
   updateTabPill(t);
   window.scrollTo(0,0);
   tap();
@@ -13532,6 +13537,6 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
 })();
 </script>
 <script src="src/ui/sports-icons.js"></script>
-<script src="src/ui/today.js?v=f025-1"></script>
+<script src="src/ui/today.js?v=f026-1"></script>
 </body>
 </html>

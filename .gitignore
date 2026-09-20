@@ -93,3 +93,7 @@ scripts/
 
 # QA kit is a tracked dev tool, not ops tooling — exempt from the *.mjs rule
 !qa/check.mjs
+!qa/inline-receipt.test.mjs
+!qa/personal-shortcuts.test.mjs
+!qa/support-ui.test.mjs
+!qa/service-worker.test.mjs

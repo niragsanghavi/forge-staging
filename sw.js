@@ -2,20 +2,20 @@
 // You deploy often and have been bitten by stale caches before, so this always
 // tries the network first and only falls back to cache when offline.
 // To force every device to refresh, bump CACHE_VERSION (e.g. 'forge-v1' -> 'forge-v2').
-const CACHE_VERSION = 'forge-staging-v86-f025';
+const CACHE_VERSION = 'forge-staging-v87-f026';
 const APP_SHELL = [
   './', './index.html',
   './src/style/main.css',
   './src/style/today.css',
-  './src/style/today.css?v=f025-1',
+  './src/style/today.css?v=f026-1',
   './src/style/sports-icons.css',
   './src/ui/today.js',
-  './src/ui/today.js?v=f025-1',
+  './src/ui/today.js?v=f026-1',
   './src/ui/sports-icons.js',
   './assets/sports/soft-sculpt.webp',
   './assets/sports/fire.webp',
   './assets/forgeling.webp',
-  './assets/forgeling.webp?v=f025-1',
+  './assets/forgeling.webp?v=f026-1',
   './assets/fonts/archivo-800.woff2',
   './assets/icons/forge-f.svg',
   './src/config/firebase.js',

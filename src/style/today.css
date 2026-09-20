@@ -162,3 +162,34 @@ body::before{background:none}#screen-app .page{max-width:660px;margin-left:auto;
 .solo-workouts button[aria-pressed=true]{outline:2px solid var(--gold)}
 .solo-rank{padding:12px 0;border-bottom:1px solid var(--border)}.solo-rank span:nth-child(2){flex:1;overflow-wrap:anywhere}
 .solo-shell button:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
+/* Selected muscles fill the drawing itself; text labels remain in the picker. */
+.forge-gym-badge.forge-anatomy{display:inline-flex;gap:2px;width:82px;height:66px;align-items:center}
+.forge-anatomy>svg{width:50%;height:100%;stroke:none;fill:none;overflow:visible}
+.forge-anatomy .forge-body-base{fill:var(--surface);stroke:var(--muted);stroke-width:1.2}
+.forge-anatomy .forge-body-region{fill:var(--border);stroke:var(--surface);stroke-width:1.3;stroke-linejoin:round}
+.forge-anatomy .forge-body-region.is-trained{fill:var(--gold)}
+.forge-anatomy [data-body-view=back] .is-trained{fill:var(--orange)}
+.forge-anatomy text{font:9px system-ui,sans-serif;fill:var(--muted);stroke:none}
+#forgeLiftBadge .forge-anatomy{width:200px;max-width:50vw;height:164px;flex-shrink:0}
+.forge-gym-calendar .forge-anatomy{width:100%;max-width:58px;height:48px}
+.forge-gym-calendar .forge-anatomy text{display:none}
+#screen-app .tabs .tab.active{background:linear-gradient(180deg,var(--gold-l),transparent);color:var(--text);box-shadow:inset 0 3px 0 var(--gold);border-radius:14px 14px 0 0}
+#screen-app .tabs .tab.active svg{filter:drop-shadow(0 0 7px var(--gold));stroke-width:2.2}
+#screen-app .tabs .tab.active span{font-weight:800}
+.today-receipt[data-receipt-state=confirmed] .today-button-quiet{color:var(--today-ink);background:transparent}
+.today-points-details{border-top:1px solid var(--today-muted);padding:4px 0}
+.today-points-details summary{cursor:pointer;display:flex;gap:12px;justify-content:space-between;align-items:center;min-height:48px;font-weight:700;overflow-wrap:anywhere}
+.today-points-details summary:after{content:'＋';flex-shrink:0}.today-points-details[open] summary:after{content:'−'}
+.today-points-body{padding:8px 0 16px;line-height:1.6}.today-points-total{font-size:24px;font-weight:800;margin:0}
+.today-points-line{display:flex;justify-content:space-between;gap:16px}
+.today-points-details summary:focus-visible{outline:2px solid var(--today-focus);outline-offset:3px}
+.forge-support-guide{display:flex;align-items:center;gap:14px;padding:12px;border-radius:18px;background:var(--gold-l);color:var(--text)}
+.forge-support-guide img{width:64px;height:64px;object-fit:contain}.forge-support-guide p{margin:0;line-height:1.6}
+.forge-support-status{display:inline-block;background:var(--gold-l);color:var(--text);padding:6px 12px;border-radius:20px;font-weight:750}
+.forge-support-messages{display:flex;flex-direction:column;gap:12px;margin:16px 0}
+.forge-support-message{padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--surface);max-width:92%;overflow-wrap:anywhere}
+.forge-support-message.from-member{align-self:flex-end}.forge-support-message.from-admin{background:var(--gold-l);align-self:flex-start}
+.forge-support-message p{white-space:pre-wrap;margin:6px 0;line-height:1.6}.forge-support-message small{color:var(--muted)}
+.forge-support label{display:block;font-weight:700;margin:12px 0}.forge-support textarea,.forge-support select{display:block;box-sizing:border-box;width:100%;padding:12px;margin-top:8px;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);font:inherit}
+.forge-support>.today-button{margin:12px 0}.forge-support textarea:focus-visible,.forge-support select:focus-visible{outline:2px solid var(--gold)}
+.forge-has-update{position:relative}.forge-has-update:after{content:'';position:absolute;top:0;right:0;width:9px;height:9px;border-radius:50%;background:var(--orange);border:2px solid var(--bg)}

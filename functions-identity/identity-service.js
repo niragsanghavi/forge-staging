@@ -119,6 +119,12 @@ module.exports = function identityService({db, FieldValue, HttpsError, deleteAut
         if(/^\d{4}-\d{2}$/.test(sid))await db.collection('soloBoards').doc(sid).collection('entries').doc(id).delete();
       }
     }
+    const support=db.collection('supportThreads').doc(uid);
+    if((await support.get()).exists){
+      await support.update({deleting:true});
+      for(;;){const records=await support.collection('messages').limit(200).get();if(!records.docs.length)break;const cleanup=db.batch();for(const d of records.docs)cleanup.delete(support.collection('messages').doc(d.id));await cleanup.commit();}
+      await support.delete();
+    }
     try{await deleteAuthUser(uid);}catch(e){if(e.code!=='auth/user-not-found')throw e;}
     const batch=db.batch();
     batch.update(ref,{name:'Deleted user',nameLower:'deleted user',email:null,pinHash:null,knownDeviceUids:[],pushTokens:{},memberships:{},stats:{},soloEnabled:false,soloDisplayName:null,soloPublicRanking:false,soloMonths:[],deleted:true,deletedAt:FieldValue.serverTimestamp(),authDeletedAt:FieldValue.serverTimestamp()});

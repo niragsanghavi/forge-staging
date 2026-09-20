@@ -64,7 +64,7 @@ const html = read('index.html');
 check(![...html.split('\n')].some(line => /^(<{7}|={7}|>{7})( |$)/.test(line)), 'no git conflict markers');
 
 const scriptSources = [...html.matchAll(/<script[^>]*\bsrc=["']([^"']+)["'][^>]*><\/script>/gi)].map(match => match[1]);
-const localScriptSources = scriptSources.filter(src => !/^(?:https?:)?\/\//i.test(src));
+const localScriptSources = scriptSources.filter(src => !/^(?:https?:)?\/\//i.test(src)).map(src=>src.split(/[?#]/,1)[0]);
 const remoteScriptSources = scriptSources.filter(src => /^(?:https?:)?\/\//i.test(src));
 const requiredLocal = ['src/config/firebase.js', 'src/state/appState.js', 'src/services/scoringEngine.js'];
 const sourceFiles = [...new Set([...localScriptSources, ...requiredLocal])];
