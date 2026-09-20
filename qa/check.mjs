@@ -1,13 +1,16 @@
 #!/usr/bin/env node
-// Forge offline QA — local files and synthetic data only. No network or auth.
+// Run npm test from the repository root: offline QA + all qa/*.test.mjs tests.
+// Opt-in: npm run test:live (staging only). Set FORGE_QA_ACCESS_TOKEN privately
+// to an existing Google OAuth access token with Firestore read permission.
+// No sign-up/login/write operations. Never paste the token into chat or source.
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
 const args = process.argv.slice(2);
-if (args.length) {
-  console.error(`Unknown option(s): ${args.join(' ')}\nUsage: node qa/check.mjs`);
+if (args.some(arg => arg !== '--live') || args.length > 1) {
+  console.error('Usage: npm test | npm run test:live');
   process.exit(2);
 }
 
@@ -80,7 +83,7 @@ for (const relative of sourceFiles) {
   if (fs.existsSync(path.join(ROOT, relative))) parseOK = parseScript(read(relative), relative) && parseOK;
 }
 check(parseOK, `${inline.length} inline and ${sourceFiles.length} local script unit(s) parse`);
-console.log(`  - Remote script references deliberately not fetched (${remoteScriptSources.length}); deployment/site checks are excluded.`);
+console.log(`  - Remote script references deliberately not fetched (${remoteScriptSources.length}); deployed-site checks require --live.`);
 
 const definitions = {};
 for (const match of html.matchAll(/^(?:async )?function ([A-Za-z_]\w*)\s*\(/gm)) definitions[match[1]] = (definitions[match[1]] || 0) + 1;
@@ -127,13 +130,18 @@ if (Array.isArray(fixture?.scenarios) && fixture.scenarios.length > 0) {
   }
 }
 
-section('3. EXCLUDED BY DESIGN');
-console.log('  - No Firebase authentication, Firestore reads/writes, HTTP requests, or deployed-site checks run here.');
-console.log('  - Real-device, native build/signing, deployment, and production-data verification remain separate human-gated checks.');
+if (args.includes('--live')) {
+  section('3. OPT-IN LIVE STAGING CHECKS (read-only)');
+  const { runLiveChecks } = await import('./live-checks.mjs');
+  await runLiveChecks({engineSource: read('src/services/scoringEngine.js'), check});
+} else {
+  section('3. LIVE CHECKS NOT REQUESTED');
+  console.log('  Offline only. Use npm run test:live for read-only staging reconciliation and deployed-site checks.');
+}
 
 if (checks === 0) {
   console.error('No-op QA run: no checks executed.');
   process.exit(2);
 }
-console.log(`\n${failures ? `${failures} FAILURE(S)` : `ALL ${checks} OFFLINE CHECKS PASS`}`);
+console.log(`\n${failures ? `${failures} FAILURE(S)` : `ALL ${checks} ${args.includes('--live') ? 'OFFLINE + LIVE' : 'OFFLINE'} CHECKS PASS`}`);
 process.exit(failures ? 1 : 0);

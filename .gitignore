@@ -97,3 +97,6 @@ scripts/
 !qa/personal-shortcuts.test.mjs
 !qa/support-ui.test.mjs
 !qa/service-worker.test.mjs
+!qa/live-checks.mjs
+!qa/live-checks.test.mjs
+!qa/function-ownership.test.mjs

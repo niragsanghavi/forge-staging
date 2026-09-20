@@ -193,11 +193,10 @@ exports.mondayRecap = onSchedule(
 /* ═══════════════════════════════════════════════════════════════════════════
    AUTH PHASE 2 — SERVER-SIDE IDENTITY (AUTH_DESIGN_FINAL.md, locked 25 Jul)
 
-   These four callables move the privileged writes off the client so the
-   users-doc ownership rule (AUTH_PHASE2_NOTES.md) can ship without breaking
-   rollover. The client can NEVER write authUid — claimIdentity is its only
-   writer, verified against the PIN hash SERVER-SIDE where a wrong guess
-   writes nothing (the exact defect that sank the 4-Aug rules-only design).
+   Legacy admin/notification callables and their shared verification helpers.
+   Account claims and step settlement belong exclusively to the identity
+   codebase. Run npm test at the repository root before deploying either
+   firebase.json or firebase.staging-candidate.json; ownership tests cover both.
 
    Every callable requires an authenticated caller (request.auth) — that is
    the Google-signed-in user, whose uid IS the identity we bind. Admin SDK
@@ -244,89 +243,8 @@ async function recordRateHit(uid, action, windowMs){
   });
 }
 
-/**
- * claimIdentity — bind the caller's Google account to an existing Forge
- * identity after verifying its PIN server-side.
- * data: { groupCode, name, pin }
- * Returns: { ok:true, userId } on success.
- */
-exports.claimIdentity = onCall({ region: REGION }, async (request) => {
-  const auth = request.auth;
-  if(!auth || !auth.uid) throw new HttpsError('unauthenticated', 'Sign in with Google first.');
-  // PROVIDER CHECK, grafted from the superseded auth branch — the one thing it
-  // had that this newer implementation lost. Without it, an ANONYMOUS session
-  // that guesses a PIN (rate-limited, but 4 digits) gets authUid bound to a
-  // throwaway anonymous uid: the account reads as "secured", the real owner is
-  // permanently refused ("secured by a different Google sign-in"), and the
-  // attacker holds it for as long as that anon session lives. Claiming is only
-  // meaningful when the uid is durable and re-loginable — i.e. Google.
-  const fb = auth.token && auth.token.firebase;
-  const provider = fb && fb.sign_in_provider;
-  const identities = (fb && fb.identities) || {};
-  if(provider !== 'google.com' && !identities['google.com']){
-    throw new HttpsError('permission-denied', 'Claiming needs a Google sign-in, not a guest session.');
-  }
-  const authUid = auth.uid;
-  const email = (auth.token && auth.token.email) || null;
-
-  const groupCode = String((request.data && request.data.groupCode) || '').trim().toUpperCase();
-  const name      = String((request.data && request.data.name) || '').trim();
-  const pin       = String((request.data && request.data.pin) || '');
-  if(!groupCode || !name || !/^\d{4}$/.test(pin)){
-    throw new HttpsError('invalid-argument', 'Group code, name and a 4-digit PIN are required.');
-  }
-
-  // Rate limit BEFORE any lookup — 5 wrong guesses/hour per Google account.
-  // This only CHECKS; a hit is recorded further down solely on a wrong PIN.
-  await assertUnderRateLimit(authUid, 'claim', 5, 3600 * 1000);
-
-  // 1:1 rule (Q2): if this Google account already owns an identity, refuse —
-  // unless it's the very same one being re-claimed (idempotent retry).
-  const mine = await db.collection('users').where('authUid', '==', authUid).limit(2).get();
-  const alreadyMine = mine.docs.find(d => !d.data().deletedAt);
-
-  // Resolve the group's current-season roster → the target userId by name.
-  const gSnap = await db.collection('groups').doc(groupCode).get();
-  if(!gSnap.exists) throw new HttpsError('not-found', 'No group with that code.');
-  const sid = gSnap.data().currentSeasonId;
-  const sSnap = sid ? await db.collection('groups').doc(groupCode).collection('seasons').doc(sid).get() : null;
-  if(!sSnap || !sSnap.exists) throw new HttpsError('not-found', 'That group has no active season.');
-  const entry = (sSnap.data().roster || []).find(p => p && String(p.name).toLowerCase() === name.toLowerCase());
-  if(!entry || !entry.userId) throw new HttpsError('not-found', 'That name is not on this group’s roster.');
-  const userId = entry.userId;
-
-  // If this Google account already owns a DIFFERENT identity, stop.
-  if(alreadyMine && alreadyMine.id !== userId){
-    throw new HttpsError('already-exists', `This Google account already runs ${alreadyMine.data().name || 'another player'}.`);
-  }
-
-  const uSnap = await db.collection('users').doc(userId).get();
-  if(!uSnap.exists) throw new HttpsError('not-found', 'Account record missing — ask your group admin.');
-  const u = uSnap.data();
-
-  // Idempotent success: already bound to this same Google account.
-  if(u.authUid && u.authUid === authUid) return { ok:true, userId, already:true };
-  // Claimed by someone else → refuse (this is the takeover the whole design closes).
-  if(u.authUid && u.authUid !== authUid) throw new HttpsError('permission-denied', 'This account is already secured by a different Google sign-in.');
-  // Founder-skip / reset accounts have no PIN hash — unclaimable by PIN. They
-  // link on their own device (Phase 1) or grace-set a PIN first.
-  if(!u.pinHash) throw new HttpsError('failed-precondition', 'No PIN is set on this account. Set one in the app first, then claim.');
-
-  if(!hashEq(sha256hex(pin), u.pinHash)){
-    await recordRateHit(authUid, 'claim', 3600 * 1000);   // only a wrong guess costs budget
-    throw new HttpsError('permission-denied', 'That PIN doesn’t match. Check with your group admin if you’ve forgotten it.');
-  }
-
-  await db.collection('users').doc(userId).set({
-    authUid,
-    email: email || u.email || null,
-    authLinkedAt: FieldValue.serverTimestamp(),
-    claimedAt: FieldValue.serverTimestamp()
-  }, { merge: true });
-
-  logger.info(`claimIdentity: ${authUid} → ${userId} (${entry.name} in ${groupCode})`);
-  return { ok:true, userId };
-});
+// claimIdentity and settleSweep are owned exclusively by the identity codebase.
+// See functions-identity/identity-entry.js; never re-export aliases here.
 
 /**
  * awardSeasonBadges — write the per-user stat/badge increments at rollover.

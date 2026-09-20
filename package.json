@@ -1,0 +1,10 @@
+{
+  "name": "forge-staging",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node qa/check.mjs && node --test qa/*.test.mjs",
+    "test:live": "node qa/check.mjs --live"
+  }
+}
