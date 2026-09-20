@@ -7,7 +7,7 @@ const {onCall,HttpsError}=require('firebase-functions/v2/https');
 const {onSchedule}=require('firebase-functions/v2/scheduler');
 const {setGlobalOptions}=require('firebase-functions/v2/options');
 setGlobalOptions({region:'asia-south1',maxInstances:3});
-admin.initializeApp();
+if(!(admin.apps || []).length) admin.initializeApp();
 const db=admin.firestore();
 const identity=require('./identity-service')({db,FieldValue,HttpsError,deleteAuthUser:uid=>admin.auth().deleteUser(uid)});
 const solo=require('./solo-service')({db,FieldValue,HttpsError,identity});

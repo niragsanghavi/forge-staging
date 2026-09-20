@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Forge — app-level privacy manifest.
+  Required for App Store upload since May 2024; without it the binary is
+  rejected before a human sees it.
+
+  EVERY ENTRY BELOW WAS VERIFIED AGAINST THE CODE, not assumed:
+
+    Name            roster display name, written to groups/{code}.players and
+                    season rosters. Identifies the person to their group.
+    UserID          `userId` / `uid` on roster entries and logs.
+    DeviceID        `uid` / `knownDeviceUids` — how a device is recognised
+                    between sessions.
+    Fitness         the workout logs themselves (21 write sites against the
+                    `logs` collection). Self-reported exercise data.
+    ProductInteraction
+                    `analytics/{group}/tabClicks` — a per-month counter of
+                    which tab was opened. First-party, stored in our own
+                    Firestore. There is NO third-party analytics SDK in this
+                    app: no Firebase Analytics import, no measurementId, no
+                    logEvent call anywhere.
+    CrashData /
+    OtherDiagnosticData
+                    the `errorLogs` collection: error type, message, stack,
+                    context, plus an env blob (device, viewport, user agent,
+                    build). Carries player/userId/uid, so it is LINKED.
+
+  DELIBERATELY NOT DECLARED, each checked:
+
+    Location        zero geolocation calls in the codebase; the privacy policy
+                    states plainly that location is never collected.
+    Contacts/Photos never requested.
+    Health          HealthKit IS integrated (read-only, workouts) as of
+                    15 Aug 2026 — and Health is still correctly NOT declared
+                    here, because Apple's definition of "collected" is data
+                    transmitted off-device. Raw HealthKit samples never leave
+                    the phone; what uploads is the ordinary user-confirmed
+                    Forge log, already declared as Fitness above. If that
+                    boundary ever changes, declare HealthFitness here.
+    EmailAddress    the only email code paths sit behind FEATURE_GOOGLE_AUTH,
+                    which is FALSE in this build, so no email is collected.
+                    ⚠️ THE DAY THAT FLAG FLIPS TRUE, EmailAddress MUST BE
+                    ADDED HERE and to the App Store Connect privacy answers.
+
+  NSPrivacyAccessedAPITypes is empty, and that is the accurate answer rather
+  than a lazy one: our two Swift files use no required-reason API, Capacitor's
+  core uses UserDefaults in zero files, and `nm` on the built binary and on
+  Capacitor.framework returns zero UserDefaults symbols. WKWebView localStorage
+  is WebKit's own store and never touches NSUserDefaults.
+
+  ⚠️ RE-CHECK THIS FILE when native plugins land (LocalNotifications, Haptics,
+  Share). Those ship their own framework manifests, but any new data they cause
+  us to collect belongs here.
+
+  NSPrivacyTracking is false: nothing here is linked with third-party data for
+  advertising, and no data is shared with a data broker. No ATT prompt needed.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeName</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeUserID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeDeviceID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeFitness</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeProductInteraction</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeCrashData</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeOtherDiagnosticData</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

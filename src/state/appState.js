@@ -702,10 +702,13 @@ window.seasonIdOf = function(month, year){
 // verify authorization/deletion and configure/test providers before enabling.
 // Native authentication remains blocked until its dedicated bridge is ready.
 // Staging web acceptance candidate only. Production/native remain held.
-window.FEATURE_GOOGLE_AUTH = window.IS_STAGING===true
+window.FEATURE_GOOGLE_AUTH = globalThis.FORGE_BUILD_TARGET?.providersEnabled===true && ((window.IS_STAGING===true
   && typeof location!=='undefined' && location.hostname==='niragsanghavi.github.io'
   && location.pathname.startsWith('/forge-staging/')
-  && !(window.Capacitor?.isNativePlatform?.());
+  && !(window.Capacitor?.isNativePlatform?.()))
+  || (window.FORGE_BUILD_ENV==='production' && (window.IS_NATIVE
+      ? window.FORGE_NATIVE_AUTH_READY===true
+      : typeof location!=='undefined' && location.hostname==='goforge.in')));
 window.FEATURE_APPLE_AUTH = window.FEATURE_GOOGLE_AUTH;
 
 // SERVER-SIDE PRIVILEGED WRITES (AUTH_PHASE2_NOTES.md). When true, the rollover

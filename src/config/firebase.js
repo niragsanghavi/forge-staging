@@ -1,7 +1,6 @@
-// ── SEPTEMBER INTEGRATION: STAGING ONLY ──────────────────────────────
-// Browser/LAN testing is locked to staging. Native boot is held below until
-// a separate staging shell is reviewed. Release configuration is a separate
-// promotion task; neither hostname nor a URL flag can select production here.
+// ── EXPLICIT BUILD TARGET ──────────────────────────────────────────
+// Checked-in build-target.js stays on staging. Production requires a reviewed
+// source change; neither hostname nor a URL flag can select it.
 const PROD_CFG = {
   apiKey: "AIzaSyCIXojxM6N6f6kp10g7zYV5XYTyLJ6pz2g",
   authDomain: "forge-25c8c.firebaseapp.com",
@@ -21,13 +20,9 @@ const STAGING_CFG = {
 };
 // ⬆️⬆️ -------------------------------------------------------------- ⬆️⬆️
 
-// SEPTEMBER INTEGRATION ONLY — never promote this file wholesale to release.
-// This isolated working copy must not choose production from a hostname,
-// query parameter, localStorage value, or Capacitor's localhost origin.
-// Native shell Firebase/signing configuration is still inherited from the
-// release source. Until a separate staging shell is prepared and reviewed,
-// fail before JavaScript Firebase initialization on native rather than mix
-// staging Firestore with production native messaging/identity services.
+// Native shells retain the production identity. A staging target therefore
+// always rejects native boot, preventing mixed-project identity/messaging.
+// Production native boot also requires the explicit native-auth release gate.
 const IS_NATIVE = !!(window.Capacitor && (
   (typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform())
   || window.Capacitor.platform === 'ios'
@@ -35,13 +30,21 @@ const IS_NATIVE = !!(window.Capacitor && (
 ));
 window.IS_NATIVE = IS_NATIVE;
 
-const IS_STAGING = true;
+const BUILD_TARGET=globalThis.FORGE_BUILD_TARGET;
+if(!BUILD_TARGET || !['staging','production'].includes(BUILD_TARGET.environment)){
+  throw new Error('Forge build target is missing or invalid.');
+}
+const IS_STAGING = BUILD_TARGET.environment==='staging';
 window.IS_STAGING = IS_STAGING;
-window.FORGE_BUILD_ENV = 'staging-integration';
-const FB_CFG = STAGING_CFG;
+window.FORGE_BUILD_ENV = IS_STAGING ? 'staging-integration' : 'production';
+window.FORGE_NATIVE_AUTH_READY = !IS_STAGING && BUILD_TARGET.nativeAuth===true && BUILD_TARGET.providersEnabled===true;
+const FB_CFG = IS_STAGING ? STAGING_CFG : PROD_CFG;
 
-if(IS_NATIVE){
+if(IS_NATIVE && (IS_STAGING || !window.FORGE_NATIVE_AUTH_READY)){
   throw new Error('Forge integration: native testing is held until the staging shell configuration is reviewed.');
+}
+if(!IS_STAGING && !IS_NATIVE && location.hostname!=='goforge.in'){
+  throw new Error('Production Forge is not permitted on this web origin.');
 }
 
 firebase.initializeApp(FB_CFG);
@@ -346,13 +349,25 @@ window.googleProvider = function(){
   return p;
 };
 
-// Web provider entry. Native OAuth must use a reviewed native bridge rather
-// than launching Google's web flow inside an embedded browser.
+// Native adapter remains release-gated. Staging's native boot guard stays intact.
+let _forgeNativeAuthAdapter=null;
+function forgeNativeAuthAdapter(){
+  if(!_forgeNativeAuthAdapter){
+    if(typeof window.createForgeNativeAuth!=='function')throw new Error('NATIVE_AUTH_PLUGIN_MISSING');
+    _forgeNativeAuthAdapter=window.createForgeNativeAuth({
+      auth,firebase,plugin:window.Capacitor?.Plugins?.FirebaseAuthentication,
+      platform:window.Capacitor?.getPlatform?.(),apiKey:firebase.app().options.apiKey,
+      ready:()=>window.FORGE_NATIVE_AUTH_READY===true
+    });
+  }
+  return _forgeNativeAuthAdapter;
+}
+// Native never opens the web popup inside its embedded browser.
 window.startForgeProviderSignIn = async function(provider){
   if(!window.FEATURE_GOOGLE_AUTH) throw new Error('FEATURE_OFF');
   if(!['google.com','apple.com'].includes(provider)) throw new Error('INVALID_PROVIDER');
   if(provider==='apple.com'&&!window.FEATURE_APPLE_AUTH) throw new Error('APPLE_NOT_CONFIGURED');
-  if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()) throw new Error('NATIVE_AUTH_NOT_CONFIGURED');
+  if(window.Capacitor?.isNativePlatform?.())return forgeNativeAuthAdapter().signIn(provider);
   const p=provider==='google.com'?window.googleProvider():new firebase.auth.OAuthProvider('apple.com');
   if(provider==='apple.com'){p.addScope('email');p.addScope('name');}
   const result=await auth.signInWithPopup(p);
@@ -362,7 +377,7 @@ window.startForgeProviderSignIn = async function(provider){
 window.confirmForgeAccountDeletion = async function(expectedUid){
   const user=auth.currentUser;
   if(!user||user.isAnonymous||user.uid!==expectedUid)throw new Error('SIGN_IN_REQUIRED');
-  if(window.Capacitor?.isNativePlatform?.())throw new Error('NATIVE_AUTH_NOT_CONFIGURED');
+  if(window.Capacitor?.isNativePlatform?.())return forgeNativeAuthAdapter().confirmDeletion(expectedUid);
   const apple=user.providerData.some(p=>p.providerId==='apple.com');
   const provider=apple?new firebase.auth.OAuthProvider('apple.com'):window.googleProvider();
   const result=await user.reauthenticateWithPopup(provider);

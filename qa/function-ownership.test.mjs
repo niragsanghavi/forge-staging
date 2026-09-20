@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import crypto from 'node:crypto';
+import {spawnSync} from 'node:child_process';
 const root=path.resolve(import.meta.dirname,'..');
 const trigger=Symbol('firebase trigger');
 const wrap=()=>({[trigger]:true});
@@ -12,8 +13,9 @@ function exportsFor(directory) {
   const base=path.resolve(root,directory), cache=new Map();
   const forbidden=()=>{throw Error('Function discovery attempted an external operation');};
   const db=new Proxy({}, {get:()=>forbidden});
+  const apps=[];
   const sdk={
-    'firebase-admin':{initializeApp(){},firestore:()=>db,auth:forbidden},
+    'firebase-admin':{apps,initializeApp(){assert.equal(apps.length,0,'Firebase initialized twice');apps.push({});},firestore:()=>db,auth:forbidden},
     'firebase-admin/firestore':{FieldValue:{}},
     'firebase-functions':{logger:{info(){},warn(){},error(){}}},
     'firebase-functions/v2/https':{onCall:wrap,HttpsError:Error},
@@ -67,8 +69,27 @@ test('all configured codebases have disjoint actual export names',()=>{
   }
   const owners=uniqueOwners([...bases].map(([name,source])=>[name,exportsFor(source)]));
   for(const name of ['claimIdentity','settleSweep']) assert.equal(owners.get(name),'identity');
-  for(const name of ['streakAtRisk','mondayRecap','testPush','awardSeasonBadges','adminResetPin']) assert.equal(owners.get(name),'default');
+  for(const name of ['streakAtRisk','mondayRecap','testPush','awardSeasonBadges','adminResetPin','sendNotice','noticeQueue','drainScheduledNotices']) assert.equal(owners.get(name),'default');
 });
 test('ownership guard rejects duplicate names, not just known collisions',()=>{
   assert.throws(()=>uniqueOwners([['default',['newName']],['identity',['newName']]]),/Duplicate function/);
+});
+test('production assembly preserves every endpoint under default, including existing claimIdentity',()=>{
+  const result=spawnSync(process.execPath,['build/prepare-production-backend.mjs'],{cwd:root,encoding:'utf8'});
+  assert.equal(result.status,0,result.stderr);
+  const {output,deployed}=JSON.parse(result.stdout);
+  assert.equal(deployed,false);
+  assert.ok(output.startsWith(path.join(root,'build/production-backend-')));
+  const expected=[...exportsFor('functions'),...exportsFor('functions-identity')].sort();
+  const actual=exportsFor(path.relative(root,path.join(output,'functions'))).sort();
+  assert.deepEqual(actual,expected);
+  for(const name of ['adminResetPin','awardSeasonBadges','claimIdentity','mondayRecap','streakAtRisk','testPush'])assert.ok(actual.includes(name));
+  const config=JSON.parse(fs.readFileSync(path.join(output,'firebase.json'),'utf8'));
+  assert.equal(config.functions.length,1);assert.equal(config.functions[0].codebase,'default');
+  const manifest=JSON.parse(fs.readFileSync(path.join(output,'source-manifest.json'),'utf8'));
+  for(const item of manifest.files){
+    const hash=crypto.createHash('sha256').update(fs.readFileSync(path.join(output,'functions',item.destination))).digest('hex');
+    assert.equal(hash,item.sha256);
+    assert.equal(hash,crypto.createHash('sha256').update(fs.readFileSync(path.join(root,item.source))).digest('hex'));
+  }
 });

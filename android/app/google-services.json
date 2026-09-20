@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "981352149705",
+    "project_id": "forge-25c8c",
+    "storage_bucket": "forge-25c8c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:981352149705:android:56285549813d2616b39318",
+        "android_client_info": {
+          "package_name": "in.goforge.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDaHjcgUdbU_FhEopcB1JRYt8YMZaV6ZXU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

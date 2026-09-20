@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "scheduledNotices",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "sendAt", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "logs",
       "queryScope": "COLLECTION",
       "fields": [

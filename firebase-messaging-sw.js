@@ -19,10 +19,17 @@
 
 importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
+importScripts('./src/config/build-target.js');
 
 // This integration candidate is staging-only, including background messaging.
 // Hostnames, query strings and service-worker scope cannot select production.
-var IS_STAGING = true;
+if(!self.FORGE_BUILD_TARGET || !['staging','production'].includes(self.FORGE_BUILD_TARGET.environment)){
+  throw new Error('Forge messaging build target is missing or invalid.');
+}
+var IS_STAGING = self.FORGE_BUILD_TARGET.environment==='staging';
+if(!IS_STAGING && self.location.hostname!=='goforge.in'){
+  throw new Error('Production Forge messaging is not permitted on this origin.');
+}
 
 firebase.initializeApp(IS_STAGING ? {
   apiKey: "AIzaSyD-bFi6X9Hevwmg-p65ajz35G64wco90CA",

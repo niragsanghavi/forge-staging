@@ -1,0 +1,32 @@
+{
+  "files": [
+    "index.html",
+    "manifest.json",
+    "privacy.html",
+    "guide.html",
+    "delete-account.html",
+    "src/style/main.css",
+    "src/style/sports-icons.css",
+    "src/style/today.css",
+    "src/ui/sports-icons.js",
+    "src/ui/today.js",
+    "src/config/firebase.js",
+    "src/config/build-target.js",
+    "src/services/nativeAuth.js",
+    "src/state/appState.js",
+    "src/services/scoringEngine.js",
+    "icon-180.png",
+    "icon-192.png",
+    "icon-512.png",
+    "assets/badges/champion.webp",
+    "assets/badges/champion-spin.webp",
+    "assets/badges/team-a.webp",
+    "assets/badges/team-b.webp",
+    "assets/badges/team-c.webp",
+    "assets/forgeling.webp",
+    "assets/sports/soft-sculpt.webp",
+    "assets/sports/fire.webp",
+    "assets/fonts/archivo-800.woff2",
+    "assets/icons/forge-f.svg"
+  ]
+}

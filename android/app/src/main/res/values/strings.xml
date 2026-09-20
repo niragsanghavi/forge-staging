@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Forge</string>
+    <string name="title_activity_main">Forge</string>
+    <string name="package_name">in.goforge.app</string>
+    <string name="custom_url_scheme">in.goforge.app</string>
+    <!-- Health Connect: shown when the user taps "Privacy policy" on the
+         permission sheet. Points at the live policy, which has an explicit
+         Apple Health / Health Connect section (read-only, on-device). -->
+    <string name="health_connect_privacy_policy_url">https://goforge.in/privacy</string>
+</resources>

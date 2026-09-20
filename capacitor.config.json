@@ -1,0 +1,20 @@
+{
+  "appId": "in.goforge.app",
+  "appName": "Forge",
+  "webDir": "www",
+  "plugins": {
+    "FirebaseAuthentication": {
+      "skipNativeAuth": true,
+      "providers": ["google.com", "apple.com"]
+    }
+  },
+  "ios": {
+    "contentInset": "always",
+    "backgroundColor": "#0a0a0d",
+    "limitsNavigationsToAppBoundDomains": true
+  },
+  "server": {
+    "androidScheme": "https",
+    "iosScheme": "https"
+  }
+}

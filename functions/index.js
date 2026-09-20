@@ -33,7 +33,7 @@ const admin = require('firebase-admin');
 const { FieldValue } = require('firebase-admin/firestore');
 const crypto = require('crypto');
 
-admin.initializeApp();
+if(!(admin.apps || []).length) admin.initializeApp();
 const db = admin.firestore();
 const IST = 'Asia/Kolkata';
 const REGION = 'asia-south1';
@@ -202,6 +202,256 @@ exports.mondayRecap = onSchedule(
    the Google-signed-in user, whose uid IS the identity we bind. Admin SDK
    bypasses Firestore rules, so these run regardless of the ownership rule.
    ═══════════════════════════════════════════════════════════════════════════ */
+
+// Resolve a target spec to the set of people it means, plus a human label.
+// Shared by the live send and the scheduled drain SO THAT THEY CANNOT DRIFT:
+// a scheduled notice must reach whoever is in the group when it fires, not
+// whoever was in it when it was written, and the only way to guarantee that
+// is for both paths to run this same function.
+async function resolveAudience(scope, groupCode, team){
+  if(!['all','group','team'].includes(scope)) throw new HttpsError('invalid-argument', 'Unknown audience type.');
+  if(scope === 'all'){
+    const us = await db.collection('users').get();
+    const ids = [];
+    us.docs.forEach(u => { if(!u.data().deletedAt) ids.push(u.id); });
+    return { userIds: Array.from(new Set(ids)), label: 'everyone on Forge' };
+  }
+  if(!/^[A-Z0-9_-]{1,64}$/.test(groupCode || '')) throw new HttpsError('invalid-argument', 'Pick a valid group first.');
+  const gSnap = await db.collection('groups').doc(groupCode).get();
+  if(!gSnap.exists) throw new HttpsError('not-found', 'No group with that code.');
+  const g = gSnap.data();
+  if(!g.currentSeasonId) throw new HttpsError('failed-precondition', 'That group has no active season.');
+  const sSnap = await db.collection('groups').doc(groupCode)
+                        .collection('seasons').doc(g.currentSeasonId).get();
+  if(!sSnap.exists) throw new HttpsError('not-found', 'That season is missing.');
+  // Same roster filter the scheduled senders use: a departed player is not an
+  // audience, and a roster row with no userId has no device to reach.
+  let roster = (sSnap.data().roster || []).filter(p => p && p.userId && p.departed !== true);
+  let label;
+  if(scope === 'team'){
+    if(!team) throw new HttpsError('invalid-argument', 'Pick a team first.');
+    roster = roster.filter(p => String(p.team) === team);
+    label  = `Team ${team} in ${g.name || groupCode}`;
+  } else {
+    label  = g.name || groupCode;
+  }
+  // One person appearing twice (two roster rows, a merged account) is one
+  // person, and must not be sent the same announcement twice.
+  return { userIds: Array.from(new Set(roster.map(p => p.userId))), label };
+}
+
+// Park a notice for later. The AUDIENCE SPEC is stored, never the resolved
+// list: between writing and firing, people join, leave and turn notifications
+// on, and a Monday announcement written on Friday should reach Monday's group.
+const NOTICE_MAX_DAYS_AHEAD = 90;
+function noticeSendTime(value){
+  const at = new Date(value);
+  if(isNaN(at.getTime())) throw new HttpsError('invalid-argument', 'That send time is not a valid date.');
+  // One drain interval of slack, so "schedule for 2 minutes from now" is not
+  // rejected by clock skew between the phone and the server.
+  if(at.getTime() < Date.now() - 60 * 1000){
+    throw new HttpsError('invalid-argument', 'That time is in the past.');
+  }
+  if(at.getTime() > Date.now() + NOTICE_MAX_DAYS_AHEAD * 864e5){
+    throw new HttpsError('invalid-argument', `Pick a time within ${NOTICE_MAX_DAYS_AHEAD} days.`);
+  }
+  return at;
+}
+async function queueNotice(d, n){
+  const at = noticeSendTime(d.sendAt);
+  const ref = await db.collection('scheduledNotices').add({
+    title: n.title, body: n.body,
+    scope: n.scope, groupCode: n.groupCode || null, team: n.team || null,
+    labelAtWrite: n.label,          // for display only; the drain re-resolves
+    sendAt: at,
+    status: 'queued',
+    createdAt: FieldValue.serverTimestamp()
+  });
+  logger.info(`queueNotice ${ref.id} "${n.title}" → ${n.label} at ${at.toISOString()}`);
+  return { ok:true, queued:true, id: ref.id, sendAt: at.toISOString(), label: n.label };
+}
+
+// ── 3. MANUAL NOTICE — the superadmin composer ─────────────────────────────
+// The only push path in this file with a human on the other end of it.
+// streakAtRisk and mondayRecap are scheduled and templated; this is Nirag
+// typing a sentence and choosing who hears it.
+//
+// TWO-STEP BY DESIGN. `dryRun` resolves the audience and returns the counts
+// WITHOUT sending, so the confirmation can state a real number produced by the
+// same code path that will do the sending — not a guess made on the client.
+// A broadcast button whose blast radius you cannot see before pressing it is
+// how an app ends up apologising to five group chats at once.
+//
+// The admin key is the ONLY real boundary here. The superadmin PIN in front of
+// this screen is client-side UI over a hash that ships in a public repo, so it
+// stops nobody; this check is what actually stands between a stranger and
+// everyone's lock screen.
+// NOTE the STRING secret name, not the defineSecret object: ADMIN_RESET_KEY is
+// declared further down this file, and the options object is evaluated at module
+// load, so the object form would hit the temporal dead zone and crash every
+// function in the deploy. testPush above takes the string for the same reason;
+// .value() inside the handler is fine, since that runs at invocation time.
+exports.sendNotice = onCall({ region: REGION, secrets: ['ADMIN_RESET_KEY'] }, async (request) => {
+  if(!request.auth || !request.auth.uid) throw new HttpsError('unauthenticated', 'Sign in first.');
+  const d        = request.data || {};
+  const adminKey = String(d.adminKey || '');
+  const dryRun   = d.dryRun === true;
+  const expectedKey = ADMIN_RESET_KEY.value();
+  if(typeof expectedKey !== 'string' || !expectedKey.trim()) throw new HttpsError('failed-precondition', 'Notice sending is not configured.');
+
+  // Same shape as testPush/adminResetPin: the limiter counts WRONG keys, not
+  // use, so guessing costs something while a legitimate check→send pair does
+  // not spend two of five attempts.
+  await assertUnderRateLimit(request.auth.uid, 'sendnotice', 5, 3600 * 1000);
+  if(!hashEq(sha256hex(adminKey), sha256hex(expectedKey))){
+    await recordRateHit(request.auth.uid, 'sendnotice', 3600 * 1000);
+    throw new HttpsError('permission-denied', 'That admin key is not right.');
+  }
+
+  const title = String(d.title || '').trim();
+  const body  = String(d.body  || '').trim();
+  if(!title)             throw new HttpsError('invalid-argument', 'A title is required.');
+  if(!body)              throw new HttpsError('invalid-argument', 'A message is required.');
+  if(title.length > 60)  throw new HttpsError('invalid-argument', 'That title is too long (60 characters max).');
+  if(body.length  > 180) throw new HttpsError('invalid-argument', 'That message is too long (180 characters max).');
+
+  const scope     = String(d.scope || 'all');
+  const groupCode = String(d.groupCode || '').trim().toUpperCase();
+  const team      = String(d.team || '').trim();
+
+  const { userIds, label } = await resolveAudience(scope, groupCode, team);
+
+  // A scheduled send resolves its audience AT SEND TIME, not now — see
+  // queueNotice. Everything below this line is the send-now path.
+  if(d.sendAt) noticeSendTime(d.sendAt);
+
+  const entries = await tokensFor(userIds);
+  const people  = new Set(entries.map(e => e.userId)).size;
+
+  if(dryRun){
+    return { ok:true, dryRun:true, label, people, devices: entries.length, inAudience: userIds.length };
+  }
+  if(d.sendAt) return await queueNotice(d, { scope, groupCode, team, title, body, label });
+  if(!entries.length){
+    return { ok:true, label, people:0, devices:0, sent:0, pruned:0 };
+  }
+
+  // A UNIQUE tag per send. The scheduled senders reuse a stable tag on purpose
+  // (tonight's streak nudge should replace last night's); two different
+  // announcements replacing each other on the lock screen would be a bug.
+  const r = await sendAll(entries, {
+    kind : 'notice',
+    title, body,
+    tag  : 'notice-' + Date.now().toString(36),
+    url  : './'
+  });
+  logger.info(`sendNotice [${label}] "${title}" — ${r.sent} sent, ${r.pruned} pruned, `
+            + `${people} people, ${entries.length} devices`);
+  return { ok:true, label, people, devices: entries.length, ...r };
+});
+
+// ── 4. SCHEDULED NOTICE DRAIN ──────────────────────────────────────────────
+// Every 5 minutes, send whatever has come due. Granularity is therefore 5
+// minutes, which the composer says out loud rather than implying to-the-second.
+//
+// CLAIM-THEN-SEND. Each notice is flipped to 'sending' inside a transaction
+// before anything goes out, so two overlapping runs (a slow send, a retry)
+// cannot both pick up the same row and double-notify everyone. A crash after
+// the claim leaves it stuck in 'sending' rather than sending twice — the safe
+// direction to fail, and visible in the queue list.
+exports.drainScheduledNotices = onSchedule(
+  { schedule: 'every 5 minutes', timeZone: IST, region: REGION, secrets: ['ADMIN_RESET_KEY'] },
+  async () => {
+    const due = await db.collection('scheduledNotices')
+      .where('status', '==', 'queued')
+      .where('sendAt', '<=', new Date())
+      .limit(25)                       // a backlog drains over several runs
+      .get();
+    if(due.empty) return;
+
+    let sentTotal = 0;
+    for(const doc of due.docs){
+      const claimed = await db.runTransaction(async tx => {
+        const fresh = await tx.get(doc.ref);
+        if(!fresh.exists || fresh.data().status !== 'queued') return null;
+        tx.update(doc.ref, { status: 'sending', claimedAt: FieldValue.serverTimestamp() });
+        return fresh.data();
+      });
+      if(!claimed) continue;           // another run got there first
+
+      try{
+        // Re-resolved NOW, not at write time — the group may have changed.
+        const { userIds, label } = await resolveAudience(claimed.scope, claimed.groupCode, claimed.team);
+        const entries = await tokensFor(userIds);
+        const r = entries.length
+          ? await sendAll(entries, {
+              kind:'notice', title: claimed.title, body: claimed.body,
+              tag: 'notice-' + doc.id, url: './'
+            })
+          : { sent:0, pruned:0 };
+        await doc.ref.update({
+          status: 'sent',
+          sentAt: FieldValue.serverTimestamp(),
+          result: { people: new Set(entries.map(e=>e.userId)).size, devices: entries.length,
+                    sent: r.sent, label }
+        });
+        sentTotal += r.sent;
+        logger.info(`drainScheduledNotices ${doc.id} "${claimed.title}" → ${label}: ${r.sent} sent`);
+      }catch(e){
+        // A group deleted between writing and firing must not wedge the queue.
+        await doc.ref.update({ status:'failed', error: String((e && e.message) || e),
+                               failedAt: FieldValue.serverTimestamp() });
+        logger.error(`drainScheduledNotices ${doc.id} failed: ${(e && e.message) || e}`);
+      }
+    }
+    logger.info(`drainScheduledNotices done — ${sentTotal} notifications across ${due.size} notice(s)`);
+  }
+);
+
+// ── 5. NOTICE QUEUE — list and cancel ──────────────────────────────────────
+// The scheduledNotices collection is unreachable from any client: the rules
+// end in a default-deny and nothing grants it, so the ONLY way in is through
+// this admin-key-gated callable running on the Admin SDK. That is deliberate —
+// a client-writable queue would be a way to push to every phone on Forge.
+exports.noticeQueue = onCall({ region: REGION, secrets: ['ADMIN_RESET_KEY'] }, async (request) => {
+  if(!request.auth || !request.auth.uid) throw new HttpsError('unauthenticated', 'Sign in first.');
+  const d = request.data || {};
+  const expectedKey = ADMIN_RESET_KEY.value();
+  if(typeof expectedKey !== 'string' || !expectedKey.trim()) throw new HttpsError('failed-precondition', 'Notice sending is not configured.');
+  await assertUnderRateLimit(request.auth.uid, 'noticequeue', 5, 3600 * 1000);
+  if(!hashEq(sha256hex(String(d.adminKey || '')), sha256hex(expectedKey))){
+    await recordRateHit(request.auth.uid, 'noticequeue', 3600 * 1000);
+    throw new HttpsError('permission-denied', 'That admin key is not right.');
+  }
+
+  if(d.action !== undefined && !['list','cancel'].includes(d.action)) throw new HttpsError('invalid-argument', 'Unknown queue action.');
+  if(d.action === 'cancel'){
+    const id = String(d.id || '');
+    if(!/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw new HttpsError('invalid-argument', 'Which notice?');
+    const ref = db.collection('scheduledNotices').doc(id);
+    // Transactional so a cancel racing the drain cannot un-send a sent notice.
+    const outcome = await db.runTransaction(async tx => {
+      const s = await tx.get(ref);
+      if(!s.exists) return 'missing';
+      if(s.data().status !== 'queued') return s.data().status;
+      tx.update(ref, { status:'cancelled', cancelledAt: FieldValue.serverTimestamp() });
+      return 'cancelled';
+    });
+    if(outcome === 'missing')   throw new HttpsError('not-found', 'That notice is gone.');
+    if(outcome !== 'cancelled') throw new HttpsError('failed-precondition', `Too late — it is already ${outcome}.`);
+    return { ok:true, cancelled:id };
+  }
+
+  const snap = await db.collection('scheduledNotices')
+    .orderBy('sendAt', 'desc').limit(25).get();
+  return { ok:true, notices: snap.docs.map(x => {
+    const v = x.data();
+    return { id:x.id, title:v.title, body:v.body, status:v.status,
+             label: (v.result && v.result.label) || v.labelAtWrite || '',
+             sendAt: v.sendAt && v.sendAt.toDate ? v.sendAt.toDate().toISOString() : null,
+             sent: (v.result && v.result.sent) || 0 };
+  })};
+});
 
 // Unsalted SHA-256 hex — byte-identical to the app's sha256hex() (index.html).
 // The keyspace (4 digits) is the weakness, not the salt; server-side + rate
