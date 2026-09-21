@@ -115,6 +115,8 @@ scripts/
 !qa/twist-admin.test.mjs
 !qa/season-lifecycle.test.mjs
 !qa/migration-plan.test.mjs
+!qa/migration-engine.test.mjs
+!build/reviewed-migration-engine.mjs
 !qa/legacy-link.test.mjs
 !build/plan-security-migration.mjs
 !qa/group-moderation.test.mjs

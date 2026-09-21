@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import crypto from 'node:crypto';
-const fingerprint=value=>crypto.createHash('sha256').update(JSON.stringify(value,(_key,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b))):v)).digest('hex');
+export const fingerprint=value=>crypto.createHash('sha256').update(JSON.stringify(value,(_key,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b))):v)).digest('hex');
 export function planSecurityMigration(data){
  if(!data||!Array.isArray(data.groups)||!Array.isArray(data.users)||!Array.isArray(data.logs))throw Error('Expected a complete Forge export with groups, users and logs.');
  const users=new Map(data.users.map(u=>[u.id,u])),changes=[],blockers=[],admins=[],seasons=new Map();
