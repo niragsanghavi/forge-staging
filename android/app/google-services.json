@@ -12,7 +12,20 @@
           "package_name": "in.goforge.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "981352149705-8i5vh66amusr93fg4m6rug25ur1c71v5.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "in.goforge.app",
+            "certificate_hash": "990f0925ec13d90cbd4e6a35c8658211e8b9e019"
+          }
+        },
+        {
+          "client_id": "981352149705-qa1luhsqmp3av470gq19hh1q0feo287n.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDaHjcgUdbU_FhEopcB1JRYt8YMZaV6ZXU"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "981352149705-qa1luhsqmp3av470gq19hh1q0feo287n.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "981352149705-ocrvg7tpbkqlroieh3jcihk0k59601ia.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "in.goforge.app"
+              }
+            }
+          ]
         }
       }
     }

@@ -1,6 +1,6 @@
 'use strict';
 // Extracted settlement implementation; parity is checked against index.js.
-module.exports=({db,FieldValue,onSchedule,logger})=>{
+module.exports=({db,FieldValue,onSchedule,logger,pledges})=>{
 const IST='Asia/Kolkata',REGION='asia-south1';
 function istNow(){return new Date(Date.now()+19800000);}
 async function liveGroups(){
@@ -27,21 +27,26 @@ const {score:stepSeasonScore}=require('./scoring-engine');
 // The transaction reconciles any old premature snapshot without double awards.
 async function finalizeStepSeason(code,sid){
   const sRef=db.collection('groups').doc(code).collection('seasons').doc(sid);
-  const ss=await sRef.get();if(!ss.exists)return false;
+  return db.runTransaction(async tx=>{
+  const ss=await tx.get(sRef);if(!ss.exists)return false;
   const s=ss.data();if(!s.stepRounds?.enabled||s.stepsFinalizedAt)return false;
   const rounds=stepRoundsOf(s);
   if(Date.now()<stepCutoff(s,rounds[3]))return false;
-  const windows=await sRef.collection('twistWindows').get(),ws=windows.docs.map(d=>d.data());
+  const windows=await tx.get(sRef.collection('twistWindows')),ws=windows.docs.map(d=>d.data());
   if(!rounds.every(r=>ws.some(w=>w.week===stepRoundId(sid,r)&&Array.isArray(w.awarded)&&w.settledBy==='server-sweep')))return false;
-  const [logs,bonus,twists,jack,ip,gSnap]=await Promise.all([
-    db.collection('logs').where('groupCode','==',code).where('month','==',s.month).where('year','==',s.year).get(),
-    db.collection('bonuses_30day').where('groupCode','==',code).where('month','==',s.month).where('year','==',s.year).get(),
-    sRef.collection('twists').get(),sRef.collection('jackAwards').get(),
-    db.collection('bonuses_iron_pledge').where('groupCode','==',code).where('month','==',s.month).where('year','==',s.year).get(),
-    db.collection('groups').doc(code).get()
+  const [logs,bonus,twists,jack,gSnap]=await Promise.all([
+    tx.get(db.collection('logs').where('groupCode','==',code).where('month','==',s.month).where('year','==',s.year)),
+    tx.get(db.collection('bonuses_30day').where('groupCode','==',code).where('month','==',s.month).where('year','==',s.year)),
+    tx.get(sRef.collection('twists')),tx.get(sRef.collection('jackAwards')),
+    tx.get(db.collection('groups').doc(code))
   ]);
   const ls=logs.docs.map(d=>d.data()).filter(l=>!l.voided),roster=s.roster||[];
-  const ctx={season:s,groupCode:code,logs:ls,bonuses:bonus.docs.map(d=>d.data()),twists:Object.fromEntries(twists.docs.map(d=>[d.id,d.data()])),jackAwards:jack.docs.map(d=>d.data()),ironPledgeBonuses:ip.docs.map(d=>d.data()),twistWindows:ws};
+  // Do not depend on the rollover scheduler having run first. All earned
+  // pledge results must be included in the same immutable final snapshot.
+  if(!pledges)throw Error('Pledge settlement dependency is required for finalization');
+  const pledge=await pledges.plan(tx,code,sid,s,ls);
+  if(new Set(roster.map(p=>p.name)).size!==roster.length)throw Error('Duplicate season names; snapshot needs review');
+  const ctx={season:s,groupCode:code,asOf:new Date(Date.UTC(s.year,s.month,1)).toISOString().slice(0,10),logs:ls,bonuses:bonus.docs.map(d=>d.data()),twists:Object.fromEntries(twists.docs.map(d=>[d.id,d.data()])),jackAwards:jack.docs.map(d=>d.data()),ironPledgeBonuses:pledge.bonuses,twistWindows:ws};
   const ranked=roster.map(p=>({p,sc:stepSeasonScore(p.name,ctx)})).sort((a,b)=>b.sc.total-a.sc.total);
   const finalStandings=ranked.map(({p,sc},i)=>({userId:p.userId||null,name:p.name,team:p.team,total:sc.total,wo:sc.wo,streak:sc.streak,rank:i+1}));
   const teamStandings=[...new Set(roster.map(p=>p.team))].map(team=>{const rows=finalStandings.filter(p=>p.team===team);return {team,avg:Math.round(rows.reduce((n,p)=>n+p.total,0)/rows.length),memberCount:rows.length};}).sort((a,b)=>b.avg-a.avg).map((t,i)=>({...t,rank:i+1}));
@@ -49,7 +54,6 @@ async function finalizeStepSeason(code,sid){
   const winner=first&&first.total>0&&(!second||first.total>second.total)?first.name:null;
   const tw=teamStandings.length>1&&teamStandings[0].avg>teamStandings[1].avg?teamStandings[0].team:null;
   const badgesAwarded=finalStandings.map(p=>({userId:p.userId,name:p.name,badges:[...(p.name===winner?['season_winner']:[]),...(p.team===tw?['team_winner']:[])]})).filter(p=>p.badges.length);
-  return db.runTransaction(async tx=>{
     const fresh=await tx.get(sRef);if(!fresh.exists||fresh.data().stepsFinalizedAt)return false;
     const old=fresh.data(),targets=finalStandings.filter(p=>p.userId);
     // Refuse duplicate identities instead of incrementing one account twice.
@@ -57,8 +61,10 @@ async function finalizeStepSeason(code,sid){
     const users=await Promise.all(targets.map(p=>tx.get(db.collection('users').doc(p.userId))));
     const archives=await Promise.all(targets.map(p=>tx.get(db.collection('users').doc(p.userId).collection('seasons').doc(code+'_'+sid))));
     const stamp=FieldValue.serverTimestamp();
+    for(const w of pledge.writes)tx.set(w.ref,w.value);
     tx.update(sRef,{finalStandings,teamStandings,badgesAwarded,snapshotAt:stamp,stepsFinalizedAt:stamp,statsAwardedAt:stamp});
     targets.forEach((p,i)=>{
+      if(!users[i].exists||users[i].data().deleted||users[i].data().deletedAt||users[i].data().deletionRequestedAt)return;
       const badges=badgesAwarded.find(b=>b.name===p.name)?.badges||[];
       const previous=archives[i].exists?archives[i].data():null;
       const dayCounts=Array.from({length:s.days},(_,d)=>ls.filter(l=>l.player===p.name&&l.day===d+1).reduce((n,l)=>n+(Array.isArray(l.workouts)?l.workouts.length:1),0));
@@ -119,18 +125,24 @@ function stepBonusOf(season){
 }
 
 async function settleOneRound(code, sid, season, round, roundEndDate){
-  if(Date.now()<stepCutoff(season,round))return false;
-  const week = stepRoundId(sid, round);
   const sRef = db.collection('groups').doc(code).collection('seasons').doc(sid);
+  const roundNumber=round.n;
+  return db.runTransaction(async tx=>{
+  const current=await tx.get(sRef);
+  if(!current.exists||!current.data().stepRounds?.enabled)return false;
+  season=current.data();
+  round=stepRoundsOf(season).find(r=>r.n===roundNumber);
+  if(!round||Date.now()<stepCutoff(season,round))return false;
+  const week = stepRoundId(sid, round);
   const winRef = sRef.collection('twistWindows').doc('step_week_' + week);
 
-  const winSnap = await winRef.get();
+  const winSnap = await tx.get(winRef);
   if(winSnap.exists && Array.isArray((winSnap.data()||{}).awarded)) return false;
 
-  const q = await sRef.collection('stepWeeks').where('week','==',week).get();
+  const q = await tx.get(sRef.collection('stepWeeks').where('week','==',week));
   const stepDocs = q.docs.map(d => d.data());
 
-  const roster = (season.roster||[]).filter(p => p && p.departed !== true);
+  const roster = (Array.isArray(season.roster)?season.roster:[]).filter(p => p && p.departed !== true);
   const teamOf = new Map(roster.map(p => [p.name, p.team]));
   const byPlayer = new Map();
   const daysByPlayer = new Map();
@@ -162,8 +174,9 @@ async function settleOneRound(code, sid, season, round, roundEndDate){
   }
   const awarded = winnerTeam ? roster.filter(p => p.team === winnerTeam).map(p => p.name) : [];
   const start = new Date(season.year, season.month - 1, round.start);
-  try{
-    await winRef.create({                            // create-only: a racing client wins, we back off
+    // Readings, roster and immutable result share a transaction. Concurrent
+    // uploads or roster edits force a retry with fresh inputs.
+    tx.create(winRef,{
       twist:'step_week', week,
       monDate: start.getDate(), sunDate: round.end,
       month: start.getMonth()+1, year: start.getFullYear(),
@@ -175,11 +188,8 @@ async function settleOneRound(code, sid, season, round, roundEndDate){
       resolvedAt: FieldValue.serverTimestamp(),
       settledBy: 'server-sweep'
     });
-  }catch(e){
-    if(String(e && e.code) === '6' || /already exists/i.test(String(e))) return false;
-    throw e;
-  }
   return true;
+  });
 }
 
 return onSchedule(

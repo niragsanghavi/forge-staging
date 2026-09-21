@@ -11,6 +11,9 @@ const context=vm.createContext({});
 vm.runInContext(read('src/config/build-target.js'),context);
 check(context.FORGE_BUILD_TARGET.environment==='production','Explicit reviewed production build target');
 check(context.FORGE_BUILD_TARGET.nativeAuth===true,'Native provider activation after setup verification');
+const deployedRules=read('firestore.rules');
+check(!/allow\s+(?:create|update|create,\s*update):\s*if\s+isAuthed\(\)/.test(deployedRules),
+  'Legacy authenticated-write policy retired after complete client/backend migration (draft secure rules alone do not count)');
 const config=JSON.parse(read('capacitor.config.json'));
 check(config.appId==='in.goforge.app','Existing store app ID preserved');
 check(config.plugins?.FirebaseAuthentication?.skipNativeAuth===true,'JS Firebase owns the authentication session');

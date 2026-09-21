@@ -84,6 +84,7 @@ firebase-debug.log
 # only — 15 revisions are already public and must be assumed known. Canonical
 # copy + backups live in ~/Desktop/forge-backups/.
 firestore.rules
+firestore.secure.rules
 
 # Admin/ops tooling and IDE/agent state — public Pages repo, nothing here
 # should serve at the site. scripts/ carries prod-project references.
@@ -104,6 +105,23 @@ scripts/
 !qa/native-provider.test.mjs
 !qa/build-target.test.mjs
 !qa/release-preflight.mjs
+!qa/calendar-size.test.mjs
+!qa/scoring-resilience.test.mjs
+!qa/group-write-service.test.mjs
+!qa/mandatory-link.test.mjs
+!qa/deletion-history.test.mjs
+!qa/aggregate-service.test.mjs
+!qa/admin-service.test.mjs
+!qa/twist-admin.test.mjs
+!qa/season-lifecycle.test.mjs
+!qa/migration-plan.test.mjs
+!qa/legacy-link.test.mjs
+!build/plan-security-migration.mjs
+!qa/group-moderation.test.mjs
+!qa/jack-award.test.mjs
+!qa/group-create-service.test.mjs
+!qa/identity-deletion.test.mjs
+!qa/memory-firestore.mjs
 !build/prepare-production-backend.mjs
 /build/production-backend-*/
 !ios/build-www.mjs

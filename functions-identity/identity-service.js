@@ -4,12 +4,13 @@ const crypto = require('node:crypto');
 // Legacy PIN migration is an explicitly accepted lower-assurance transition.
 // Never use this endpoint to replace an existing owner. No PINs/tokens in logs.
 module.exports = function identityService({db, FieldValue, HttpsError, deleteAuthUser, now=Date.now}) {
+  const history=require('./deletion-history')({db,FieldValue});
   const fail=(code,message)=>{throw new HttpsError(code,message);};
   function actor(request,recent=true){
     const a=request.auth, t=a&&a.token, p=t&&t.firebase&&t.firebase.sign_in_provider;
     if(!a||!a.uid) fail('unauthenticated','Sign in first.');
     if(!['google.com','apple.com'].includes(p)) fail('permission-denied','Use Google or Apple sign-in.');
-    if(recent&&(!Number.isFinite(t.auth_time)||now()/1000-t.auth_time>600)) fail('unauthenticated','Sign in again to confirm this change.');
+    if(recent&&(!Number.isFinite(t.auth_time)||now()/1000-t.auth_time>600||t.auth_time>now()/1000+60)) fail('unauthenticated','Sign in again to confirm this change.');
     return {uid:a.uid,provider:p,email:typeof t.email==='string'?t.email:null};
   }
   async function claim(request){
@@ -81,30 +82,33 @@ module.exports = function identityService({db, FieldValue, HttpsError, deleteAut
   async function finalizeDeletion(request){
     const a=actor(request),id=String(request.data?.userId||'');
     if(!/^[A-Za-z0-9_-]{1,128}$/.test(id))fail('invalid-argument','Invalid profile.');
-    const ref=db.collection('users').doc(id),snap=await ref.get();
-    if(!snap.exists||snap.data().authUid!==a.uid)fail('permission-denied','Sign in as this profile owner.');
-    const u=snap.data();
-    if(!u.deletionRequestedAt)fail('failed-precondition','Start deletion in Profile first.');
-    const logs=await db.collection('logs').where('userId','==',id).get();
-    if(logs.docs.some(d=>!d.data().voided))fail('failed-precondition','Workout deletion has not finished. Retry deletion.');
-    for(const code of Object.keys(u.memberships||{})){
-      const group=await db.collection('groups').doc(code).get();
-      const sid=group.exists&&group.data().currentSeasonId;
-      if(!sid)continue;
-      const season=await db.collection('groups').doc(code).collection('seasons').doc(sid).get();
-      if(season.exists&&(season.data().roster||[]).some(p=>p.userId===id))fail('failed-precondition','Group removal has not finished. Retry deletion.');
-    }
     if(typeof deleteAuthUser!=='function')fail('failed-precondition','Account deletion is not configured.');
-    // Durable server-only job survives Auth deletion followed by a lost
-    // response or failed Firestore write. The scheduled worker can finish it
-    // without requiring a now-deleted account to authenticate again.
-    await db.collection('identityDeletionJobs').doc(a.uid).set({userId:id,state:'pending',requestedAt:FieldValue.serverTimestamp()});
-    await finishDeletionJob(a.uid,id);
-    return {ok:true};
+    const ref=db.collection('users').doc(id),jobRef=db.collection('identityDeletionJobs').doc(a.uid);
+    await db.runTransaction(async tx=>{
+      const snap=await tx.get(ref),job=await tx.get(jobRef);
+      if(!snap.exists||snap.data().authUid!==a.uid)fail('permission-denied','Sign in as this profile owner.');
+      if(job.exists&&job.data().userId!==id)fail('failed-precondition','Deletion ownership changed.');
+      if(!snap.data().deletionRequestedAt)tx.update(ref,{deletionRequestedAt:FieldValue.serverTimestamp()});
+      if(!job.exists)tx.set(jobRef,{userId:id,state:'pending',requestedAt:FieldValue.serverTimestamp(),departedLabel:'Departed '+crypto.randomBytes(6).toString('hex')});
+    });
+    const complete=await finishDeletionJob(a.uid,id);
+    return {ok:true,complete,pending:!complete};
   }
   async function finishDeletionJob(uid,id){
+    const jobRef=db.collection('identityDeletionJobs').doc(uid),lease=crypto.randomUUID();
+    const acquired=await db.runTransaction(async tx=>{
+      const snap=await tx.get(jobRef);if(!snap.exists||snap.data().userId!==id)fail('failed-precondition','Deletion job unavailable.');
+      const job=snap.data();if(job.state==='complete')return 'complete';
+      if(job.leaseUntil>now())return false;
+      tx.update(jobRef,{lease,leaseUntil:now()+360000,departedLabel:job.departedLabel||'Departed '+crypto.randomBytes(6).toString('hex')});return true;
+    });
+    if(acquired==='complete')return true;
+    if(!acquired)return false;
+    try{
     const ref=db.collection('users').doc(id),snap=await ref.get();
     if(!snap.exists||snap.data().authUid!==uid||!snap.data().deletionRequestedAt)fail('failed-precondition','Deletion ownership changed.');
+    const job=(await jobRef.get()).data();
+    if(!await history.run(uid,id,jobRef,job))return false;
     if(snap.data().soloEnabled){
       // Repeated batches make this resumable even for years of private logs.
       const solo=ref.collection('soloLogs');
@@ -127,15 +131,47 @@ module.exports = function identityService({db, FieldValue, HttpsError, deleteAut
     }
     try{await deleteAuthUser(uid);}catch(e){if(e.code!=='auth/user-not-found')throw e;}
     const batch=db.batch();
-    batch.update(ref,{name:'Deleted user',nameLower:'deleted user',email:null,pinHash:null,knownDeviceUids:[],pushTokens:{},memberships:{},stats:{},soloEnabled:false,soloDisplayName:null,soloPublicRanking:false,soloMonths:[],deleted:true,deletedAt:FieldValue.serverTimestamp(),authDeletedAt:FieldValue.serverTimestamp()});
-    batch.update(db.collection('identityDeletionJobs').doc(uid),{state:'complete',completedAt:FieldValue.serverTimestamp()});
+    // Replace, do not merge: unknown historical profile fields may contain PII.
+    batch.set(ref,{name:'Deleted user',nameLower:'deleted user',deleted:true,deletedAt:FieldValue.serverTimestamp(),authDeletedAt:FieldValue.serverTimestamp()});
+    batch.delete(db.collection('authIdentities').doc(uid));
+    batch.delete(db.collection('identityClaimLimits').doc(id));
+    batch.set(jobRef,{userId:id,state:'complete',completedAt:FieldValue.serverTimestamp()});
     await batch.commit();
+    return true;
+    }finally{
+      await db.runTransaction(async tx=>{const snap=await tx.get(jobRef);if(snap.exists&&snap.data().lease===lease)tx.update(jobRef,{lease:null,leaseUntil:0});});
+    }
   }
   async function retryDeletions(){
     const jobs=await db.collection('identityDeletionJobs').where('state','==','pending').limit(100).get();
     let completed=0,failed=0;
-    for(const job of jobs.docs){try{await finishDeletionJob(job.id,job.data().userId);completed++;}catch(e){failed++;}}
+    for(const job of jobs.docs){try{if(await finishDeletionJob(job.id,job.data().userId))completed++;}catch(e){failed++;}}
     return {completed,failed};
   }
-  return {claim,join,actor,finalizeDeletion,retryDeletions};
+  async function refresh(request){
+    const a=actor(request,false),indexRef=db.collection('authIdentities').doc(a.uid);
+    return db.runTransaction(async tx=>{
+      const index=await tx.get(indexRef),legacy=await tx.get(db.collection('users').where('authUid','==',a.uid).limit(2));
+      if(legacy.docs.length>1)fail('failed-precondition','Account recovery is needed.');
+      const id=index.exists?index.data().userId:legacy.docs[0]?.id;
+      if(!id)return {linked:false};
+      if(typeof id!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(id)||legacy.docs.some(d=>d.id!==id))fail('failed-precondition','Account recovery is needed.');
+      const snap=await tx.get(db.collection('users').doc(id));
+      if(!snap.exists||snap.data().authUid!==a.uid||snap.data().deleted||snap.data().deletedAt||snap.data().deletionRequestedAt)fail('permission-denied','Profile unavailable.');
+      const codes=Object.keys(snap.data().memberships||{});
+      if(codes.length>7)fail('failed-precondition','Membership records need repair.');
+      const groupCodes=[];
+      for(const code of codes){
+        if(!/^[A-Z0-9]{4,10}$/.test(code))continue;
+        const ref=db.collection('groups').doc(code),group=await tx.get(ref),sid=group.exists&&group.data().currentSeasonId;
+        if(typeof sid!=='string'||!/^\d{4}-\d{2}$/.test(sid))continue;
+        const season=await tx.get(ref.collection('seasons').doc(sid));
+        if(season.exists&&Array.isArray(season.data().roster)&&season.data().roster.filter(p=>p&&p.userId===id&&!p.departed).length===1)groupCodes.push(code);
+      }
+      tx.set(indexRef,{userId:id,groupCodes});
+      tx.update(db.collection('users').doc(id),{lastActiveAt:FieldValue.serverTimestamp()});
+      return {linked:true,userId:id,groupCodes};
+    });
+  }
+  return {claim,join,actor,refresh,finalizeDeletion,retryDeletions};
 };

@@ -1654,6 +1654,7 @@ async function bootApp(){
   // "the page is broken" — every one of them silently landed on the player's
   // own group, giving no clue that a gate had even been attempted.
   if(location.search.includes('superadmin')){
+    if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH){await openVerifiedSuperAdmin();return;}
     if(superUnlockValid()){ showScreen('super'); loadSuperAdmin(); return; }
     showScreen('superpin');
     // Focus only once the screen is actually visible — a display:none input
@@ -1748,6 +1749,10 @@ async function resolveCodeAlias(input){
 }
 
 async function verifyCode(){
+  if(window.FEATURE_GOOGLE_AUTH&&(!auth.currentUser||auth.currentUser.isAnonymous)){
+    showObStep(1);renderGoogleLoginDoor();
+    toast('Continue with Google or Apple first. Then enter your group code.','default');return;
+  }
   const entered = document.getElementById('codeInput').value.trim().toUpperCase();
   const err = document.getElementById('codeError');
   const goBtn = document.getElementById('codeGoBtn');
@@ -1828,6 +1833,24 @@ async function choosePlayer(name){
   const p = (season.roster||[]).find(x=>x.name===name);
   if(!p){ return; }
   const chosenCode=groupCode, chosenSeason=seasonId;
+  if(window.FEATURE_GOOGLE_AUTH){
+    if(!auth.currentUser||auth.currentUser.isAnonymous){showObStep(1);renderGoogleLoginDoor();toast('Continue with Google or Apple first.','default');return;}
+    if(!p.userId){toast('This older profile needs help linking. Contact Forge support; do not create a replacement profile.','error');return;}
+    const uid=auth.currentUser.uid;
+    try{
+      const identity=await callFunction('refreshIdentity',{});
+      if(groupCode!==chosenCode||seasonId!==chosenSeason||window._forgePlayerSelection!==selection||auth.currentUser?.uid!==uid)return;
+      if(identity?.linked){
+        if(identity.userId!==p.userId){toast('This sign-in belongs to a different Forge profile. Sign out to use another account.','error');return;}
+        await restoreIdentityFromGoogle({uid});return;
+      }
+    }catch(e){toast('Could not check your account. Reconnect and try again.','error');return;}
+    window._pinEntryFor=p.name;
+    document.getElementById('ob-s4-sub').textContent=`${p.name}, enter your existing Forge PIN once to link this Google or Apple account. Your groups and workout history stay in place.`;
+    document.getElementById('pinEntry').value='';
+    document.getElementById('pinEntryError').classList.add('hidden');
+    showObStep(4);return;
+  }
   if(p.userId){
     try{
       const profile=await db.collection('users').doc(p.userId).get();
@@ -1872,6 +1895,25 @@ async function submitPinEntry(){
   if(!p){ err.textContent='Something went wrong. Pick your name again.'; err.classList.remove('hidden'); return; }
   const entered = document.getElementById('pinEntry').value;
   if(!/^\d{4}$/.test(entered)){ err.textContent='Enter your 4-digit PIN.'; err.classList.remove('hidden'); return; }
+
+  if(window.FEATURE_GOOGLE_AUTH){
+    if(window._forgeClaimBusy)return;
+    const uid=auth.currentUser?.uid;
+    if(!uid||auth.currentUser.isAnonymous||!p.userId){err.textContent='Continue with Google or Apple before linking this profile.';err.classList.remove('hidden');return;}
+    window._forgeClaimBusy=true;
+    try{
+      await callFunction('claimIdentity',{userId:p.userId,pin:entered});
+      if(groupCode!==entryCode||seasonId!==entrySeason||window._pinEntryFor!==name||auth.currentUser?.uid!==uid)return;
+      document.getElementById('pinEntry').value='';
+      await restoreIdentityFromGoogle({uid});
+    }catch(e){
+      if(groupCode===entryCode&&seasonId===entrySeason&&window._pinEntryFor===name&&auth.currentUser?.uid===uid){
+        err.textContent=e?.code==='functions/resource-exhausted'?'Too many attempts. Try again in an hour.':'Could not link this profile. Check your existing PIN, or contact Forge support if you never set one.';
+        err.classList.remove('hidden');
+      }
+    }finally{window._forgeClaimBusy=false;}
+    return;
+  }
 
   // Migrated entry (has userId): verify against users.pinHash — the source
   // of truth going forward. Fallback to roster.pin only if that doc is
@@ -1975,6 +2017,7 @@ function backToPicker(){
 // If their roster record lacks a PIN, send them through the set-PIN step
 // instead of straight into the app. Returns true if it redirected.
 function gracePinCheckOnResume(){
+  if(window.FEATURE_GOOGLE_AUTH)return false; // Provider ownership replaces PIN-only grace entry.
   if(!me || !season) return false;
   const fresh = (season.roster||[]).find(p=>p.name===me.name);
   // Route to grace only when NO credential exists. pinSet:true (or a legacy
@@ -2286,7 +2329,17 @@ async function loadGroup(code, fromCache, options={}){
   // session (handleDeadGroup) and fall back to another joined group — never nuke
   // everything (that caused the mass-lockout). Transient errors just alert.
   try {
-    if(window.FEATURE_GOOGLE_AUTH&&playerAtStart?.userId){
+    if(window.FEATURE_GOOGLE_AUTH){
+      if(!auth.currentUser||auth.currentUser.isAnonymous||!playerAtStart?.userId){
+        showScreen('onboard');showObStep(1);renderGoogleLoginDoor();
+        toast('Continue with Google or Apple to protect and restore your Forge history.','default');return;
+      }
+      const identity=await callFunction('refreshIdentity',{});
+      if(!_isGroupLoadCurrent(context))return;
+      if(!identity?.linked||identity.userId!==playerAtStart.userId){
+        showScreen('onboard');showObStep(1);renderGoogleLoginDoor();
+        toast('Enter your group code and choose your existing name to link your history.','default');return;
+      }
       const profile=await db.collection('users').doc(playerAtStart.userId).get({source:'server'});
       if(!_isGroupLoadCurrent(context))return;
       const owner=profile.exists&&profile.data().authUid;
@@ -2491,10 +2544,18 @@ function maybeAskSurvey(){
   const el=document.getElementById('surveyModal'); if(!el) return;
   el.classList.add('on');
 }
-function surveyPick(choice){
+async function surveyPick(choice){
   const box=document.getElementById('surveyModal');
   const free=(document.getElementById('surveyText')||{}).value||'';
   const note=String(free).trim().slice(0,300);
+  if(typeof FEATURE_GOOGLE_AUTH!=='undefined' && FEATURE_GOOGLE_AUTH){
+    try{
+      await callFunction('submitGroupSurvey',{groupCode,choice,note});
+      _surveySet({answered:true,at:Date.now(),choice});
+      if(box)box.classList.remove('on');toast('Noted — thank you.','success');
+    }catch(e){logErr('survey write',e);toast('Could not send your answer. Please try again.','error');}
+    return;
+  }
   _surveySet({answered:true, at:Date.now(), choice});
   // Fire-and-forget. The answer is already recorded on this device, so a failed
   // write costs one data point and never a broken close.
@@ -2663,7 +2724,7 @@ function subscribe(){
 
   unsub.push(db.collection('logs').where('groupCode','==',context.code).where('month','==',month).where('year','==',year).onSnapshot(live(s=>{ allLogs=s.docs.map(d=>({id:d.id,...d.data()})).filter(l=>!l.voided); refresh(); }), liveErr('logs')));
   unsub.push(db.collection('bonuses_30day').where('groupCode','==',context.code).where('month','==',month).where('year','==',year).onSnapshot(live(s=>{ bonus30=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }), liveErr('bonuses_30day')));
-  unsub.push(db.collection('flags').where('groupCode','==',context.code).where('month','==',month).where('year','==',year).onSnapshot(live(s=>{ flags=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }), liveErr('flags')));
+  if(!window.FEATURE_GOOGLE_AUTH)unsub.push(db.collection('flags').where('groupCode','==',context.code).where('month','==',month).where('year','==',year).onSnapshot(live(s=>{ flags=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }), liveErr('flags')));
   // S5 §7.1: reactions, scoped exactly like flags — one listener per group/month/year.
   if(window.FEATURE_REACTIONS_ENABLED){
     unsub.push(db.collection('reactions').where('groupCode','==',context.code).where('month','==',month).where('year','==',year).onSnapshot(live(s=>{ reactions=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }), liveErr('reactions')));
@@ -4177,7 +4238,7 @@ async function _mirGroupMove(t,bc){
   const twists={}; twistsSnap.docs.forEach(d=>{twists[d.id]=d.data();});
   const bonuses=bonusSnap.docs.map(d=>d.data());
   const has=k=>!!twists[k];
-  const needsWindows=has('double_or_nothing')||has('boss_week')||has('underdog_week')||sData.stepChallenge===true||sData.stepRounds===true;
+  const needsWindows=has('double_or_nothing')||has('boss_week')||has('underdog_week')||sData.stepChallenge===true||sData.stepRounds===true||sData.stepRounds?.enabled===true;
   const [jackSnap,ipSnap,twwSnap]=await Promise.all([
     has('jack_of_all_trades')?sRef.collection('jackAwards').get():null,
     has('double_or_nothing')?db.collection('bonuses_iron_pledge').where('groupCode','==',t.code).where('month','==',bc.month).where('year','==',bc.year).get():null,
@@ -4883,7 +4944,7 @@ async function loginWithGoogle(){ return loginWithForgeProvider('google.com'); }
 async function loginWithForgeProvider(provider){
   if(window._forgeProviderBusy)return;
   window._forgeProviderBusy=true;
-  try{const r=await startForgeProviderSignIn(provider);await restoreIdentityFromGoogle(r);}
+  try{const r=await startForgeProviderSignIn(provider);if(location.search.includes('superadmin'))await openVerifiedSuperAdmin();else await restoreIdentityFromGoogle(r);}
   catch(e){toast('Sign-in did not finish. Please try again.','error');}
   finally{window._forgeProviderBusy=false;}
 }
@@ -4947,6 +5008,8 @@ async function restoreIdentityFromGoogle(r){
   const stillSignedIn=()=>!!(auth.currentUser&&auth.currentUser.uid===r.uid);
   if(!stillSignedIn())return;
   try{
+    await callFunction('refreshIdentity',{});
+    if(!stillSignedIn())return;
     const q = await db.collection('users').where('authUid','==',r.uid).limit(1).get();
     if(!stillSignedIn())return;
     if(q.empty){
@@ -4973,7 +5036,7 @@ async function restoreIdentityFromGoogle(r){
         const entry = (sS.data().roster||[]).find(p => p && p.userId === uDoc.id);
         if(!entry) continue;
         upsertSession(code, entry, gS.data().name);
-        if(!firstCode) firstCode = code;
+        if(!firstCode || code===r.preferredCode) firstCode = code;
         restored++;
       }catch(e){ logErr('restoreIdentityFromGoogle:'+code, e); }
     }
@@ -5231,7 +5294,13 @@ async function fillStepDays(){
         // Refresh completed readings while open; zero is known data, absence isn't.
         const days={...existing,...fresh};
         if(JSON.stringify(Object.entries(days).sort())===JSON.stringify(Object.entries(existing).sort()))continue;
-        await ref.set({player:player.name,userId:player.userId||null,team:player.team||null,week,weekStart:ymdLocal(start),days,total:Object.values(days).reduce((a,b)=>a+b,0),source:window.Capacitor?.platform==='android'?'healthconnect':'healthkit',updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+        const stepSource=window.Capacitor?.getPlatform?.()==='android'?'healthconnect':'healthkit';
+        if(window.FEATURE_GOOGLE_AUTH){
+          const saved=await callFunction('saveGroupSteps',{groupCode:context.code,seasonId:sid,round:round.n,days:fresh,source:stepSource});
+          if(saved?.ok!==true||saved.week!==week)throw new Error('STEP_SAVE_ACK_INVALID');
+        }else{
+          await ref.set({player:player.name,userId:player.userId||null,team:player.team||null,week,weekStart:ymdLocal(start),days,total:Object.values(days).reduce((a,b)=>a+b,0),source:stepSource,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+        }
         imported+=keys.length;
         if(!current())return;
       }
@@ -5422,8 +5491,8 @@ async function startAccountDeletion(){
       await confirmForgeAccountDeletion(profile.data().authUid);
     }
     if(!me||me.userId!==actorId)throw new Error('ACCOUNT_CHANGED');
-    await executeAccountDeletion(actorId, _delSay);
-    _delSay('Account deleted. Signing you out…');
+    const deletion=await executeAccountDeletion(actorId, _delSay);
+    _delSay(deletion?.pending?'Deletion requested. Cleanup will continue securely after you sign out.':'Account deleted. Signing you out…');
     setTimeout(finishAccountDeletionLocally, 1200);
   }catch(e){
     logErr('startAccountDeletion', e);
@@ -5438,6 +5507,12 @@ async function startAccountDeletion(){
 // the boot hook can safely re-run this after a mid-sweep failure.
 async function executeAccountDeletion(userId, say){
   say = say || function(){};
+  if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH){
+    say('Removing your account and workout history…');
+    const result=await callFunction('finalizeAccountDeletion',{userId});
+    if(!result||result.ok!==true||(result.complete!==true&&result.pending!==true))throw new Error('DELETION_NOT_CONFIRMED');
+    return result;
+  }
   const uRef = db.collection('users').doc(userId);
   const uSnap = await uRef.get();
   if(!uSnap.exists) throw new Error('NO_USER_DOC');
@@ -5775,6 +5850,14 @@ async function linkAnotherGroup(){
 
   btn.disabled=true; btn.textContent='Linking…';
   try{
+    if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH){
+      const result=await callFunction('linkLegacyGroup',{groupCode:code,name,pin});
+      if(!result?.ok)throw Error('Linking was not confirmed.');
+      await callFunction('refreshIdentity',{});
+      resEl.style.color='var(--green)';resEl.textContent=`Linked ${result.groupName||code}. Your history stays with your signed-in account.`;
+      document.getElementById('linkGroupCode').value='';document.getElementById('linkPlayerName').value='';document.getElementById('linkPin').value='';
+      renderProfile();return;
+    }
     // ── Resolve + verify target (all reads; no writes yet) ──
     const gRef=db.collection('groups').doc(code);
     const gSnap=await gRef.get();
@@ -5831,7 +5914,7 @@ async function linkAnotherGroup(){
     renderProfile();
   }catch(e){
     logErr('linkAnotherGroup', e);
-    fail('Something went wrong linking — check your connection and try again.');
+    fail(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH?(e.message||'Linking did not finish. Please try again.'):'Something went wrong linking — check your connection and try again.');
   }finally{
     btn.disabled=false; btn.textContent='Link Group';
   }
@@ -5996,6 +6079,7 @@ function ymdToday(){ const d=new Date(); return ymdOf(d.getFullYear(), d.getMont
 //      written by the loaded member's client (writeGlobalStats). loadGlobal
 //      then reads groups.get() + one daily doc instead of the platform scan.
 function bumpDailyRollup(ymd, codeCounts){
+  if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH)return;
   try{
     const byGroup={};
     for(const c in codeCounts){ if(codeCounts[c]) byGroup[c]=firebase.firestore.FieldValue.increment(codeCounts[c]); }
@@ -6010,6 +6094,10 @@ function bumpDailyRollup(ymd, codeCounts){
 // ctx), so the denormalized values equal what the old loadGlobal computed for
 // this group. Eventually-consistent: refreshed whenever a member is active.
 function writeGlobalStats(){
+  if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH){
+    if(window.groupCode)callFunction('refreshGroupStats',{groupCode:window.groupCode}).catch(e=>logErr('refreshGroupStats',e));
+    return;
+  }
   try{
     if(!window.season || !window.groupCode || !window.seasonId) return;
     const roster = season.roster || [];
@@ -6040,6 +6128,7 @@ function writeGlobalStats(){
 // group's slice wholesale, so voids/backdates/renames self-heal on the next
 // recompute instead of drifting like a counter would).
 function writeMonthlyRollup(){
+  if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH)return;
   try{
     if(!window.season || !window.groupCode || !season.month || !season.year) return;
     // DEMO isolation: a demo group never writes its slice into the shared
@@ -6087,6 +6176,7 @@ function scheduleGlobalStats(){ try{ clearTimeout(_gsTimer); _gsTimer=setTimeout
 // transaction because the next value depends on the previous one (reset vs.
 // continue can't be expressed as a blind increment).
 async function updateStreakAndStats(userId, year, month, day){
+  if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH)return;
   const logDate = new Date(year, month-1, day);
   const logStr = ymdOf(year, month, day);
   const uRef = db.collection('users').doc(userId);
@@ -6384,7 +6474,18 @@ async function submitLog(){
     // absorb a slow-but-connected network without lying to an online user,
     // short enough that an offline user isn't stuck staring at it.
     let commitSettled=false, commitFailed=null;
-    const rawCommit = batch.commit();
+    // Provider-enabled releases authorize every destination on the server.
+    // No fallback to a permissive direct write if the callable rejects/fails.
+    const rawCommit = window.FEATURE_GOOGLE_AUTH
+      ? callFunction('saveGroupWorkout',{
+          targets:broadcast.map(g=>({code:g.code,logId:g.logId})),
+          workouts:submission.workouts,day:submission.day,month:submission.month,year:submission.year,
+          ...(submission.km!=null?{km:submission.km}:{}),...(submission.note?{note:submission.note}:{})
+        }).then(result=>{
+          if(result?.ok!==true||!Array.isArray(result.logIds)||result.logIds.length!==broadcast.length||new Set(result.logIds).size!==broadcast.length||broadcast.some(g=>!result.logIds.includes(g.logId)))throw new Error('GROUP_SAVE_ACK_INVALID');
+          return result;
+        })
+      : batch.commit();
     const commitPromise = rawCommit
       .then(()=>{
         commitSettled=true;
@@ -6439,7 +6540,7 @@ async function submitLog(){
         const upd={};
         if(capturedRank>0) upd.groupRanks={ [submission.groupCode]: capturedRank };
         if(Object.keys(wc).length){ const inc={}; Object.keys(wc).forEach(k=>{ inc[k]={ label:wc[k].label, n:firebase.firestore.FieldValue.increment(wc[k].n) }; }); upd.workoutCounts=inc; }
-        if(Object.keys(upd).length) db.collection('users').doc(submission.actor.userId).set(upd,{merge:true}).catch(()=>{});
+        if(!(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH)&&Object.keys(upd).length) db.collection('users').doc(submission.actor.userId).set(upd,{merge:true}).catch(()=>{});
         // In-memory caches belong to the visible context. The durable denorm
         // above still lands for the original actor after a switch; these do not.
         if(_isSubmissionViewCurrent(submission)){
@@ -7669,6 +7770,7 @@ function renderFeed(){
 // STRICTLY fire-and-forget: a counter hiccup may never break logging, login,
 // or void — every failure path is swallowed. set+merge self-creates the doc.
 function bumpGlobalStat(field, n){
+  if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH)return;
   try {
     db.collection('stats').doc('global').set({
       [field]: firebase.firestore.FieldValue.increment(n),
@@ -7678,11 +7780,14 @@ function bumpGlobalStat(field, n){
 }
 
 function voidLogDoc(id, actorName){
-  return db.collection('logs').doc(id).update({
+  const removal=window.FEATURE_GOOGLE_AUTH
+    ? callFunction('voidGroupWorkout',{logId:id})
+    : db.collection('logs').doc(id).update({
     voided: true,
     voidedBy: actorName,
     voidedAt: firebase.firestore.FieldValue.serverTimestamp()
-  }).then(res=>{
+  });
+  return removal.then(res=>{
     // DEMO isolation: demo logs never incremented the shared aggregates, so
     // voiding one must not DECREMENT them either (counter corruption). The
     // in-memory copy carries the stamped demo flag; also honor the active
@@ -7770,6 +7875,11 @@ function renderBlockedCard(){
 
 async function flagLog(logId,player){
   if(!confirm(`Flag ${player}'s workout as suspicious?`)) return;
+  if(window.FEATURE_GOOGLE_AUTH){
+    try{await callFunction('flagGroupWorkout',{logId});toast('Report sent to your group admin.','success');}
+    catch(e){logErr('flagLog',e);toast('Could not send your report. Try again.','error');}
+    return;
+  }
   await db.collection('flags').add({groupCode,logId,player,flaggedBy:me.name,month:season.month,year:season.year,timestamp:firebase.firestore.FieldValue.serverTimestamp()});
 }
 
@@ -7816,6 +7926,11 @@ function renderFlagQueue(){
   }).join('');
 }
 async function resolveFlag(logId,action){
+  if(window.FEATURE_GOOGLE_AUTH){
+    try{await callFunction('changeGroupAdmin',{groupCode,seasonId,action:'resolveFlag',logId,resolution:action});await loadVerifiedGroupFlags();}
+    catch(e){logErr('resolveFlag',e);toast(e.message||'Could not resolve this report.','error');}
+    return;
+  }
   if(action==='remove') await voidLogDoc(logId, me?.name||'admin');
   await Promise.all(flags.filter(f=>f.logId===logId).map(f=>db.collection('flags').doc(f.id).delete()));
 }
@@ -7847,6 +7962,12 @@ function renderAdminRoles(){
       <button class="btn btn-surface btn-sm" style="margin:0;padding:6px 4px;font-size:11px" onclick="renamePlayer('${escForInlineJsAttr(p.name)}')">Rename</button>
     </div>`).join('');
 }
+async function loadVerifiedGroupFlags(){
+  const code=groupCode,sid=seasonId,uid=auth.currentUser?.uid;
+  const result=await callFunction('getGroupFlags',{groupCode:code,seasonId:sid});
+  if(groupCode!==code||seasonId!==sid||auth.currentUser?.uid!==uid)return;
+  flags=result?.flags||[];renderFlagQueue();
+}
 
 // KNOWN, UNDERSTOOD, ACCEPTED NON-ISSUE (verified 8 Jul 2026 — do not re-litigate
 // this as a mystery if it resurfaces in testing): a `.get({source:'server'})`
@@ -7877,7 +7998,14 @@ async function saveRoles(){
   const ref = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
   try {
     let written=null;
-    await db.runTransaction(async tx=>{
+    if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH){
+      const changes=(season.roster||[]).filter(p=>p&&!p.departed).map(p=>{
+        const change={name:p.name},team=document.getElementById(`team_${p.name}`),role=document.getElementById(`role_${p.name}`),admin=document.getElementById(`admin_${p.name}`);
+        if(team)change.team=team.value;if(role)change.role=role.value;if(admin)change.isAdmin=admin.checked;return change;
+      });
+      const result=await callFunction('changeGroupAdmin',{groupCode,seasonId,action:'roles',changes});
+      if(!result?.ok||!Array.isArray(result.roster))throw new Error('ROLES_NOT_CONFIRMED');written=result.roster;
+    }else await db.runTransaction(async tx=>{
       const snap=await tx.get(ref);
       if(!snap.exists) throw new Error('SEASON_MISSING');
       const roster=snap.data().roster||[];           // FRESH copy — includes anyone who joined while you edited
@@ -7961,7 +8089,10 @@ async function renamePlayer(oldName){
   const sRef = gRef.collection('seasons').doc(seasonId);
   try{
     let written=null, userId=null;
-    await db.runTransaction(async tx=>{
+    if(window.FEATURE_GOOGLE_AUTH){
+      const result=await callFunction('changeGroupAdmin',{groupCode,seasonId,action:'rename',oldName,newName});
+      if(!result?.ok||!Array.isArray(result.roster))throw Error('Rename was not confirmed.');written=result.roster;
+    }else await db.runTransaction(async tx=>{
       const sSnap=await tx.get(sRef); if(!sSnap.exists) throw new Error('SEASON_MISSING');
       const gSnap=await tx.get(gRef);
       const roster=sSnap.data().roster||[];
@@ -8156,6 +8287,11 @@ function renderTwistToggles(){
   renderIronPledgeAdmin();
 }
 async function toggleTwist(id,enable){
+  if(window.FEATURE_GOOGLE_AUTH){
+    try{await callFunction('changeGroupAdmin',{groupCode,seasonId,action:'twistToggle',twistId:id,enabled:enable});}
+    catch(e){logErr('toggleTwist',e);toast(e.message||'Could not change the twist.','error');}
+    return;
+  }
   // Freaky Fridays / Monday Motivation: enable on day 1 of the season month only; runs all month.
   if((id==='freaky_fridays'||id==='monday_motivation') && enable){
     const label=id==='freaky_fridays'?'Freaky Fridays':'Monday Motivation';
@@ -8174,6 +8310,16 @@ async function toggleTwist(id,enable){
 // doc id + create-only rules mean a double-tap can never overwrite a past window.
 async function activateTwistWindow(twistId){
   if(!season||!seasonId){ toast('Group still loading — try again in a second.','error'); return; }
+  if(window.FEATURE_GOOGLE_AUTH){
+    try{
+      const result=await callFunction('changeGroupAdmin',{groupCode,seasonId,action:'twistWindow',twistId});
+      if(!result?.ok||!result.window)throw Error('Activation was not confirmed.');
+      const w=result.window;
+      const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      toast((result.already?'Already scheduled':'Scheduled')+': '+w.monDate+'–'+w.sunDate+' '+MN[w.month-1]+(w.frozenPlayers?.length?'. Underdog: '+w.frozenPlayers.join(', '):''),'success');
+    }catch(e){logErr('activateTwistWindow',e);toast(e.message||'Could not activate the twist.','error');}
+    return;
+  }
   const label=twistId==='boss_week'?'Boss Week':'Underdog Week';
   const now=new Date();
   if(now.getDay()!==0){   // 0 = Sunday
@@ -8224,13 +8370,19 @@ async function activateTwistWindow(twistId){
   }catch(e){ logErr('activateTwistWindow '+twistId, e); toast(`Could not set ${label} — it may already be set, or check your connection.`,'error'); }
 }
 async function saveTwistConfig(id,key,value){
+  if(window.FEATURE_GOOGLE_AUTH){
+    try{await callFunction('changeGroupAdmin',{groupCode,seasonId,action:'twistConfig',twistId:id,key,value});}
+    catch(e){logErr('saveTwistConfig',e);toast(e.message||'Could not save the twist setting.','error');}
+    return;
+  }
   await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('twists').doc(id).update({[key]:value});
 }
 async function award30(){
   const p=document.getElementById('aPlayer').value;
   if(!p){toast('Select player','error');return;}
   if(bonus30.find(b=>b.player===p)){toast('Already awarded','error');return;}
-  await db.collection('bonuses_30day').add({groupCode,player:p,month:season.month,year:season.year});
+  if(window.FEATURE_GOOGLE_AUTH)await callFunction('changeGroupAdmin',{groupCode,seasonId,action:'award30',name:p});
+  else await db.collection('bonuses_30day').add({groupCode,player:p,month:season.month,year:season.year});
   toast(`+50 pts awarded to ${p}.`,'success');
 }
 
@@ -8240,9 +8392,8 @@ async function saveFoundryGoal(){
   const val=raw===''?null:parseInt(raw);
   if(val!==null&&(isNaN(val)||val<1)){ toast('Enter a positive number, or leave blank to use auto.','error'); return; }
   try{
-    await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).update({
-      foundryGoal: val===null ? firebase.firestore.FieldValue.delete() : val
-    });
+    if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH)await callFunction('changeGroupAdmin',{groupCode,seasonId,action:'settings',patch:{foundryGoal:val}});
+    else await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).update({foundryGoal:val===null?firebase.firestore.FieldValue.delete():val});
     season.foundryGoal=val===null?undefined:val;
     toast(val===null?'Goal reset to auto.':'Season goal set to '+val+' strikes.','success');
     document.getElementById('foundryGoalInput').value='';
@@ -8361,7 +8512,8 @@ async function maybeShowRebalanceCard(){
 async function dismissRebalance(){
   const host = document.getElementById('rebalanceCard');
   try {
-    await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).update({ rebalanceDismissed: true });
+    if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH)await callFunction('changeGroupAdmin',{groupCode,seasonId,action:'settings',patch:{rebalanceDismissed:true}});
+    else await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).update({ rebalanceDismissed: true });
     season.rebalanceDismissed = true;
     if(host) host.innerHTML = '';
     toast('Teams kept as they are.','success');
@@ -8433,7 +8585,11 @@ async function applyRebalance(){
     const plan = computeSnakeDraft(prev.standings);
     const ref = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
     let written = null;
-    await db.runTransaction(async tx=>{
+    if(window.FEATURE_GOOGLE_AUTH){
+      const changes=(season.roster||[]).filter(p=>p&&!p.departed&&plan.assignments[p.name]).map(p=>({name:p.name,team:plan.assignments[p.name]}));
+      const result=await callFunction('changeGroupAdmin',{groupCode,seasonId,action:'rebalance',changes});
+      if(!result?.ok||!Array.isArray(result.roster))throw Error('Rebalance was not confirmed.');written=result.roster;
+    }else await db.runTransaction(async tx=>{
       const snap = await tx.get(ref);
       if(!snap.exists) throw new Error('SEASON_MISSING');
       const roster = snap.data().roster || [];
@@ -8486,10 +8642,26 @@ function showSuperPinError(msg){
   el.classList.remove('hidden');
 }
 
+async function openVerifiedSuperAdmin(){
+  const actor=auth.currentUser;
+  if(actor&&!actor.isAnonymous){
+    try{
+      await actor.getIdToken(true);
+      const access=await callFunction('getAdminAccess',{});
+      if(auth.currentUser?.uid!==actor.uid)return;
+      if(access?.superadmin===true){showScreen('super');await loadSuperAdmin();return;}
+    }catch(e){logErr('openVerifiedSuperAdmin',e);}
+  }
+  showScreen('superpin');
+  const card=document.querySelector('#screen-superpin .ob-card');
+  if(card)card.innerHTML='<div class="ob-title">Sign in to Superadmin</div><p class="ob-sub">Only your approved Google or Apple account can open this dashboard. Your old Forge PIN does not grant admin access.</p><button class="btn btn-gold" onclick="loginWithForgeProvider(\'google.com\')">Continue with Google</button><button class="btn btn-surface" onclick="loginWithForgeProvider(\'apple.com\')">Continue with Apple</button><button class="btn btn-surface" onclick="exitSuper()">Back to Forge</button>';
+}
+
 // No attempt throttling here, on purpose. This gate is client-side UI over a
 // hash that ships in a public repo, so a lockout would buy exactly no security
 // while handing the one person who needs this page a way to lock himself out.
 async function submitSuperPin(){
+  if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH){await openVerifiedSuperAdmin();return;}
   const el  = document.getElementById('superPinEntry');
   const val = el ? el.value : '';
   if(!val){ showSuperPinError('Enter the PIN first.'); return; }
@@ -8526,6 +8698,10 @@ function lockSuper(){
 
 // ── SUPER ADMIN ───────────────────────────────────────────────────────────
 async function loadSuperAdmin(){
+  if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH){
+    try{const access=await callFunction('getAdminAccess',{});if(access?.superadmin!==true)throw new Error('ADMIN_REQUIRED');}
+    catch(e){showScreen('code');toast('Sign in with the account approved for Superadmin.','error');return;}
+  }
   // Create-group no longer asks for month/year/days — say plainly what it will
   // make, so "current month" is visible rather than assumed.
   try{
@@ -8644,7 +8820,10 @@ async function loadSuperAdmin(){
 // costs no extra read).
 async function toggleSurveyAsk(code, on){
   try{
-    await db.collection('groups').doc(code).set(
+    if(typeof FEATURE_GOOGLE_AUTH!=='undefined' && FEATURE_GOOGLE_AUTH){
+      const current=await db.collection('groups').doc(code).get();
+      await callFunction('changeGroupAdmin',{groupCode:code,seasonId:current.data()?.currentSeasonId,action:'survey',enabled:on});
+    }else await db.collection('groups').doc(code).set(
       { surveyAsk: on ? SURVEY_ID : firebase.firestore.FieldValue.delete() }, {merge:true});
     toast(on ? 'Survey on for this group — members see it next time they open Forge.'
              : 'Survey off. Nobody new will be asked.', 'success');
@@ -9282,7 +9461,8 @@ async function superToggleScoringV2(code, sid, on){
   const verb = on ? 'TURN ON' : 'TURN OFF';
   if(!confirm(`${verb} V2 scoring for ${code} (${sid})?\n\nStreak milestone bonus + rolling team bar. This changes the group's live standings immediately.`)) return;
   try{
-    await db.collection('groups').doc(code).collection('seasons').doc(sid)
+    if(window.FEATURE_GOOGLE_AUTH)await callFunction('changeGroupAdmin',{groupCode:code,seasonId:sid,action:'settings',patch:{scoringV2:on}});
+    else await db.collection('groups').doc(code).collection('seasons').doc(sid)
       .set({ scoringV2: on }, {merge:true});
     toast(on ? `V2 scoring ON for ${code} — standings recompute on next load.`
              : `V2 scoring OFF for ${code} — back to classic points.`, 'success');
@@ -9451,6 +9631,13 @@ async function saveEditGroup(){
 
   status.textContent='Saving…';
   try{
+    if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH){
+      await callFunction('changeGroupAdmin',{groupCode:code,seasonId:sid,action:'settings',groupName:newGroupName,demo:isDemo,patch:{days,capTarget,vcTarget,minWorkouts,numTeams,teamStreakThreshold:thresholdPct/100,kmTarget,rolesEnabled,stepRounds:{enabled:_stepOn}}});
+      if(numTeams===1){
+        if(window._editRoster)window._editRoster.forEach(p=>{p.team='A';});
+        if(window.season&&window.seasonId===sid&&window.groupCode===code&&Array.isArray(window.season.roster))window.season.roster.forEach(p=>{p.team='A';});
+      }
+    }else{
     // Roster migration to Team A runs in its own transaction FIRST, so a failure
     // here leaves the season on its old numTeams rather than switching the count
     // and stranding the players the guard just promised to move.
@@ -9477,6 +9664,7 @@ async function saveEditGroup(){
         stepRounds
       })
     ]);
+    }
     // Update panel title immediately so it reflects the new name before loadSuperAdmin reloads.
     document.getElementById('editGroupName').textContent=`${newGroupName} (${sid})`;
     // If we're editing the group we're currently viewing in-app, refresh local in-memory state.
@@ -9663,6 +9851,7 @@ async function writeSeasonSnapshot(code){
 // active, so a concurrent racing call naturally re-reads a season that's
 // either too young or not yet due on its retry and declines.
 async function performRollover(code){
+  if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH)return callFunction('rolloverGroup',{groupCode:code});
   const gSnap = await db.collection('groups').doc(code).get();
   if(!gSnap.exists) return {ok:false, reason:'GROUP_MISSING'};
   const curSid = gSnap.data().currentSeasonId;
@@ -9940,6 +10129,7 @@ window._migrationDryRunDone = false;
 async function runUserMigration(dryRun){
   const statusEl = document.getElementById('migrationStatus');
   const log = (msg) => { console.log('[Migration] '+msg); if(statusEl) statusEl.textContent = msg; };
+  if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH){log('Account migration requires the reviewed server migration plan and a fresh rollback backup. Browser identity rewrites are disabled.');return;}
 
   if(!dryRun){
     // Once the users-doc ownership rule is live (FEATURE_SERVER_WRITES era),
@@ -10158,6 +10348,15 @@ window._backfillDryRunDone = false;
 async function runStatsBackfill(dryRun){
   const statusEl = document.getElementById('backfillStatus');
   const log = (msg) => { console.log('[Backfill] '+msg); if(statusEl) statusEl.textContent = msg; };
+  if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH){
+    try{
+      if(!dryRun&&(!window._statsRepairPreview||!confirm('Recalculate derived workout statistics from saved logs? Earned badges and workout records stay unchanged.')))return;
+      const result=await callFunction('repairDerivedStats',{mode:'profiles',dryRun,confirmation:window._statsRepairPreview?.confirmation||null});
+      window._statsRepairPreview=dryRun?result:null;
+      const button=document.getElementById('backfillRunBtn');if(button)button.disabled=!dryRun||result.unresolved>0;
+      log(dryRun?`${result.profiles} profiles. ${result.unresolved} unresolved workout records. ${result.unresolved?'Resolve ownership before running.':'Preview ready; no data changed.'}`:'Statistics rebuilt from saved workouts.');
+    }catch(e){logErr('stats repair',e);log(e.message||'Repair failed; preview and retry.');}return;
+  }
   if(!dryRun){
     // See runUserMigration: the ownership rule blocks client writes to linked
     // user docs, so the live bulk backfill moves to scripts/ with owner creds.
@@ -10292,6 +10491,25 @@ async function selfServeCreateGroup(){
   if(formattedName.length < 2 || formattedName.length > 24){ err.textContent='Name must be 2–24 characters.'; err.classList.remove('hidden'); return; }
   if(/[^\p{L}\p{N} .\-]/u.test(formattedName)){ err.textContent='Name can only contain letters, numbers, spaces, hyphens and periods.'; err.classList.remove('hidden'); return; }
 
+  if(window.FEATURE_GOOGLE_AUTH){
+    if(window._forgeCreateBusy)return;
+    const actorUid=auth.currentUser?.uid;
+    if(!actorUid||auth.currentUser.isAnonymous){err.textContent='Sign in with Google or Apple before creating your group.';err.classList.remove('hidden');return;}
+    window._forgeCreateBusy=true;
+    try{
+      const payload={groupName,name:formattedName,code:document.getElementById('ssCustomCode')?.value||''};
+      const key=JSON.stringify([actorUid,payload]);
+      if(window._forgeCreateAttempt?.key!==key)window._forgeCreateAttempt={key,id:crypto.randomUUID()};
+      const result=await callFunction('createGroupWithIdentity',{...payload,requestId:window._forgeCreateAttempt.id});
+      if(!result?.ok||!result.groupCode)throw Error('Creation was not confirmed.');
+      if(auth.currentUser?.uid!==actorUid)return;
+      try{if(location.search.includes('create'))history.replaceState(null,'',location.pathname);}catch(e){}
+      await restoreIdentityFromGoogle({uid:actorUid,preferredCode:result.groupCode});
+    }catch(e){logErr('selfServeCreateGroup',e);err.textContent=e.message||'Could not create your group. Try again.';err.classList.remove('hidden');}
+    finally{window._forgeCreateBusy=false;}
+    return;
+  }
+
   // Optional custom code (A-Z/0-9 ×6, unique vs groups AND aliases, not
   // reserved/blocked). Empty field → existing collision-checked random path.
   const custom = await validateCustomCode(document.getElementById('ssCustomCode')?.value);
@@ -10311,11 +10529,8 @@ async function selfServeCreateGroup(){
   const month = now.getMonth()+1, year = now.getFullYear();
   const sid = seasonIdOf(month, year);
   const days = new Date(year, month, 0).getDate(); // auto-computed, never prompted
-  // Pro-rate the month-end minimum to the days actually left: a founder
-  // arriving on the 25th must not inherit a penalty sized for people who had
-  // all 31 days. Full month ⇒ the standard 8; floor 1; never above 8.
-  const daysLeft = days - now.getDate() + 1;
-  const minW = Math.max(1, Math.min(8, Math.round(8 * daysLeft / days)));
+  // New groups start without a minimum-workout penalty (approved policy).
+  const minW = 0;
 
   const creatorEntry = { name: formattedName, team:'A', role:'Player', uid:(window.currentUid||null), isAdmin:true };  // R2: no plaintext pin field; pinHash set via grace-flow
   const serverNow = firebase.firestore.FieldValue.serverTimestamp();
@@ -10386,7 +10601,7 @@ function renderFounderCard(){
       </div>` : '';
     return;
   }
-  const noCred = !mine.pin && !mine.pinSet;
+  const noCred = !window.FEATURE_GOOGLE_AUTH && !mine.pin && !mine.pinSet;
   let young=false;
   try { const c=groupData && groupData.createdAt; const d=c && (c.toDate ? c.toDate() : new Date(c)); young=!!d && (Date.now()-d.getTime()) < 8*86400000; } catch(e){}
 
@@ -10497,6 +10712,22 @@ async function createGroup(){
   const thresholdPct=Math.min(100, Math.max(30, parseInt(document.getElementById('newGroupThreshold').value)||60));
   const rolesEnabled=document.getElementById('newGroupRoles').checked;
   const isDemo=document.getElementById('newGroupDemo').checked;
+  if(window.FEATURE_GOOGLE_AUTH){
+    if(window._forgeAdminCreateBusy)return;
+    window._forgeAdminCreateBusy=true;
+    try{
+      const payload={admin:true,groupName:name,code:document.getElementById('newGroupCustomCode')?.value||'',demo:isDemo,settings:{capTarget,vcTarget,numTeams,teamStreakThreshold:thresholdPct/100,rolesEnabled}};
+      const key=JSON.stringify([auth.currentUser?.uid,payload]);
+      if(window._forgeAdminCreateAttempt?.key!==key)window._forgeAdminCreateAttempt={key,id:crypto.randomUUID()};
+      const result=await callFunction('createGroupWithIdentity',{...payload,requestId:window._forgeAdminCreateAttempt.id});
+      if(!result?.ok||!result.groupCode)throw Error('Creation was not confirmed.');
+      globalDataCache=null;
+      const res=document.getElementById('newGroupResult');res.className='warn-box warn-green';res.textContent='Group created. Code: '+result.groupCode;res.classList.remove('hidden');
+      await loadSuperAdmin();
+    }catch(e){logErr('createGroup',e);toast(e.message||'Could not create group.','error');}
+    finally{window._forgeAdminCreateBusy=false;}
+    return;
+  }
   // Optional custom code first; else random 6-char (collision-checked —
   // batch.set() would silently REPLACE an existing group's doc).
   const custom=await validateCustomCode(document.getElementById('newGroupCustomCode')?.value);
@@ -10783,6 +11014,12 @@ function renderGlobalFromCache({groups,todayByGroup,todayUnavailable=false}){
 // reads ~G+1. Invoke from the browser console as window.backfillGlobalStats()
 // (log into any group first so score()/firebase are loaded). Idempotent.
 async function backfillGlobalStats(){
+  if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH){
+    const preview=await callFunction('repairDerivedStats',{mode:'global',dryRun:true});
+    if(preview.unresolved)throw Error('Resolve '+preview.unresolved+' historical workout ownership records first.');
+    if(!confirm(`Rebuild derived totals for ${preview.groups} groups and the last six monthly reports? Workout records and earned badges stay unchanged.`))return preview;
+    return callFunction('repairDerivedStats',{mode:'global',dryRun:false,confirmation:preview.confirmation});
+  }
   console.log('[R3 backfill] reading live data…');
   const gSnap=await db.collection('groups').get();
   const groups=gSnap.docs.map(d=>({code:d.id,...d.data()}));
@@ -10897,6 +11134,17 @@ function renderGlobalConsent(){
 }
 async function toggleGlobalConsent(val){
   if(!season || !seasonId){ return; }
+  if(window.FEATURE_GOOGLE_AUTH){
+    const actor=me?.userId,code=groupCode,sid=seasonId;
+    try{
+      await callFunction('setGroupVisibility',{groupCode:code,seasonId:sid,visible:val});
+      if(me?.userId!==actor||groupCode!==code||seasonId!==sid)return;
+      me.globalConsent=val;
+      const entry=(season.roster||[]).find(p=>p&&p.userId===actor);if(entry)entry.globalConsent=val;
+      upsertSession(code,me,groupData?.name);renderGlobalConsent();
+    }catch(e){if(me?.userId===actor&&groupCode===code&&seasonId===sid){toast('Could not update visibility. Reconnect and try again.','error');renderGlobalConsent();}}
+    return;
+  }
   const ref = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
   try{
     let written=null;
@@ -10927,6 +11175,13 @@ async function checkJackOfAllTrades(day, newWorkouts, submission){
   const jackGroupCode=submission?submission.groupCode:groupCode;
   const jackLogs=submission?submission.score.logs:allLogs;
   if(!jackTwists['jack_of_all_trades']?.enabled||!jackActor||!jackSeason||!jackSeasonId) return;
+  if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH){
+    try{
+      const result=await callFunction('checkJackAward',{groupCode:jackGroupCode,year:jackSeason.year,month:jackSeason.month,day});
+      if(result?.awarded&&(!submission||_isSubmissionViewCurrent(submission)))toast('🃏 Jack of All Trades! +20 pts for 4 distinct workout types this week.','success');
+    }catch(e){logErr('checkJackOfAllTrades',e);}
+    return;
+  }
   const date=new Date(jackSeason.year,jackSeason.month-1,day);
   const dow=date.getDay()===0?6:date.getDay()-1;
   const monDay=day-dow, sunDay=monDay+6;
@@ -11078,6 +11333,11 @@ async function lockInPledge(){
   const inp=document.getElementById('pledgeInput');
   const val=parseInt(inp?.value);
   if(!val||val<1||val>7){ toast('Enter a number between 1 and 7.','error'); return; }
+  if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH){
+    try{const result=await callFunction('lockPledge',{groupCode,seasonId,pledge:val});if(!result?.ok)throw Error('Pledge was not confirmed.');toast('Pledge locked: '+val+' workout days.','success');}
+    catch(e){logErr('lockInPledge',e);toast(e.message||'Could not lock your pledge.','error');}
+    return;
+  }
   const weekStr=getISOWeek(new Date());
   // Doc ID includes the week so each week is its own create (bets rules are
   // create-only). Same sanitizer as jackAwards doc IDs.
@@ -11157,6 +11417,10 @@ function renderIronPledgeAdmin(){
 // redundant: without it there's a real race between an unsettled pledge and
 // the season-end snapshot, and the snapshot has no second chance).
 async function settlePledgesFor(code, seasonData, betsMap, logsArr, existingBonuses){
+  if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH){
+    const result=await callFunction('settlePledges',{groupCode:code,seasonId:seasonIdOf(seasonData.month,seasonData.year)});
+    return result?.settled>0;
+  }
   const today = new Date();
   const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const weeksInBets = [...new Set(Object.values(betsMap).map(b=>b.week))];
@@ -11507,7 +11771,11 @@ async function showTab(t,options={}){
     // own group. ADMIN_PIN stays as the master super-override for anyone
     // else (unchanged behavior for every non-admin, including every group
     // that predates this feature and has no isAdmin data at all yet).
-    if(me?.isAdmin){
+    if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH){
+      const code=groupCode,sid=seasonId,uid=auth.currentUser?.uid;
+      try{const access=await callFunction('getAdminAccess',{groupCode:code,seasonId:sid});if(code!==groupCode||sid!==seasonId||uid!==auth.currentUser?.uid)return;if(access?.groupAdmin!==true)throw new Error('ADMIN_REQUIRED');adminUnlocked=true;}
+      catch(e){toast('Group admin access is required for this account.','error');return;}
+    }else if(me?.isAdmin){
       adminUnlocked=true;
     } else {
       const pin=prompt('Enter admin PIN:');
@@ -11546,12 +11814,16 @@ async function showTab(t,options={}){
   if(t==='feed') renderFeed();
   if(t==='admin'){ try{ renderAdminExtras(); }catch(e){} }
   if(t==='admin') maybeShowRebalanceCard().catch(e=>logErr('maybeShowRebalanceCard',e));
+  if(t==='admin'&&window.FEATURE_GOOGLE_AUTH)loadVerifiedGroupFlags().catch(e=>{logErr('loadGroupFlags',e);toast('Could not load reports. Reopen Admin to retry.','error');});
   if(!options.tour)trackTabClick(t); // do not count guided-tour steps as user activity
 }
 
 // ── TAB ANALYTICS ─────────────────────────────────────────────────────────
 async function trackTabClick(tab){
   if(!groupCode || !season) return;
+  if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH){
+    try{await callFunction('trackGroupTab',{groupCode,tab});}catch(e){/* optional metrics cannot interrupt navigation */}return;
+  }
   const month=`${season.year}-${String(season.month).padStart(2,'0')}`;
   const ref=db.collection('analytics').doc(groupCode).collection('tabClicks').doc(month);
   try{
@@ -11671,6 +11943,14 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
       if(typeof db==='undefined' || !d) return;
       var ym = d.seasonId || '';
       if(!/^\d{4}-\d{2}$/.test(ym)) return;
+      if(typeof FEATURE_GOOGLE_AUTH!=='undefined' && FEATURE_GOOGLE_AUTH){
+        var actorId=window.me&&me.userId,contextGroup=window.groupCode,contextSeason=window.seasonId;
+        var comparison=await firebase.app().functions('asia-south1').httpsCallable('getRecapPercentile')({seasonId:ym});
+        if(!comparison.data?.available||!actorId||window.me?.userId!==actorId||window.groupCode!==contextGroup||window.seasonId!==contextSeason)return;
+        d.familyPct=comparison.data.percentile;d.familyOf=comparison.data.population;
+        var familyEl=document.getElementById('recapFamily');if(familyEl)familyEl.innerHTML=familyLine(d);
+        return;
+      }
       var pop = _familyCache[ym];
       if(!pop){
         var snap = await db.collection('analytics').doc('global').collection('monthly').doc(ym).get();

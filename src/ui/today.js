@@ -599,7 +599,7 @@
       if(model.hasGroups){message('This account also belongs to groups. Open Group mode → Profile → Delete account to remove everything together.');return;}
       if(!confirm('Permanently delete your Forge account, solo workouts and leaderboard entries? This cannot be undone.'))return;
       saving=true;message('Confirm your sign-in to delete your account…');
-      try{await confirmForgeAccountDeletion(actor);if(!alive(token,actor))return;await callFunction('deleteSoloAccount',{});if(alive(token,actor)){await auth.signOut();await open();message('Your account was deleted.');}}
+      try{await confirmForgeAccountDeletion(actor);if(!alive(token,actor))return;const result=await callFunction('deleteSoloAccount',{});if(!result||result.ok!==true||(result.complete!==true&&result.pending!==true))throw new Error('DELETION_NOT_CONFIRMED');if(alive(token,actor)){await auth.signOut();await open();message(result.pending?'Deletion requested. Cleanup will continue after you sign out.':'Your account was deleted.');}}
       catch(e){if(alive(token,actor))message('Deletion did not finish. Some steps may be complete. Retry when connected, or use the account-deletion support page.');}
       finally{saving=false;}
     }));

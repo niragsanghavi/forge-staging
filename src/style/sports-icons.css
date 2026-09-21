@@ -5,8 +5,12 @@
 .forge-fire.flk-s{width:20px;height:20px}.forge-fire.flk-m{width:23px;height:23px}.forge-fire.flk-l{width:28px;height:28px}
 .fi-streak .forge-fire{width:23px;height:23px}.mir-flame .forge-fire{width:20px;height:20px}.mir-rline .forge-fire{width:24px;height:24px}
 .mir-pick .forge-sport{width:40px;height:40px}.mir-frow .forge-sport{width:34px;height:34px}.ddrow .forge-sport{width:36px;height:36px}.mir-bar .forge-sport{width:20px;height:20px}.fi-ico .forge-sport{width:48px;height:48px}
-.mir-day .forge-sport{width:16px;height:16px;margin:0;color:currentColor}.mir-day .forge-sport+.forge-sport{margin-left:-5px}
-.mir-day-marks{display:flex;align-items:center;justify-content:center;gap:1px;width:100%;max-width:100%;margin-top:5px;color:var(--today-text,var(--text));overflow:hidden}.mir-day-more{font-size:9px;font-weight:800;line-height:1;white-space:nowrap}
+.mir-day .forge-sport{width:24px;height:24px;margin:0;color:currentColor}
+.mir-day-marks{display:flex;align-items:center;justify-content:center;gap:1px;width:100%;max-width:100%;margin-top:10px;color:var(--today-text,var(--text));overflow:hidden}.mir-day-more{font-size:9px;font-weight:800;line-height:1;white-space:nowrap}
+.mir-day.hit .n,.mir-day-more{color:var(--today-text,var(--text))!important}
+/* Calendar glyph colors are independent of tiny date/count labels. */
+:root[data-theme=light] .mir-day .forge-sport{filter:brightness(.85)}
 @keyframes forge-fire-frames{0%,100%{background-position:0 0}16.666%{background-position:50% 0}33.333%{background-position:100% 0}50%{background-position:0 100%}66.666%{background-position:50% 100%}83.333%{background-position:100% 100%}}
-@media(min-width:390px){.mir-day .forge-sport{width:20px;height:20px}.mir-day .forge-sport+.forge-sport{margin-left:-7px}}
+@media(min-width:390px){.mir-day .forge-sport{width:28px;height:28px}}
+@media(max-width:360px){.mir-day .forge-sport{width:22px;height:22px}}
 @media(prefers-reduced-motion:reduce){.forge-fire{animation:none!important;background-position:0 0}}

@@ -5,14 +5,15 @@ const window={};
 // Default (no ctx) reads the live globals exactly as before — so every existing
 // score(name) / teamTotal(team) call is unchanged.
 function _seasonOf(ctx){ return (ctx && ctx.season) || window.season || {}; }
-function _logsOf(ctx){ return (ctx && ctx.logs) || (typeof allLogs!=='undefined' ? allLogs : []) || []; }
+function _scoreArray(value){return Array.isArray(value)?value:[];}
+function _logsOf(ctx){ return _scoreArray((ctx && ctx.logs) || (typeof allLogs!=='undefined' ? allLogs : [])); }
 function _twistsOf(ctx){ return (ctx && ctx.twists) || (typeof activeTwists!=='undefined' ? activeTwists : {}) || {}; }
-function _bonusesOf(ctx){ return (ctx && ctx.bonuses) || (typeof bonus30!=='undefined' ? bonus30 : []) || []; }
+function _bonusesOf(ctx){ return _scoreArray((ctx && ctx.bonuses) || (typeof bonus30!=='undefined' ? bonus30 : [])); }
 function _rosterOf(ctx){ const s=_seasonOf(ctx); return (s && Array.isArray(s.roster)) ? s.roster : []; }
-function _jackAwardsOf(ctx){ return (ctx&&ctx.jackAwards)||(typeof jackAwards!=='undefined'?jackAwards:[])||[]; }
-function _ironPledgeBonusesOf(ctx){ return (ctx&&ctx.ironPledgeBonuses)||(typeof ironPledgeBonuses!=='undefined'?ironPledgeBonuses:[])||[]; }
-function _twistWindowsOf(ctx){ return (ctx&&ctx.twistWindows)||(typeof twistWindows!=='undefined'?twistWindows:[])||[]; }
-function _activeGroupCode(ctx){ return (ctx&&ctx.groupCode)||groupCode||''; }
+function _jackAwardsOf(ctx){ return _scoreArray((ctx&&ctx.jackAwards)||(typeof jackAwards!=='undefined'?jackAwards:[])); }
+function _ironPledgeBonusesOf(ctx){ return _scoreArray((ctx&&ctx.ironPledgeBonuses)||(typeof ironPledgeBonuses!=='undefined'?ironPledgeBonuses:[])); }
+function _twistWindowsOf(ctx){ return _scoreArray((ctx&&ctx.twistWindows)||(typeof twistWindows!=='undefined'?twistWindows:[])); }
+function _activeGroupCode(ctx){ return (ctx&&ctx.groupCode)||(typeof groupCode!=='undefined'?groupCode:''); }
 
 const _EMPTY_SET = new Set();
 
@@ -59,12 +60,15 @@ const STREAK_MILESTONE_BONUS = 10;
 const _scoreCache = new WeakMap();
 
 function _ctxEntry(ctx){
-  const cfg=_seasonOf(ctx), logs=_logsOf(ctx), roster=_rosterOf(ctx);
+  const cfg=_seasonOf(ctx), logs=_logsOf(ctx), rosterRef=_rosterOf(ctx);
   const twists=_twistsOf(ctx), bonuses=_bonusesOf(ctx);
   const jacks=_jackAwardsOf(ctx), ips=_ironPledgeBonusesOf(ctx);
   const tw=_twistWindowsOf(ctx);
   const myGC=_activeGroupCode(ctx);
-  const today=new Date();
+  // Server aggregates can supply the same competition day regardless of the
+  // runtime timezone. Existing callers retain their current local-day behavior.
+  const asOf=ctx&&ctx.asOf;
+  const today=asOf&&/^\d{4}-\d{2}-\d{2}$/.test(asOf)?new Date(asOf+'T12:00:00'):new Date();
   // kmTarget is part of the stamp: the km bonus below reads it, so without it an
   // admin raising or lowering the target would leave every cached score stale
   // until the logs array happened to be replaced.
@@ -74,16 +78,20 @@ function _ctxEntry(ctx){
                cfg.rolesEnabled,cfg.teamStreakThreshold,cfg.kmTarget,cfg.scoringV2===true,
                myGC,today.toDateString()].join('|');
   const hit=_scoreCache.get(logs);
-  if(hit && hit.cfg===cfg && hit.rosterRef===roster && hit.twists===twists &&
+  if(hit && hit.cfg===cfg && hit.rosterRef===rosterRef && hit.twists===twists &&
      hit.bonuses===bonuses && hit.jacks===jacks && hit.ips===ips && hit.tw===tw && hit.stamp===stamp) return hit;
 
+  const roster=rosterRef.filter(p=>p&&typeof p.name==='string'&&p.name.trim()&&typeof p.team==='string');
   const {month, year} = cfg;
   const calendarDays=Number.isInteger(month)&&month>=1&&month<=12&&Number.isInteger(year)?new Date(year,month,0).getDate():31;
   const DAYS = Number.isInteger(cfg.days)&&cfg.days>=1?Math.min(cfg.days,calendarDays):calendarDays;
   // Defense in depth: loaders normally scope snapshots, but dirty/foreign
   // input must not become points. Missing legacy scope fields remain allowed.
   const validLogs=logs.filter(l=>l&&typeof l.player==='string'&&!l.voided&&Number.isInteger(l.day)&&l.day>=1&&l.day<=DAYS
-    &&(l.month==null||l.month===month)&&(l.year==null||l.year===year)&&(l.groupCode==null||l.groupCode===myGC));
+    &&(l.month==null||l.month===month)&&(l.year==null||l.year===year)&&(l.groupCode==null||l.groupCode===myGC)
+    // Historical records without this field remain compatible. Explicitly
+    // empty or malformed workout payloads are never a workout day.
+    &&(l.workouts===undefined||(Array.isArray(l.workouts)&&l.workouts.length>0&&l.workouts.every(w=>typeof w==='string'&&w.trim()))));
 
   // Per-player log/day indexes — one O(N) pass over the logs.
   const rosterByName=new Map(roster.map(p=>[p.name,p]));
@@ -94,7 +102,7 @@ function _ctxEntry(ctx){
   // Accumulated in this same O(N) pass. l.km is whatever the client wrote, so it
   // is coerced and validated here rather than trusted: a string, a NaN, a
   // negative or an absurd value must never be able to move a score.
-  const kmByPlayer=new Map(), kmByTeam=new Map();
+  const kmByPlayer=new Map(), kmByTeam=new Map(), distanceEvents=new Map();
   for(const l of validLogs){
     let arr=logsByPlayer.get(l.player); if(!arr) logsByPlayer.set(l.player,arr=[]);
     arr.push(l);
@@ -108,8 +116,13 @@ function _ctxEntry(ctx){
       const k=Number(l.km);
       if(Number.isFinite(k) && k>0){
         const capped=Math.min(k, KM_MAX_PER_LOG);
-        kmByPlayer.set(l.player,(kmByPlayer.get(l.player)||0)+capped);
-        kmByTeam.set(t,(kmByTeam.get(t)||0)+capped);
+        // Identified copies of the same event count once. Distinct same-day
+        // workouts still add; legacy records with no identifier stay distinct.
+        const key=typeof l.id==='string'&&l.id?JSON.stringify([myGC,year,month,l.player,l.day,l.id]):l;
+        const prior=distanceEvents.get(key)||0, delta=Math.max(0,capped-prior);
+        distanceEvents.set(key,Math.max(prior,capped));
+        kmByPlayer.set(l.player,(kmByPlayer.get(l.player)||0)+delta);
+        kmByTeam.set(t,(kmByTeam.get(t)||0)+delta);
       }
     }
   }
@@ -235,7 +248,7 @@ function _ctxEntry(ctx){
 
   // Twist + bonus lookups.
   const bonusWT=twists['bonus_workout'];
-  const bonusWord=bonusWT?.enabled ? (bonusWT.workout||'').toLowerCase() : null;
+  const bonusWord=bonusWT?.enabled&&typeof bonusWT.workout==='string'&&bonusWT.workout.trim() ? bonusWT.workout.toLowerCase() : null;
   const friOn=!!twists['freaky_fridays']?.enabled;
   const monOn=!!twists['monday_motivation']?.enabled;
 
@@ -266,7 +279,7 @@ function _ctxEntry(ctx){
   // Underdog Week: each window froze its last-place players at activation time.
   const underdogWindows=seasonWindows
     .filter(w=>w.twist==='underdog_week'&&validWindow(w))
-    .map(w=>({monDate:w.monDate, sunDate:endOf(w), frozen:new Set(w.frozenPlayers||[])}));
+    .map(w=>({monDate:w.monDate, sunDate:endOf(w), frozen:new Set(_scoreArray(w.frozenPlayers).filter(n=>typeof n==='string'))}));
 
   // Step Challenge: a RESOLVED week froze three things at resolution time — who
   // won, who was on that team, and what the bonus was worth. Scoring reads only
@@ -304,9 +317,9 @@ function _ctxEntry(ctx){
   }
   for(const awards of stepByPeriod.values())for(const [name,points] of awards)stepAwards.set(name,(stepAwards.get(name)||0)+points);
 
-  const b30Set=new Set(bonuses.map(b=>b.player));
+  const b30Set=new Set(bonuses.filter(b=>b&&typeof b.player==='string').map(b=>b.player));
   const jackCnt=new Map();
-  jacks.forEach(a=>{ if(!a.groupCode||a.groupCode===myGC) jackCnt.set(a.player,(jackCnt.get(a.player)||0)+1); });
+  jacks.forEach(a=>{ if(a&&typeof a.player==='string'&&(!a.groupCode||a.groupCode===myGC)) jackCnt.set(a.player,(jackCnt.get(a.player)||0)+1); });
   const ipSum=new Map();
   ips.forEach(b=>{const raw=Number(b?.rawPoints);if(b&&b.groupCode===myGC&&Number.isFinite(raw)&&raw>=0&&(b.type==='double'||b.type==='zero'))ipSum.set(b.player,(ipSum.get(b.player)||0)+(b.type==='double'?raw:-raw));});
 
@@ -318,7 +331,7 @@ function _ctxEntry(ctx){
   const isEnd=seasonPast || (todayInSeason && today.getDate()===DAYS);
 
   const entry={
-    cfg, rosterRef:roster, twists, bonuses, jacks, ips, tw, stamp,
+    cfg, rosterRef, twists, bonuses, jacks, ips, tw, stamp,
     DAYS, capTarget:cfg.capTarget??16, vcTarget:cfg.vcTarget??20, minWorkouts:cfg.minWorkouts??12,
     rolesEnabled:cfg.rolesEnabled!==false,
     rosterByName, logsByPlayer, daysByPlayer, qualByTeam,
@@ -486,7 +499,7 @@ function score(playerName, ctx){
 
 function teamTotal(team){
   const roster=_rosterOf();
-  const players=roster.filter(p=>p.team===team);
+  const players=roster.filter(p=>p&&typeof p.name==='string'&&p.team===team);
   if(players.length===0) return 0;
   const sum=players.reduce((s,p)=>s+score(p.name).total,0);
   return Math.round(sum/players.length); // average for fair cross-team comparison
