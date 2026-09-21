@@ -15,7 +15,7 @@ test('every precached shell asset exists',async()=>{const r=setup();r.handlers.i
 test('versioned experience assets use matching offline cache keys',()=>{
   const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   for(const asset of ['src/style/today.css','src/ui/today.js','assets/forgeling.webp']){
-    const versioned=asset+'?v=f026-1';assert.ok(html.includes(versioned));assert.ok(source.includes('./'+versioned));
+    const versioned=asset+'?v='+(asset==='src/ui/today.js'?'solo-recovery-20260921':'f026-1');assert.ok(html.includes(versioned));assert.ok(source.includes('./'+versioned));
   }
 });
 test('activation preserves unrelated application caches',async()=>{const r=setup();r.handlers.activate(r.event);await Promise.all(r.waits);assert.deepEqual(r.deleted,['forge-v78']);});

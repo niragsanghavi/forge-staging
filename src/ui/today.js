@@ -540,6 +540,11 @@
   function shell(){
     const el=root();el.replaceChildren();
     const head=node('header','','solo-heading');head.append(node('h1','Forge · Solo'),button('Group mode',()=>{if(saving)return;epoch++;showScreen('onboard');showObStep(1);}));el.append(head);
+    if(uid()&&window.FEATURE_GOOGLE_AUTH){
+      const recovery=node('section','','today-card');
+      recovery.append(node('h2','Already worked out with a group?'),node('p','Recover your existing group profile using its group code, your name and Forge PIN. You do not need to delete solo or disconnect Google or Apple.'),button('Recover my group profile',recoverGroup));
+      el.append(recovery);
+    }
     const status=node('p','','solo-status');status.id='soloStatus';status.setAttribute('role','status');el.append(status);
     return el;
   }
@@ -562,6 +567,57 @@
     try{await startForgeProviderSignIn(provider);if(token===epoch)await open();}
     catch(e){if(token===epoch)message('Sign-in did not finish. You can try again.');}
     finally{window._forgeProviderBusy=false;}
+  }
+  function recoverGroup(){
+    if(saving||!uid())return;
+    const token=++epoch,actor=uid(),el=shell(),form=node('form');
+    el.append(node('h2','Bring your group history with you'),node('p','Use the details you used before Google or Apple sign-in. If you do not know your group code or profile name, ask someone in that group. Nothing changes until you confirm.'));
+    function field(title,options){const label=node('label',title),input=node('input');Object.assign(input,options);label.append(input);form.append(label);return input;}
+    const code=field('Group code',{required:true,maxLength:10,autocomplete:'off'});
+    const name=field('Your name in that group',{required:true,maxLength:24,autocomplete:'off'});
+    const pin=field('Your existing Forge PIN',{required:true,type:'password',inputMode:'numeric',maxLength:4,autocomplete:'off',pattern:'[0-9]{4}'});
+    const review=button('Review recovery',()=>{});review.type='submit';form.append(review);
+    const back=button('Back to my solo calendar',()=>{if(saving)return;pin.value='';open(scope);});form.append(back);el.append(form);
+    form.onsubmit=e=>{
+      e.preventDefault();if(saving||!alive(token,actor))return;
+      const group=code.value.trim().toUpperCase(),person=name.value.trim();
+      if(!/^[A-Z0-9]{4,10}$/.test(group)||!person||!/^\d{4}$/.test(pin.value)){message('Enter your group code, profile name and four-digit Forge PIN.');return;}
+      review.disabled=true;code.disabled=true;name.disabled=true;pin.disabled=true;
+      const confirm=node('section','','today-card');
+      confirm.append(node('h3','Recover '+person+' in '+group+'?'),node('p','After checking your PIN, Forge will bring this group profile and its recorded history into your current signed-in account. Your solo calendar stays. This can include other groups linked to that profile. A profile already linked to another sign-in cannot be recovered this way.'));
+      const change=button('Change details',()=>{if(saving)return;confirm.remove();review.disabled=false;code.disabled=false;name.disabled=false;pin.disabled=false;code.focus();});
+      const submit=button('Verify sign-in and recover profile',async()=>{
+        if(saving||window._forgeProviderBusy||!alive(token,actor))return;
+        saving=true;window._forgeProviderBusy=true;submit.disabled=true;change.disabled=true;back.disabled=true;message('Confirm your sign-in to continue…');
+        let linked=false;
+        try{
+          const provider=auth.currentUser.providerData?.some(p=>p.providerId==='apple.com')?'apple.com':'google.com';
+          const signed=await startForgeProviderSignIn(provider);
+          if(!alive(token,actor)||signed.uid!==actor){pin.value='';return;}
+          message('Checking your group profile…');
+          const result=await callFunction('linkLegacyGroup',{groupCode:group,name:person,pin:pin.value});
+          linked=result?.ok===true;
+          if(!linked)throw Error('Recovery was not confirmed.');
+          pin.value='';if(!alive(token,actor))return;
+          message('Profile linked. Opening your group…');
+          await restoreIdentityFromGoogle({uid:actor,preferredCode:group});
+          if(alive(token,actor))message('Your profile is linked. Use Group mode to open your group, or retry sign-in. Do not repeat recovery.');
+        }catch(error){
+          if(alive(token,actor)){
+            pin.value='';
+            message(linked?'Your profile is linked, but the group could not open. Use Group mode to continue.':String(error.code||'').endsWith('resource-exhausted')?'Too many PIN attempts. Wait an hour before trying again.':'Recovery did not finish. Check your group details and PIN. If this profile already has a linked sign-in, use that account.');
+            if(!linked){confirm.remove();review.disabled=false;code.disabled=false;name.disabled=false;pin.disabled=false;pin.focus();}
+          }
+        }finally{
+          pin.value='';
+          saving=false;window._forgeProviderBusy=false;
+          if(back.isConnected)back.disabled=false;
+          if(!alive(token,actor)&&uid()!==actor)await open(scope);
+        }
+      });
+      confirm.append(change,submit);el.append(confirm);submit.focus();
+    };
+    code.focus();
   }
   function enrollment(el,token,actor){
     el.append(node('h2','Make a little room for yourself.'),node('p','4 base points for a workout day, plus a consecutive-day bonus of 1, 2, then 3. A missed day resets the bonus; a new month starts a new score.'));

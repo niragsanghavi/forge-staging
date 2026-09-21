@@ -4971,7 +4971,7 @@ async function restoreIdentityFromGoogle(r){
         const entry = (sS.data().roster||[]).find(p => p && p.userId === uDoc.id);
         if(!entry) continue;
         upsertSession(code, entry, gS.data().name);
-        if(!firstCode) firstCode = code;
+        if(!firstCode || code===r.preferredCode) firstCode = code;
         restored++;
       }catch(e){ logErr('restoreIdentityFromGoogle:'+code, e); }
     }
@@ -13537,6 +13537,6 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
 })();
 </script>
 <script src="src/ui/sports-icons.js"></script>
-<script src="src/ui/today.js?v=f026-1"></script>
+<script src="src/ui/today.js?v=solo-recovery-20260921"></script>
 </body>
 </html>
