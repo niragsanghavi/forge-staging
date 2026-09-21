@@ -4,11 +4,23 @@ import {memoryFirestore} from './memory-firestore.mjs';
 import {buildReviewedMigration,fingerprint} from '../build/plan-security-migration.mjs';
 import {runReviewedMigration} from '../build/reviewed-migration-engine.mjs';
 const at=Date.parse('2026-09-21T06:00:00Z');
+test('dry run requires a fresh project-matched verified backup before any database reads',async()=>{
+ for(const mode of ['missing','stale','future','project','unverified']){
+  const h=setup();h.db.collection=()=>{throw Error('UNEXPECTED_DATABASE_READ');};
+  const backup=h.options.rollbackExport;
+  if(mode==='missing')delete h.options.rollbackExport;
+  if(mode==='stale')backup.completedAt=new Date(at-86400001).toISOString();
+  if(mode==='future')backup.completedAt=new Date(at+1000).toISOString();
+  if(mode==='project')backup.projectId='forge-25c8c';
+  if(mode==='unverified')backup.operatorVerified=false;
+  await assert.rejects(runReviewedMigration(h.options),/freshly verified full rollback export/);
+ }
+});
 function setup(){
  const season={roster:[{name:'Alex',uid:'one',pin:'synthetic-credential'}]},log={groupCode:'TEST',year:2026,month:9,player:'Alex'};
  const h=memoryFirestore([['users/one',{name:'Alex'}],['groups/TEST/seasons/2026-09',season],['logs/a',log]]);h.db.projectId='forge-staging-865ff';
  const manifest=buildReviewedMigration({env:'STAGING',groups:[{id:'TEST',currentSeasonId:'2026-09',seasons:[{id:'2026-09',...season}]}],users:[{id:'one'}],logs:[{id:'a',...log}]});
- const options={db:h.db,manifest,now:()=>at},apply={...options,dryRun:false,approvedHash:manifest.manifestHash,rollbackExport:{projectId:h.db.projectId,operatorVerified:true,uri:'gs://fictional-rollback/export',completedAt:new Date(at-1000).toISOString()}};
+ const options={db:h.db,manifest,now:()=>at,rollbackExport:{projectId:h.db.projectId,operatorVerified:true,uri:'gs://fictional-rollback/export',completedAt:new Date(at-1000).toISOString()}},apply={...options,dryRun:false,approvedHash:manifest.manifestHash};
  return {...h,options,apply,manifest};
 }
 test('migration defaults to preview and never exposes credentials',async()=>{

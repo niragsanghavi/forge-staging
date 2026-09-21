@@ -42,11 +42,12 @@ export async function runReviewedMigration({db,manifest,dryRun=true,approvedHash
  if(!dryRun){
   if(project==='forge-25c8c'&&allowProduction!==true)throw Error('Production execution requires separate explicit authorization');
   if(approvedHash!==manifest.manifestHash)throw Error('Approve this exact manifest before applying');
-  // This is an operator attestation, NOT independent cloud-backup verification.
+ }
+  // Required BEFORE dry-run reads too. This is an operator attestation,
+  // NOT independent cloud-backup verification.
   // The operator must inspect a successful managed export before supplying it.
   const age=now()-Date.parse(rollbackExport?.completedAt||'');
   if(rollbackExport?.operatorVerified!==true||rollbackExport.projectId!==project||!/^gs:\/\/[^/]+\/.+/.test(rollbackExport.uri||'')||!Number.isFinite(age)||age<0||age>86400000)throw Error('A freshly verified full rollback export is required');
- }
  const states=[];
  for(const id of new Set(manifest.writes.flatMap(owners))){if(!usable(await db.collection('users').doc(id).get()))states.push({path:'users/'+id,status:'owner-unavailable'});}
  for(const write of manifest.writes)states.push({path:write.path,status:classify(await refOf(db,write.path).get(),write)});

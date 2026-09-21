@@ -5,8 +5,18 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import crypto from 'node:crypto';
 export const fingerprint=value=>crypto.createHash('sha256').update(JSON.stringify(value,(_key,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b))):v)).digest('hex');
-export function planSecurityMigration(data){
+function migrationScope(data,review){
+ const excluded=review.excludedGroupCodes||[];
+ if(!Array.isArray(excluded)||excluded.some(code=>typeof code!=='string'))throw Error('Explicit excluded group codes required');
+ for(const code of excluded){
+  if(!data.groups.some(g=>g.id===code))throw Error('Excluded group missing from export: '+code);
+  if(data.logs.some(log=>log.groupCode===code))throw Error('Excluded group has logs (including voided): '+code);
+ }
+ return {...data,groups:data.groups.filter(g=>!excluded.includes(g.id))};
+}
+export function planSecurityMigration(data,review={}){
  if(!data||!Array.isArray(data.groups)||!Array.isArray(data.users)||!Array.isArray(data.logs))throw Error('Expected a complete Forge export with groups, users and logs.');
+ data=migrationScope(data,review);
  const users=new Map(data.users.map(u=>[u.id,u])),changes=[],blockers=[],admins=[],seasons=new Map();
  const canonical=id=>{const seen=new Set();while(users.get(id)?.mergedInto){if(seen.has(id))return null;seen.add(id);id=users.get(id).mergedInto;}return users.has(id)?id:null;};
  for(const group of data.groups){
@@ -38,12 +48,13 @@ export function planSecurityMigration(data){
 // owner decisions are keyed by document path (roster entries add #index).
 // No legacy PIN/verifier is copied into the manifest, even for rollback.
 export function buildReviewedMigration(data,review={}){
+ data=migrationScope(data,review);
  const copy=structuredClone(data),users=new Map(copy.users.map(u=>[u.id,u])),issues=[],writes=[];
  const assignments=review.assignments||{},admins=review.adminDecisions||{},used=new Set(),usedAdmins=new Set();
  const canonical=id=>{const seen=new Set();while(users.get(id)?.mergedInto){if(seen.has(id))return null;seen.add(id);id=users.get(id).mergedInto;}return users.has(id)?id:null;};
  function selected(key,fallback){
   if(!Object.hasOwn(assignments,key))return canonical(fallback);
-  used.add(key);const id=assignments[key],user=users.get(id);
+  used.add(key);const id=canonical(assignments[key]),user=users.get(id);
   if(typeof id!=='string'||!user||user.mergedInto||user.deleted||user.deletedAt||user.deletionRequestedAt){issues.push({path:key,reason:'INVALID_REVIEWED_OWNER'});return null;}return id;
  }
  for(const group of copy.groups){
@@ -76,7 +87,7 @@ export function buildReviewedMigration(data,review={}){
  for(const key of Object.keys(assignments))if(!used.has(key))issues.push({path:key,reason:'UNUSED_OWNER_DECISION'});
  for(const key of Object.keys(admins))if(!usedAdmins.has(key))issues.push({path:key,reason:'UNUSED_ADMIN_DECISION'});
  const audit=planSecurityMigration(copy),blockers=[...audit.blockers,...issues];
- return {schema:1,readOnly:true,environment:data.env||null,exportTakenAt:data.takenAt||null,readyForHumanReview:blockers.length===0,blockers,writes,manifestHash:fingerprint(writes),requiresFreshFullRollbackExport:true,requiresExplicitApprovalBeforeApply:true};
+ return {schema:1,readOnly:true,excludedGroupCodes:[...(review.excludedGroupCodes||[])],environment:data.env||null,exportTakenAt:data.takenAt||null,readyForHumanReview:blockers.length===0,blockers,writes,manifestHash:fingerprint(writes),requiresFreshFullRollbackExport:true,requiresExplicitApprovalBeforeApply:true};
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  if(process.argv.length!==3||!path.isAbsolute(process.argv[2]))throw Error('Provide one absolute path to a Forge JSON export.');

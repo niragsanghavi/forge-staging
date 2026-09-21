@@ -2,6 +2,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {planSecurityMigration,buildReviewedMigration} from '../build/plan-security-migration.mjs';
 const fixture=()=>({groups:[{id:'TEST',currentSeasonId:'2026-09',seasons:[{id:'2026-09',roster:[{name:'A',uid:'one',isAdmin:true}]}]}],users:[{id:'one'}],logs:[{id:'log',groupCode:'TEST',year:2026,month:9,player:'A'}]});
+test('reviewed tombstones follow multiple merge links to the canonical owner',()=>{
+ const d=fixture();d.users.push({id:'old',mergedInto:'middle'},{id:'middle',mergedInto:'one'});
+ const m=buildReviewedMigration(d,{assignments:{'logs/log':'old'},adminDecisions:{'groups/TEST/seasons/2026-09#0':true}});
+ assert.equal(m.readyForHumanReview,true);assert.equal(m.writes.find(w=>w.path==='logs/log').patch.userId,'one');
+});
+test('merge cycles, missing terminals and deleted terminals fail reviewed ownership',()=>{
+ for(const extra of [[{id:'old',mergedInto:'old'}],[{id:'old',mergedInto:'missing'}],[{id:'old',mergedInto:'gone'},{id:'gone',deleted:true}]]){
+  const d=fixture();d.users.push(...extra);const m=buildReviewedMigration(d,{assignments:{'logs/log':'old'},adminDecisions:{'groups/TEST/seasons/2026-09#0':true}});
+  assert.equal(m.readyForHumanReview,false);assert.ok(m.blockers.some(b=>b.reason==='INVALID_REVIEWED_OWNER'));
+ }
+});
+test('explicit empty-group exclusions preserve source and never delete or write excluded seasons',()=>{
+ const d=fixture();for(const id of ['2CYU0Q','JNIDMV','SEIMSC'])d.groups.push({id,currentSeasonId:'2026-09',seasons:[{id:'2026-09',roster:[{name:'Unclaimed'}]}]});
+ const before=structuredClone(d),review={excludedGroupCodes:['2CYU0Q','JNIDMV','SEIMSC'],adminDecisions:{'groups/TEST/seasons/2026-09#0':true}};
+ const m=buildReviewedMigration(d,review);assert.equal(m.readyForHumanReview,true);assert.equal(m.writes.length,2);assert.deepEqual(d,before);assert.equal(planSecurityMigration(d,review).counts.groups,1);
+ for(const voided of [false,true]){d.logs.push({id:'unexpected',groupCode:'SEIMSC',voided});assert.throws(()=>buildReviewedMigration(d,review),/including voided/);d.logs.pop();}
+});
 test('migration planner is read-only and resolves only explicit profile anchors',()=>{const d=fixture(),before=structuredClone(d),r=planSecurityMigration(d);assert.deepEqual(d,before);assert.equal(r.counts.blockers,0);assert.equal(r.counts.logBackfills,1);assert.equal(r.adminReview[0].requiresReview,true);});
 test('missing profile identity is not guessed by a matching display name',()=>{const d=fixture();d.groups[0].seasons[0].roster[0].uid='device';d.users[0].name='A';assert.ok(planSecurityMigration(d).blockers.some(b=>b.reason==='CURRENT_MEMBER_OWNERSHIP_UNRESOLVED'));});
 test('duplicate current identities and ambiguous logs block promotion',()=>{const d=fixture();d.groups[0].seasons[0].roster.push({name:'A',userId:'one'});const r=planSecurityMigration(d);assert.ok(r.blockers.some(b=>b.reason==='DUPLICATE_PROFILE'));assert.ok(r.blockers.some(b=>b.reason==='LOG_OWNERSHIP_UNRESOLVED'));});
