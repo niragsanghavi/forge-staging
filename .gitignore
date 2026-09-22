@@ -102,3 +102,5 @@ scripts/
 !qa/solo-dom.mjs
 !qa/solo-entry.test.mjs
 !qa/polish-feedback.test.mjs
+!qa/auth-session.test.mjs
+!qa/provider-redirect.test.mjs

@@ -76,10 +76,11 @@
   }
   async function signIn(provider){
     const ticket=epoch;
-    const result=await ForgeWelcome.authenticate(provider,text=>{if(ticket===epoch)status(text);});
+    const result=await ForgeWelcome.authenticate(provider,text=>{if(ticket===epoch)status(text);},{action:ForgeWelcome.recoveryRequested()?'recover':'solo'});
     if(!result||ticket!==epoch)return;
     if(result.uid!==actor()){status('Your sign-in changed. Please try again.',true);return;}
     await open();
+    if(window.ForgeWelcome.recoveryRequested())recoverGroup();
   }
   function enrollment(){
     const el=content();el.append(node('h1','Make room for your own pace.'));
@@ -335,7 +336,8 @@
   // Existing PIN-verified recovery is inserted below. It never creates an
   // account, bypasses proof, or detaches a provider to make a merge succeed.
   function recoverGroup(){
-    if(saving||!actor())return;
+    if(saving)return;
+    if(!actor()){window.ForgeWelcome.recover();return;}
     const token=++epoch,identity=actor(),el=shell(),form=node('form');
     el.append(node('h2','Bring your group history with you'),node('p','Use the details you used before Google or Apple sign-in. If you do not know your group code or profile name, ask someone in that group. Nothing changes until you confirm.'));
     function field(title,options){const label=node('label',title),input=node('input');Object.assign(input,options);label.append(input);form.append(label);return input;}

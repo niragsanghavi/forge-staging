@@ -302,7 +302,7 @@
     <div class="ob-step" id="ob-s4">
       <div class="ob-title">Enter your PIN</div>
       <div class="ob-sub" id="ob-s4-sub">Welcome back. Enter your 4-digit PIN to continue.</div>
-      <input class="code-input" id="pinEntry" type="tel" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off" oninput="this.value=this.value.replace(/[^0-9]/g,'')" onkeydown="if(event.key==='Enter')submitPinEntry()">
+<input class="code-input" id="pinEntry" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off" oninput="this.value=this.value.replace(/[^0-9]/g,'')" onkeydown="if(event.key==='Enter')submitPinEntry()">
       <div id="pinEntryError" class="warn-box warn-red hidden" style="margin-top:10px"></div>
       <button class="btn btn-gold" style="margin-top:10px" onclick="submitPinEntry()">Continue</button>
       <div style="margin-top:14px;font-size:11px;color:var(--muted);text-align:center">Forgot your PIN? Message your group admin to reset it.</div>
@@ -1622,13 +1622,14 @@ window.onload = () => {
   // Establish the anonymous auth session FIRST, before any Firestore read.
   // Everything downstream (loadGroup, loadSuperAdmin, verifyCode) issues
   // Firestore queries, so they must not run until we have a UID.
-  ensureAuth().then(uid => {
+  readForgeRedirectResult().then(()=>ensureAuth()).then(async uid => {
     window.currentUid = uid;   // available app-wide for Stage 2+ (PIN binding)
     // RETURN it. bootApp is async, so without this its rejection escapes as an
     // unhandled rejection and skips the .catch below — meaning the boot-failure
     // recovery screen never renders and the user is left staring at the default
     // onboarding screen, which looks identical to being logged out.
-    return bootApp();
+    if(window._forgeRedirectOutcome)await resumeForgeRedirect();
+    else {await bootApp();await resumeForgeRedirect();}
   }).catch(err => {
     // Auth itself failed — the app can't talk to Firestore at all. This is
     // exactly the signature of a wedged/corrupted local Firebase state (seen
@@ -1642,6 +1643,28 @@ window.onload = () => {
     }
   });
 };
+
+async function resumeForgeRedirect(){
+  if(window._forgeRedirectError){toast(window._forgeRedirectError,'error');return;}
+  const r=window._forgeRedirectOutcome;window._forgeRedirectOutcome=null;
+  if(!r||auth.currentUser?.uid!==r.uid||auth.currentUser.isAnonymous)return;
+  try{
+    if(r.action==='join'){
+      await callFunction('joinWithIdentity',{groupCode:r.groupCode,seasonId:r.seasonId,name:r.name});
+      await restoreIdentityFromGoogle(r);
+    }else if(r.action==='link'){
+      const saved=getSessions().find(s=>s.code===r.groupCode&&s.player?.userId===r.userId);
+      if(!saved){await restoreIdentityFromGoogle(r);toast('Choose your existing profile to finish linking. Nothing was linked automatically.','default');return;}
+      me=saved.player;groupCode=r.groupCode;setActiveCode(groupCode);await loadGroup(groupCode,true);
+      if(auth.currentUser?.uid!==r.uid||me?.userId!==r.userId)return;
+      window._claimPending={uid:r.uid,email:r.email,provider:r.provider,userId:r.userId,groupCode:r.groupCode};
+      await showTab('profile');renderGoogleAuthCard();
+    }else if(r.action==='solo'||r.action==='recover'){
+      await ForgeSolo.open();if(r.action==='recover')ForgeSolo.recoverGroup();
+    }else if(location.search.includes('superadmin'))await openVerifiedSuperAdmin();
+    else await restoreIdentityFromGoogle({...r,welcome:true});
+  }catch(e){toast('Sign-in finished, but Forge could not complete the next step. Try again; your existing history is safe.','error');}
+}
 
 async function bootApp(){
   // Before any screen shows. Swallowed silently until now, which meant a throw
@@ -1665,6 +1688,7 @@ async function bootApp(){
   // "the page is broken" — every one of them silently landed on the player's
   // own group, giving no clue that a gate had even been attempted.
   if(location.search.includes('superadmin')){
+    await openVerifiedSuperAdmin();return;
     if(superUnlockValid()){ showScreen('super'); loadSuperAdmin(); return; }
     showScreen('superpin');
     // Focus only once the screen is actually visible — a display:none input
@@ -1760,6 +1784,10 @@ async function resolveCodeAlias(input){
 }
 
 async function verifyCode(){
+  if(window.FEATURE_GOOGLE_AUTH&&(!auth.currentUser||auth.currentUser.isAnonymous)){
+    showObStep(1);renderGoogleLoginDoor();
+    toast('Continue with Google or Apple first. Then enter your group code.','default');return;
+  }
   const entered = document.getElementById('codeInput').value.trim().toUpperCase();
   const err = document.getElementById('codeError');
   const goBtn = document.getElementById('codeGoBtn');
@@ -1841,6 +1869,24 @@ async function choosePlayer(name){
   const p = (season.roster||[]).find(x=>x.name===name);
   if(!p){ return; }
   const chosenCode=groupCode, chosenSeason=seasonId;
+  if(window.FEATURE_GOOGLE_AUTH){
+    if(!auth.currentUser||auth.currentUser.isAnonymous){showObStep(1);renderGoogleLoginDoor();toast('Continue with Google or Apple first.','default');return;}
+    if(!p.userId){toast('This older profile needs help linking. Contact Forge support; do not create a replacement profile.','error');return;}
+    const uid=auth.currentUser.uid;
+    try{
+      const identity=await callFunction('refreshIdentity',{});
+      if(groupCode!==chosenCode||seasonId!==chosenSeason||window._forgePlayerSelection!==selection||auth.currentUser?.uid!==uid)return;
+      if(identity?.linked){
+        if(identity.userId!==p.userId){toast('This sign-in belongs to a different Forge profile. Sign out to use another account.','error');return;}
+        await restoreIdentityFromGoogle({uid});return;
+      }
+    }catch(e){toast('Could not check your account. Reconnect and try again.','error');return;}
+    window._pinEntryFor=p.name;
+    document.getElementById('ob-s4-sub').textContent=`${p.name}, enter your existing Forge PIN once to link this Google or Apple account. Your groups and workout history stay in place.`;
+    document.getElementById('pinEntry').value='';
+    document.getElementById('pinEntryError').classList.add('hidden');
+    showObStep(4);return;
+  }
   if(p.userId){
     try{
       const profile=await db.collection('users').doc(p.userId).get();
@@ -1885,6 +1931,26 @@ async function submitPinEntry(){
   if(!p){ err.textContent='Something went wrong. Pick your name again.'; err.classList.remove('hidden'); return; }
   const entered = document.getElementById('pinEntry').value;
   if(!/^\d{4}$/.test(entered)){ err.textContent='Enter your 4-digit PIN.'; err.classList.remove('hidden'); return; }
+
+  if(window.FEATURE_GOOGLE_AUTH){
+    if(window._forgeClaimBusy)return;
+    const uid=auth.currentUser?.uid;
+    if(!uid||auth.currentUser.isAnonymous||!p.userId){err.textContent='Continue with Google or Apple before linking this profile.';err.classList.remove('hidden');return;}
+    window._forgeClaimBusy=true;
+    try{
+      await callFunction('claimIdentity',{userId:p.userId,pin:entered});
+      if(groupCode!==entryCode||seasonId!==entrySeason||window._pinEntryFor!==name||auth.currentUser?.uid!==uid)return;
+      document.getElementById('pinEntry').value='';
+      await restoreIdentityFromGoogle({uid});
+    }catch(e){
+      if(groupCode===entryCode&&seasonId===entrySeason&&window._pinEntryFor===name&&auth.currentUser?.uid===uid){
+        document.getElementById('pinEntry').value='';
+        err.textContent=window.ForgeFeedback?ForgeFeedback.claim(e).text:'Could not link this profile. Check your existing PIN, or contact Forge support.';
+        err.classList.remove('hidden');
+      }
+    }finally{window._forgeClaimBusy=false;}
+    return;
+  }
 
   // Migrated entry (has userId): verify against users.pinHash — the source
   // of truth going forward. Fallback to roster.pin only if that doc is
@@ -1987,7 +2053,14 @@ function backToPicker(){
 // Stage 2 grace check for users resumed from a saved localStorage session.
 // If their roster record lacks a PIN, send them through the set-PIN step
 // instead of straight into the app. Returns true if it redirected.
-function gracePinCheckOnResume(){
+async function gracePinCheckOnResume(){
+  if(window.FEATURE_GOOGLE_AUTH&&auth.currentUser&&!auth.currentUser.isAnonymous){
+    const uid=auth.currentUser.uid,profile=me?.userId,code=groupCode;
+    const identity=await callFunction('refreshIdentity',{});
+    if(uid!==auth.currentUser?.uid||code!==groupCode||profile!==me?.userId)return true;
+    if(identity.linked&&identity.userId===profile&&identity.groupCodes?.includes(code))return false;
+    throw new Error('Verify your linked group profile before continuing.');
+  }
   if(!me || !season) return false;
   const fresh = (season.roster||[]).find(p=>p.name===me.name);
   // Route to grace only when NO credential exists. pinSet:true (or a legacy
@@ -2036,7 +2109,7 @@ async function registerAndJoin(){
     window._forgeRegistrationBusy=true;
     try{
       let user=auth.currentUser;
-      if(!user||user.isAnonymous){await startForgeProviderSignIn('google.com');user=auth.currentUser;}
+      if(!user||user.isAnonymous){await startForgeProviderSignIn('google.com',{action:'join',...captured});user=auth.currentUser;}
       if(!user||user.isAnonymous)throw new Error('Sign in before joining.');
       const uid=user.uid;
       if(groupCode!==captured.groupCode||seasonId!==captured.seasonId)return;
@@ -2427,7 +2500,7 @@ async function loadGroup(code, fromCache, options={}){
     checkAutoRollover(code).catch(e=>logErr('checkAutoRollover',e));
     }
 
-    if(gracePinCheckOnResume()) return;
+    if(await gracePinCheckOnResume()) return;
     if(!_isGroupLoadCurrent(context)) return;
     launchApp(options);
   } catch(e){
@@ -4910,7 +4983,7 @@ async function linkForgeProvider(provider){
   window._forgeProviderBusy=true;
   window._claimPending=null;
   try{
-    const r=await startForgeProviderSignIn(provider);
+    const r=await startForgeProviderSignIn(provider,{action:'link',userId:actorId,groupCode:code});
     if(!me||me.userId!==actorId||groupCode!==code)return;
     window._claimPending={...r,userId:actorId,groupCode:code};
     renderGoogleAuthCard();
@@ -4927,7 +5000,7 @@ async function loginWithGoogle(){ return loginWithForgeProvider('google.com'); }
 async function loginWithForgeProvider(provider){
   if(window._forgeProviderBusy)return;
   window._forgeProviderBusy=true;
-  try{const r=await startForgeProviderSignIn(provider);await restoreIdentityFromGoogle(r);}
+  try{const r=await startForgeProviderSignIn(provider);if(location.search.includes('superadmin'))await openVerifiedSuperAdmin();else await restoreIdentityFromGoogle(r);}
   catch(e){toast('Sign-in did not finish. Please try again.','error');}
   finally{window._forgeProviderBusy=false;}
 }
@@ -4983,7 +5056,7 @@ async function restoreIdentityFromGoogle(r){
     const q = await db.collection('users').where('authUid','==',r.uid).limit(1).get();
     if(!stillSignedIn())return;
     if(q.empty){
-      if(r.welcome&&window.ForgeWelcome){ForgeWelcome.unlinked();return;}
+      if(window.ForgeWelcome){ForgeWelcome.unlinked();return;}
       toast('Signed in. New here? Enter your group code to join. Already a member? Open your existing profile and link it in Profile.','default');
       return;
     }
@@ -4992,7 +5065,9 @@ async function restoreIdentityFromGoogle(r){
     const codes = Object.keys(u.memberships || {});
     if(!codes.length){
       if(u.soloEnabled&&window.ForgeSolo){await ForgeSolo.open();return;}
-      toast('That account is not in any group yet.','error'); return;
+      if(window.ForgeWelcome){ForgeWelcome.unlinked();return;}
+      showScreen('onboard');showObStep(1);
+      toast('You’re signed in. Enter a group code to join or recover your existing profile.','default'); return;
     }
     let restored = 0, firstCode = null;
     for(const code of codes.slice(0, MAX_GROUPS)){
@@ -7956,7 +8031,7 @@ async function saveRoles(){
 // It sweeps every group the person belongs to, because a name can differ per
 // group and only this group's roster is being changed — the others keep theirs.
 async function renamePlayer(oldName){
-  const raw = prompt(`Rename "${oldName}" to what?\n\nUse the EXACT spelling their workouts are logged under — the app matches logs to people by name.`, oldName);
+  const raw = await ForgeDialogs.ask({title:'Rename player',message:'Use the exact spelling of their existing workouts. You will review the impact before saving.',label:'New name',value:oldName,confirm:'Review name'});
   if(raw===null) return;
   const newName = String(raw).trim().replace(/\s+/g,' ');
   if(!newName || newName===oldName) return;
@@ -7986,7 +8061,7 @@ async function renamePlayer(oldName){
     : (oldLogs>0
         ? `\n\n⚠️ ${oldLogs} log(s) this month are under "${oldName}". Log names cannot be changed, so those will STOP counting until they log again under the new name.`
         : '');
-  if(!confirm(`Rename "${oldName}" to "${newName}" in this group?${warn}`)) return;
+  if(!await ForgeDialogs.confirm('Rename player',`Rename "${oldName}" to "${newName}" in this group?${warn}`)) return;
 
   const gRef = db.collection('groups').doc(groupCode);
   const sRef = gRef.collection('seasons').doc(seasonId);
@@ -8049,8 +8124,7 @@ async function renamePlayer(oldName){
 // It is a server secret (ADMIN_RESET_KEY) that has never been in the bundle.
 // It is read into a local, sent once, and never stored, logged or toasted.
 async function resetPlayerPin(name){
-  if(!confirm(`Reset ${name}'s PIN? They'll set a new one next time they log in.`)) return;
-  const adminKey = prompt(`Admin key to reset ${name}'s PIN.\n\nThis is the server key, not the 4-digit group PIN.`);
+  const adminKey = await ForgeDialogs.ask({title:'Reset '+name+'’s PIN',message:'They will need to set a new PIN. This requires the private server admin key, not a group PIN.',label:'Server admin key',secret:true,confirm:'Reset PIN'});
   if(adminKey === null) return;                       // cancelled, not failed
   if(!adminKey.trim()){ toast('Admin key is required.','error'); return; }
   try {
@@ -8520,7 +8594,24 @@ function showSuperPinError(msg){
 // No attempt throttling here, on purpose. This gate is client-side UI over a
 // hash that ships in a public repo, so a lockout would buy exactly no security
 // while handing the one person who needs this page a way to lock himself out.
+async function openVerifiedSuperAdmin(){
+  const actor=auth.currentUser;
+  if(actor&&!actor.isAnonymous){
+    try{
+      await actor.getIdToken(true);
+      const access=await callFunction('getAdminAccess',{});
+      if(auth.currentUser?.uid!==actor.uid)return;
+      if(access?.superadmin===true){showScreen('super');await loadSuperAdmin();return;}
+    }catch(e){logErr('openVerifiedSuperAdmin',e);}
+  }
+  showScreen('superpin');
+  const card=document.querySelector('#screen-superpin .ob-card');
+  if(card)card.innerHTML='<div class="ob-title">Sign in to Superadmin</div><p class="ob-sub">Only your approved Google or Apple account can open this dashboard. Your old Forge PIN does not grant admin access.</p><button class="btn btn-gold" onclick="loginWithForgeProvider(\'google.com\')">Continue with Google</button><button class="btn btn-surface" onclick="loginWithForgeProvider(\'apple.com\')">Continue with Apple</button><button class="btn btn-surface" onclick="exitSuper()">Back to Forge</button>';
+}
+
+
 async function submitSuperPin(){
+  await openVerifiedSuperAdmin();return;
   const el  = document.getElementById('superPinEntry');
   const val = el ? el.value : '';
   if(!val){ showSuperPinError('Enter the PIN first.'); return; }
@@ -8557,6 +8648,8 @@ function lockSuper(){
 
 // ── SUPER ADMIN ───────────────────────────────────────────────────────────
 async function loadSuperAdmin(){
+  try{const access=await callFunction('getAdminAccess',{});if(access?.superadmin!==true)throw new Error('ADMIN_REQUIRED');}
+  catch(e){showScreen('superpin');toast('Sign in with the account approved for Superadmin.','error');return;}
   // Create-group no longer asks for month/year/days — say plainly what it will
   // make, so "current month" is visible rather than assumed.
   try{
@@ -8691,7 +8784,7 @@ async function toggleSurveyAsk(code, on){
 // via the testPush callable, which is gated on the same server key as the PIN
 // reset. During the pilot the only tokens are the tester's own devices.
 async function superTestPush(){
-  const adminKey = prompt('Admin key to send a test notification to every registered device.');
+  const adminKey = await ForgeDialogs.ask({title:'Send test notifications',message:'This sends a test notification to every registered device. Only continue if you intend to notify those people now.',label:'Server admin key',secret:true,confirm:'Send test notifications'});
   if(adminKey === null) return;
   if(!adminKey.trim()){ toast('Admin key is required.','error'); return; }
   try{
@@ -9875,6 +9968,8 @@ async function manualRolloverRepair(code){
   toast(messages[result.reason] || `Nothing to do (${result.reason}).`, result.ok===false && result.reason==='TARGET_SEASON_EXISTS' ? 'error' : undefined);
 }
 function exitSuper(){
+  const url=new URL(location.href);url.searchParams.delete('superadmin');
+  history.replaceState(null,'',url.pathname+url.search+url.hash);
   // Leave super admin entirely. If a normal player session exists on this
   // device, the onboarding boot logic will pick it up on reload; otherwise
   // the user lands on the group-code entry screen.
@@ -11536,19 +11631,14 @@ async function showTab(t,options={}){
     }catch(e){ logErr('legacy log route', e); } }, 260);
     return;
   }
-  if(t==='admin'&&!adminUnlocked){
-    // S3 §4.1: a per-group admin gets straight in — no PIN needed for their
-    // own group. ADMIN_PIN stays as the master super-override for anyone
-    // else (unchanged behavior for every non-admin, including every group
-    // that predates this feature and has no isAdmin data at all yet).
-    if(me?.isAdmin){
+  if(t==='admin'){
+    const code=groupCode,sid=seasonId,uid=auth.currentUser?.uid;
+    try{
+      const access=await callFunction('getAdminAccess',{groupCode:code,seasonId:sid});
+      if(code!==groupCode||sid!==seasonId||uid!==auth.currentUser?.uid)return;
+      if(access?.groupAdmin!==true)throw new Error('ADMIN_REQUIRED');
       adminUnlocked=true;
-    } else {
-      const pin=prompt('Enter admin PIN:');
-      const hash=await sha256hex(pin||'');
-      if(hash!==ADMIN_PIN_HASH){toast('Wrong PIN','error');return;}
-      adminUnlocked=true;
-    }
+    }catch(e){adminUnlocked=false;toast('Sign in with the Google or Apple account linked to this group’s admin profile.','error');return;}
   }
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(x=>{x.classList.remove('active');x.removeAttribute('aria-current');});
@@ -13572,6 +13662,7 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
   }
 })();
 </script>
+<script src="src/ui/dialogs.js"></script>
 <script src="src/ui/sports-icons.js"></script>
 <script src="src/ui/account-feedback.js"></script>
 <script src="src/ui/account-recovery.js"></script>

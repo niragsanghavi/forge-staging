@@ -38,14 +38,14 @@
     if(code==='AUTH_STATE_CHANGED')return 'Your sign-in changed before it finished. Choose Google or Apple again; no profile was created.';
     return 'Sign-in did not finish. Your profile has not changed. Please try again.';
   }
-  async function authenticate(provider,report){
+  async function authenticate(provider,report,context={}){
     if(window._forgeProviderBusy){report('A sign-in window is already open. Finish or close it before trying again.');return null;}
     window._forgeProviderBusy=true;
     const buttons=[...document.querySelectorAll('.forge-provider-button')];buttons.forEach(b=>b.disabled=true);
     report('Opening '+(provider==='apple.com'?'Apple':'Google')+' sign-in…');
     try{
       // Keep the popup call in the original click, before any asynchronous work.
-      const result=await startForgeProviderSignIn(provider);
+      const result=await startForgeProviderSignIn(provider,context);
       if(!result?.uid||!window.auth?.currentUser||auth.currentUser.isAnonymous||auth.currentUser.uid!==result.uid)throw Error('AUTH_STATE_CHANGED');
       report('Signed in. Opening your Forge…');return result;
     }catch(error){report(signInError(error));return null;}
@@ -68,7 +68,7 @@
     if(intent==='solo'&&!allowSolo())return;
     busy=true;const chosen=intent;
     try{
-      const result=await authenticate(provider,message);if(!result)return;
+      const result=await authenticate(provider,message,{action:chosen==='recover'?'recover':chosen==='solo'?'solo':'restore'});if(!result)return;
       if(chosen==='recover'){await ForgeSolo.open();if(auth.currentUser?.uid===result.uid)ForgeSolo.recoverGroup();}
       else if(chosen==='solo')await ForgeSolo.open();
       else await restoreIdentityFromGoogle({...result,welcome:true});
@@ -81,7 +81,12 @@
     if(hasGroupSession()){message('You are already in a group. Use Profile to secure this account, or sign out first.');return;}
     intent='recover';
     if(window.auth?.currentUser&&!auth.currentUser.isAnonymous){ForgeSolo.open().then(()=>ForgeSolo.recoverGroup());return;}
-    message('First sign in with the Google or Apple account you want to use. Next, confirm your existing group profile and Forge PIN.');
+    const text='Sign in with Google or Apple first. Then confirm your existing group profile and Forge PIN.';
+    message(text);
+    if($('screen-solo')?.classList.contains('active')){
+      if($('soloStatus'))$('soloStatus').textContent=text;
+      document.querySelector('#soloRoot .forge-provider-button')?.focus();
+    }
     $('forgeWelcomeProviders')?.scrollIntoView({block:'nearest',behavior:'auto'});$('forgeWelcomeProviders')?.querySelector('button')?.focus();
   }
   function unlinked(){
@@ -93,6 +98,6 @@
     const host=$('forgeWelcomeProviders');if(host&&window.FEATURE_GOOGLE_AUTH){host.replaceChildren(providers(enter));}
     syncGroupChoices();
   }
-  window.ForgeWelcome={providers,choose,enter,recover,unlinked,mount,authenticate,allowSolo,hasGroupSession,syncGroupChoices};
+  window.ForgeWelcome={providers,choose,enter,recover,unlinked,mount,authenticate,allowSolo,hasGroupSession,syncGroupChoices,recoveryRequested:()=>intent==='recover'};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);else mount();
 })();

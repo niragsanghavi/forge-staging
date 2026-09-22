@@ -295,41 +295,31 @@ if(IS_STAGING){
   });
 }
 
-// Ensure an anonymous Firebase session exists before any Firestore call.
+// Restore the persisted provider session; use anonymous only after resolved null.
 window.ensureAuth = function(){
-  return new Promise((resolve, reject) => {
-    const existing = auth.currentUser;
-    // Did a persisted anon session survive this launch? Recorded BEFORE any
-    // signInAnonymously so the session_lost breadcrumb can tell "IndexedDB auth
-    // survived but localStorage was evicted" apart from a fresh first visit.
-    window._forgeAuthPreexisting = !!existing;
-    if(existing){ resolve(existing.uid); return; }
-    // A ceiling on the whole thing. signInAnonymously().catch covers the case
-    // where the call itself fails, but not the one where it resolves and
-    // onAuthStateChanged never fires — a wedged connection, a half-open socket,
-    // an IndexedDB that will not answer. There was no timer here, so that path
-    // hung forever: no error, no timeout, no screen. Boot simply stopped, which
-    // is exactly the "connection stuck" symptom that took a live debugging
-    // session to pin down.
-    //
-    // 15s is deliberately generous — a slow Indian mobile connection on a cold
-    // start must not trip this. Anything past 15s was never going to arrive.
-    let settled = false;
-    const done = fn => (...a) => { if(settled) return; settled = true; clearTimeout(timer); fn(...a); };
-    const timer = setTimeout(() => {
-      try{ unsubscribe(); }catch(e){}
-      done(reject)(new Error('AUTH_TIMEOUT'));
-    }, 15000);
-
-    const unsubscribe = auth.onAuthStateChanged(user => {
-      if(user){ try{ unsubscribe(); }catch(e){} done(resolve)(user.uid); }
-    });
-    auth.signInAnonymously().catch(err => {
-      try{ unsubscribe(); }catch(e){}
-      console.error('Anonymous sign-in failed:', err);
-      done(reject)(err);
-    });
+  if(window._forgeEnsureAuthPending)return window._forgeEnsureAuthPending;
+  const pending=new Promise((resolve,reject)=>{
+    let settled=false,unsubscribe=()=>{},creating=false;
+    const finish=(error,user)=>{
+      if(settled)return;settled=true;clearTimeout(timer);unsubscribe();
+      if(error)reject(error);else resolve(user.uid);
+    };
+    const timer=setTimeout(()=>finish(new Error('AUTH_TIMEOUT')),15000);
+    // currentUser may be null until IndexedDB hydration completes. Only the
+    // first resolved Auth observation can justify creating an anonymous user.
+    unsubscribe=auth.onAuthStateChanged(user=>{
+      if(settled)return;
+      if(user){window._forgeAuthPreexisting=!creating;finish(null,user);return;}
+      if(creating)return;
+      creating=true;window._forgeAuthPreexisting=false;
+      auth.signInAnonymously().then(result=>finish(null,result.user)).catch(error=>finish(error));
+    },error=>finish(error));
+    if(settled)unsubscribe(); // also supports synchronous test observers
   });
+  window._forgeEnsureAuthPending=pending;
+  const clear=()=>{if(window._forgeEnsureAuthPending===pending)window._forgeEnsureAuthPending=null;};
+  pending.then(clear,clear);
+  return pending;
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -348,15 +338,63 @@ window.googleProvider = function(){
 
 // Web provider entry. Native OAuth must use a reviewed native bridge rather
 // than launching Google's web flow inside an embedded browser.
-window.startForgeProviderSignIn = async function(provider){
+window.startForgeProviderSignIn = async function(provider,context={}){
   if(!window.FEATURE_GOOGLE_AUTH) throw new Error('FEATURE_OFF');
   if(!['google.com','apple.com'].includes(provider)) throw new Error('INVALID_PROVIDER');
   if(provider==='apple.com'&&!window.FEATURE_APPLE_AUTH) throw new Error('APPLE_NOT_CONFIGURED');
   if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()) throw new Error('NATIVE_AUTH_NOT_CONFIGURED');
   const p=provider==='google.com'?window.googleProvider():new firebase.auth.OAuthProvider('apple.com');
   if(provider==='apple.com'){p.addScope('email');p.addScope('name');}
-  const result=await auth.signInWithPopup(p);
+  const result=await window.forgePopupSignIn(p,context);
   return {uid:result.user.uid,email:result.user.email||null,provider};
+};
+
+// A blocked popup offers an explicit same-tab retry; cancellation never redirects.
+// Only navigation intent is stored. PINs, keys and OAuth credentials never are.
+window.forgePopupSignIn = async function(provider,context={}){
+  try{return await auth.signInWithPopup(provider);}
+  catch(error){
+    if(error?.code!=='auth/popup-blocked')throw error;
+    const host=document.querySelector('.screen.active')||document.body;
+    document.getElementById('forgeRedirectHelp')?.remove();
+    const box=document.createElement('section');box.id='forgeRedirectHelp';box.className='card';
+    const message=document.createElement('p');message.setAttribute('role','status');
+    message.textContent='Your browser blocked the sign-in window. Continue in this tab, or allow pop-ups for Forge and try again.';
+    const button=document.createElement('button');button.className='btn btn-gold';button.textContent='Continue sign-in in this tab';
+    box.append(message,button);host.prepend(box);
+    button.onclick=async()=>{
+      button.disabled=true;
+      try{
+        const pending={provider:provider.providerId,action:context.action||'restore',at:Date.now()};
+        for(const key of ['groupCode','seasonId','name','userId'])if(typeof context[key]==='string')pending[key]=context[key];
+        sessionStorage.setItem('forgeProviderRedirect',JSON.stringify(pending));
+        message.textContent='Opening secure sign-in. You will return to Forge afterward.';
+        await auth.signInWithRedirect(provider);
+      }catch(e){
+        try{sessionStorage.removeItem('forgeProviderRedirect');}catch{}button.disabled=false;
+        message.textContent='Same-tab sign-in could not start. Allow pop-ups for Forge in Safari or Chrome, then try the Google or Apple button again.';
+      }
+    };
+    box.scrollIntoView({block:'nearest'});throw error;
+  }
+};
+window.readForgeRedirectResult = async function(){
+  let pending;
+  try{pending=JSON.parse(sessionStorage.getItem('forgeProviderRedirect')||'null');}catch{}
+  if(!pending)return;
+  try{sessionStorage.removeItem('forgeProviderRedirect');}catch{}
+  if(!window.FEATURE_GOOGLE_AUTH||!['google.com','apple.com'].includes(pending.provider)||!Number.isFinite(pending.at)||Date.now()-pending.at>600000||Date.now()<pending.at)return;
+  let redirectTimer;
+  try{
+    const result=await Promise.race([
+      auth.getRedirectResult(),
+      new Promise((_,reject)=>{redirectTimer=setTimeout(()=>reject(Error('REDIRECT_TIMEOUT')),15000);})
+    ]);
+    if(!result?.user||result.user.isAnonymous)throw Error('REDIRECT_NOT_COMPLETED');
+    window._forgeRedirectOutcome={...pending,uid:result.user.uid,email:result.user.email||null};
+  }catch{
+    window._forgeRedirectError='Sign-in did not return a usable session. Your browser may block cross-site storage. Allow pop-ups for Forge and try again; no profile was created.';
+  }finally{clearTimeout(redirectTimer);}
 };
 
 window.confirmForgeAccountDeletion = async function(expectedUid){
