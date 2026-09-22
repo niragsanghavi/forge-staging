@@ -252,7 +252,7 @@
     if(saving||!model?.enrolled||!Number.isInteger(day)||day<1||day>model.period.throughDay)return;
     const log=model.logs.find(l=>l.day===day),p={...model.period},ticket=epoch,id=actor(),selected=new Set(log?.workouts||[]);if(initial)selected.add(initial);
     const {body,dialog:d,close}=openDialog(dateName(p,day)),form=node('form'),current=()=>alive(ticket,id)&&d.isConnected;
-    if(!p.current){body.append(node('p',(log?.workouts||[]).join(' + ')||'No workout recorded.'),node('p',log?.note||'','today-muted'),node('p','Previous months are read-only.','today-muted'));return;}
+    if(!p.current||day<Math.max(1,p.throughDay-7)){body.append(node('p',(log?.workouts||[]).join(' + ')||'No workout recorded.'),node('p',log?.note||'','today-muted'),node('p',!p.current?'Previous months are read-only.':'This day is read-only. You can log today and the previous seven days.','today-muted'));return;}
     const searchLabel=node('label','Find a workout'),search=node('input');search.type='search';search.placeholder='Search all workouts';searchLabel.append(search);form.append(searchLabel);
     const choices=node('div','','solo-workouts'),chosen=node('p','','today-muted');chosen.setAttribute('role','status');form.append(choices,chosen);
     const tags=new Set(ForgeExperience.muscleTags(log?.note)),muscles=node('fieldset','','solo-muscles');muscles.append(node('legend','Gym details · optional'));

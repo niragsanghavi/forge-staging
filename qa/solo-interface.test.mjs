@@ -1,6 +1,41 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {runtime,flush} from './solo-dom.mjs';
+import {createRequire} from 'node:module';
+const makeSolo=createRequire(import.meta.url)('../functions-identity/solo-service.js');
+test('Tuesday Solo window includes last Tuesday, excludes Monday, and preserves history',async()=>{
+ const h=runtime({logs:[{year:2026,month:9,day:14,workouts:['Yoga'],note:'Older history'}]});
+ await h.w.ForgeSolo.open();
+ h.w.ForgeSolo.edit(15);assert.ok(h.d.querySelector('dialog form'));
+ h.d.querySelector('dialog').close();
+ h.w.ForgeSolo.edit(14);assert.equal(h.d.querySelector('dialog form'),null);
+ assert.match(h.d.querySelector('dialog').textContent,/Older history/);
+ assert.match(h.d.querySelector('dialog').textContent,/read-only/);h.close();
+});
+test('Solo server enforces inclusive seven-day lookback using IST, including midnight and month seams',async()=>{
+ for(const [clock,data,allowed] of [
+  ['2026-09-22T06:00:00Z',{year:2026,month:9,day:15},true],
+  ['2026-09-22T06:00:00Z',{year:2026,month:9,day:14},false],
+  ['2026-09-22T06:00:00Z',{year:2026,month:9,day:22},true],
+  ['2026-09-22T06:00:00Z',{year:2026,month:9,day:23},false],
+  ['2026-09-21T18:29:59Z',{year:2026,month:9,day:14},true],
+  ['2026-09-21T18:30:00Z',{year:2026,month:9,day:14},false],
+  ['2026-09-30T18:30:00Z',{year:2026,month:10,day:1},true],
+  ['2026-09-30T18:30:00Z',{year:2026,month:9,day:30},false]
+ ]){
+  let transaction=false;
+  const db={collection:name=>({doc:()=>({
+   get:async()=>({exists:true,data:()=>name==='authIdentities'?{userId:'profile'}:{authUid:'actor',soloEnabled:true}}),
+   collection:()=>({doc:()=>({})})
+  })}),runTransaction:async()=>{transaction=true;return {ok:true};}};
+  class Failure extends Error{constructor(code,message){super(message);this.code=code;}}
+  const service=makeSolo({db,FieldValue:{},HttpsError:Failure,identity:{actor:()=>({uid:'actor'})},now:()=>Date.parse(clock)});
+  const action=service.save({data:{...data,workouts:['Walk']}});
+  if(allowed)assert.equal((await action).ok,true);
+  else await assert.rejects(action,e=>e.code==='invalid-argument');
+  assert.equal(transaction,allowed,clock+' '+JSON.stringify(data));
+ }
+});
 test('solo has three real destinations and Profile, not a single placeholder page',async()=>{
  const h=runtime();await h.w.ForgeSolo.open();assert.equal(h.d.querySelectorAll('[data-solo-tab]').length,3);
  for(const [tab,text] of [['history','The work you put in.'],['board','Your own lane. Good company.'],['profile','Test Athlete'],['today','Your month. Your pace.']]){

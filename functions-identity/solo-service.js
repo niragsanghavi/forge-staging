@@ -46,7 +46,7 @@ module.exports=({db,FieldValue,HttpsError,identity,now=Date.now})=>{
   async function save(request){
     const a=await owner(request),p=period(request.data),day=Number(request.data?.day),workouts=request.data?.workouts;
     if(!a.userId||!a.user.soloEnabled)fail('failed-precondition','Choose solo mode first.');
-    if(!p.current||!Number.isInteger(day)||day<1||day>p.throughDay)fail('invalid-argument','Log a day in the current month, not a future day.');
+    if(!p.current||!Number.isInteger(day)||day<Math.max(1,p.throughDay-7)||day>p.throughDay)fail('invalid-argument','Log today or one of the previous seven days in the current month.');
     if(!Array.isArray(workouts)||!workouts.length||workouts.length>12||workouts.some(w=>typeof w!=='string'||w.length>40||!w.trim()))fail('invalid-argument','Choose your workout.');
     const note=String(request.data?.note||'').trim();if(note.length>500)fail('invalid-argument','Keep the note under 500 characters.');
     const ref=db.collection('users').doc(a.userId),date=p.sid+'-'+String(day).padStart(2,'0'),logRef=ref.collection('soloLogs').doc(date),boardRef=db.collection('soloBoards').doc(p.sid).collection('entries').doc(a.userId);
