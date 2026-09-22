@@ -13,7 +13,10 @@ function harness({linked=false,userId='person',anonymous=false}={}){
   db:new Proxy({},{get(){throw Error('Credential/profile read must not occur before server proof');}}),
   callFunction:async(name,data)=>{calls.push({name,data});return {linked,userId};},
   showObStep:s=>steps.push(s),renderGoogleLoginDoor(){},toast:m=>messages.push(m),restoreIdentityFromGoogle:async r=>restores.push(r)};
- vm.createContext(ctx);vm.runInContext(choose+'\n'+submit,ctx);
+ vm.createContext(ctx);
+ vm.runInContext(fs.readFileSync(new URL('../src/ui/account-feedback.js',import.meta.url),'utf8'),ctx);
+ ctx.ForgeFeedback=ctx.window.ForgeFeedback;
+ vm.runInContext(choose+'\n'+submit,ctx);
  return {ctx,nodes,node,calls,steps,messages,restores};
 }
 test('legacy chooser never downloads password verifiers and routes to server proof',async()=>{

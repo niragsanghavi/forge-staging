@@ -1,10 +1,11 @@
 'use strict';
 const crypto=require('node:crypto');
 const {scoreSoloDays}=require('./scoring-engine');
+const {wall}=require('./season-dates');
 module.exports=({db,FieldValue,HttpsError,identity,now=Date.now})=>{
   const fail=(code,message)=>{throw new HttpsError(code,message);};
   function period(data={}){
-    const today=new Date(now()+19800000),year=Number(data.year??today.getUTCFullYear()),month=Number(data.month??today.getUTCMonth()+1);
+    const today=wall(now()),year=Number(data.year??today.getUTCFullYear()),month=Number(data.month??today.getUTCMonth()+1);
     if(!Number.isInteger(year)||year<2020||!Number.isInteger(month)||month<1||month>12||year*12+month>today.getUTCFullYear()*12+today.getUTCMonth()+1)fail('invalid-argument','Choose a current or previous month.');
     const sid=year+'-'+String(month).padStart(2,'0'),current=year===today.getUTCFullYear()&&month===today.getUTCMonth()+1;
     return {year,month,sid,current,throughDay:current?today.getUTCDate():new Date(Date.UTC(year,month,0)).getUTCDate()};
@@ -48,7 +49,7 @@ module.exports=({db,FieldValue,HttpsError,identity,now=Date.now})=>{
   async function save(request){
     const a=await owner(request),p=period(request.data),day=Number(request.data?.day),workouts=request.data?.workouts;
     if(!a.userId||!a.user.soloEnabled)fail('failed-precondition','Choose solo mode first.');
-    if(!p.current||!Number.isInteger(day)||day<1||day>p.throughDay)fail('invalid-argument','Log a day in the current month, not a future day.');
+    if(!p.current||!Number.isInteger(day)||day<Math.max(1,p.throughDay-7)||day>p.throughDay)fail('invalid-argument','Log today or one of the previous seven days in the current month.');
     if(!Array.isArray(workouts)||!workouts.length||workouts.length>12||workouts.some(w=>typeof w!=='string'||w.length>40||!w.trim()))fail('invalid-argument','Choose your workout.');
     const note=String(request.data?.note||'').trim();if(note.length>500)fail('invalid-argument','Keep the note under 500 characters.');
     const ref=db.collection('users').doc(a.userId),date=p.sid+'-'+String(day).padStart(2,'0'),logRef=ref.collection('soloLogs').doc(date),boardRef=db.collection('soloBoards').doc(p.sid).collection('entries').doc(a.userId);

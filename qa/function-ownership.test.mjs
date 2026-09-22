@@ -69,6 +69,7 @@ test('all configured codebases have disjoint actual export names',()=>{
     }
   }
   const owners=uniqueOwners([...bases].map(([name,source])=>[name,exportsFor(source)]));
+  for(const name of ['previewWorkoutRemoval','removeWorkoutsEverywhere','getPublishedAnnouncement','previewAnnouncement','publishAnnouncement','unpublishAnnouncement'])assert.equal(owners.get(name),'identity');
   for(const name of ['claimIdentity','refreshIdentity','settleSweep','saveGroupWorkout','voidGroupWorkout','saveGroupSteps','setGroupVisibility','refreshGroupStats','aggregateLogChanges','aggregateSeasonChanges','aggregateAwardChanges','aggregateBonusChanges']) assert.equal(owners.get(name),'identity');
   for(const name of ['streakAtRisk','mondayRecap','testPush','awardSeasonBadges','adminResetPin','sendNotice','noticeQueue','drainScheduledNotices']) assert.equal(owners.get(name),'default');
   for(const name of ['getAdminAccess','changeGroupAdmin','createGroupWithIdentity','checkJackAward','reconcileStatistics','lockPledge','settlePledges','rolloverGroup','rolloverSweep','getGroupFlags','flagGroupWorkout'])assert.equal(owners.get(name),'identity');

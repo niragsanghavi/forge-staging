@@ -4,6 +4,9 @@ const {wall,sidOf}=require('./season-dates');
 module.exports=function({db,FieldValue,HttpsError,groupWrites,pledges,identity,now=Date.now,logger=console}){
  const fail=(code,message)=>{throw new HttpsError(code,message);};
  async function run(code,request=null){
+  // Reject callable requests before reading group existence or season state.
+  // Internal scheduled work has no request and retains its separate path.
+  if(request)identity.actor(request,false);
   if(typeof code!=='string'||!/^[A-Z0-9]{4,10}$/.test(code))fail('invalid-argument','Invalid group.');
   return db.runTransaction(async tx=>{
    const gRef=db.collection('groups').doc(code),gSnap=await tx.get(gRef);

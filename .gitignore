@@ -146,3 +146,8 @@ android/keystore.properties
 *.mobileprovision
 /.www-build-*/
 /.www-backup-*/
+!qa/auth-session.test.mjs
+!qa/provider-redirect.test.mjs
+!qa/release-features.test.mjs
+!qa/group-import.test.mjs
+!qa/account-extras.test.mjs

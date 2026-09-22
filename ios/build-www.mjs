@@ -62,6 +62,11 @@ const PRE_SPORTS_REQUIRED_FILES = REQUIRED_FILES.filter(file => !SPORTS_RUNTIME_
 const PRE_TODAY_REQUIRED_FILES = PRE_SPORTS_REQUIRED_FILES.filter(file => !TODAY_RUNTIME_FILES.includes(file));
 
 const EXACT_RUNTIME_FILES = new Set([
+  'branding.html',
+  'assets/modes/group.webp',
+  'assets/modes/solo.webp',
+  'assets/auth/google-signin.svg',
+  'assets/auth/apple-signin.png',
   'index.html',
   'manifest.json',
   'privacy.html',
@@ -597,6 +602,18 @@ async function main() {
 
   const runtimePaths = await loadSourceManifest();
   const snapshots = await snapshotSources(runtimePaths);
+  const target=process.env.FORGE_PAYLOAD_TARGET||'staging-web';
+  if(!['staging-web','native-production'].includes(target))fail('Unknown FORGE_PAYLOAD_TARGET');
+  const flags=target==='native-production'
+    ? {environment:'production',providersEnabled:true,nativeAuth:true}
+    : {environment:'staging',providersEnabled:true,nativeAuth:false};
+  // The page target is generated for this payload, never copied from a checkout.
+  if(!snapshots.has('src/config/build-target.js'))fail('build-target must be in the runtime manifest');
+  snapshots.set('src/config/build-target.js',Buffer.from(
+    "// Generated payload target: "+target+"\n"+
+    "Object.defineProperty(globalThis,'FORGE_BUILD_TARGET',{value:Object.freeze("+
+    JSON.stringify(flags)+"),writable:false,configurable:false});\n"
+  ));
   validateResourceClosure(runtimePaths, snapshots);
 
   // Validate every byte already under www before creating or moving anything there.

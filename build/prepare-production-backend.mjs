@@ -7,6 +7,10 @@ import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 if(process.argv.length!==2)throw Error('No arguments supported; run npm run prepare:backend.');
 const files={
+  'functions-identity/group-import-service.js':'group-import-service.js',
+  'functions-identity/device-registration-service.js':'device-registration-service.js',
+  'functions-identity/workout-removal-service.js':'workout-removal-service.js',
+  'functions-identity/announcement-service.js':'announcement-service.js',
   'functions/index.js':'legacy-entry.js',
   'functions-identity/identity-entry.js':'identity-entry.js',
   'functions-identity/identity-service.js':'identity-service.js',

@@ -43,6 +43,7 @@
     const actions=node('div','today-group-actions');
     if(selected){const share=button(`Share ${selected.name||selected.code}`,()=>{closeDialog();shareInvite(selected.code);},'today-button today-button-quiet today-share-group');share.dataset.shareGroup=selected.code;actions.append(share);}
     actions.append(button('Join another group',()=>{closeDialog();joinAnotherGroup();},'today-button today-button-secondary'));
+    if(selected&&window.FEATURE_GOOGLE_AUTH)actions.append(button('Bring this month’s workouts',()=>{closeDialog();window.ForgeAccountExtras?.copyMonth(selected.code);},'today-button today-button-quiet'));
     body.append(list,actions);
     openDialog('Your groups',body);
   }
@@ -466,16 +467,8 @@
     body.innerHTML='<img src="assets/forgeling.webp?v=f026-1" alt="Happy Forgeling"><h2>One workout. Less paperwork.</h2><ol><li>Pick the day you actually moved.</li><li>Choose your activities. For Gym, add optional muscle tags—the body fills in as you choose.</li><li>Review the destination groups, then save once.</li><li>Wait for the confirmed receipt. Pending means still sending; it is not a second workout.</li></ol><p>Health suggestions follow the same review-and-confirm rule. A connection alone does not prove a workout was logged.</p><button type="button" class="today-button" data-log-guide-close>Got it · back to logging</button>';
     ForgeToday.openDialog('Forgeling’s logging guide',body);body.querySelector('[data-log-guide-close]').onclick=()=>ForgeToday.closeDialog();
   }
-  function announcementPreview(title,message,action='none'){
-    const body=document.createElement('div');body.className='today-dialog-body forge-companion';
-    body.innerHTML=`<img src="assets/forgeling.webp?v=f026-1" alt="Happy Forgeling"><p class="today-kicker">LOCAL PREVIEW · NOT SENT</p><h2>${esc(String(title||'A small Forge update').trim().slice(0,60))}</h2><p class="forge-announcement-copy">${esc(String(message||'See what’s new this week.').trim().slice(0,500))}</p><button type="button" class="today-button" data-announcement-action>${action==='guide'?'Show me around':action==='log'?'Help me log':'Got it'}</button><p class="today-muted">Publishing is disabled until a server-authorized announcement channel is ready. This preview reaches only this screen.</p>`;
-    ForgeToday.openDialog('A note from Forge',body);body.querySelector('[data-announcement-action]').onclick=()=>{ForgeToday.closeDialog();if(action==='guide')window.startTour?.(true);else if(action==='log')loggingHelp();};
-  }
-  function announcementComposer(){
-    const body=document.createElement('div');body.className='today-dialog-body';
-    body.innerHTML='<p class="today-kicker">IN-APP ANNOUNCEMENTS · LOCAL DRAFT</p><label for="forgeDraftTitle">Title</label><input id="forgeDraftTitle" maxlength="60" value="A little more Forge"><label for="forgeDraftBody">Message</label><textarea id="forgeDraftBody" maxlength="500" rows="4">Your calendar, gym diary and points report have a new home. Forgeling can show you around.</textarea><label for="forgeDraftAction">Forgeling action</label><select id="forgeDraftAction"><option value="guide">App tour</option><option value="log">Logging help</option><option value="none">Dismiss only</option></select><button class="today-button" data-announcement-preview>Preview popup</button><p class="forge-history-warning">Not saved or sent. Publishing requires server authorization, audience rules, expiry and per-person dismissal. A founder PIN alone must not grant publishing rights.</p>';
-    ForgeToday.openDialog('Draft an in-app update',body);body.querySelector('[data-announcement-preview]').onclick=()=>announcementPreview(body.querySelector('#forgeDraftTitle').value,body.querySelector('#forgeDraftBody').value,body.querySelector('#forgeDraftAction').value);
-  }
+  function announcementPreview(){ return announcementComposer(); }
+  function announcementComposer(){ return window.ForgeAnnouncements?.composer(); }
   function healthName(){
     const c=window.Capacitor,platform=c&&(typeof c.getPlatform==='function'?c.getPlatform():c.platform);
     return platform==='android'?'Health Connect':platform==='ios'?'Apple Health':'Apple Health / Health Connect';
@@ -494,6 +487,7 @@
       ['Where is my gym breakdown?','Gym','Open Gym & strength journal below the calendar. Optional muscle-group notes are recorded when you log. Forge cannot reconstruct sets, reps or unrecorded body parts. Notes on shared workouts are visible to your groups.'],
       ['How do points and ranks work?','Trophy','The group board uses your season’s scoring rules. Tap a person for the points breakdown. Teams and People are different views. A log only gets a rank animation when a confirmed save actually changes your rank.'],
       ['One workout, several groups?','Team sport','Forge checks each linked group when you save. Groups in another season or that cannot be reached are identified in the receipt. Group-specific bonuses mean the same workout can lead to different point totals.'],
+      ['How do I add another group?','Team sport','On Today, tap Change beside your group name, then Join another group. Enter the group code and use the same linked Google or Apple account. After joining, review and copy your saved group workouts from this month. Existing copies are skipped. Previous months, Solo workouts and other people’s records stay unchanged. You can reopen the review from Change → Bring this month’s workouts.'],
       ['Connect your phone health app','Walk',`${healthName()} is optional in the phone app. Forge suggests recorded workouts for you to confirm. Confirmed logs are shared to your groups; enabled step challenges also upload daily step totals. Browser staging cannot read phone health data.`],
       ['Notifications, on your terms','Other','Open Settings & devices in Profile to choose reminders. You can say “not now” and return later. The tour never grants a permission or turns notifications on for you.'],
       ['Who can see me on All Forge?','Team sport','The People board uses explicit visibility consent. Your best group score is used rather than adding all your memberships. Group averages are labelled; different group rules mean this is not a universal fitness ranking.'],
@@ -540,6 +534,11 @@
   function shell(){
     const el=root();el.replaceChildren();
     const head=node('header','','solo-heading');head.append(node('h1','Forge · Solo'),button('Group mode',()=>{if(saving)return;epoch++;showScreen('onboard');showObStep(1);}));el.append(head);
+    if(uid()&&window.FEATURE_GOOGLE_AUTH){
+      const recovery=node('section','','today-card');
+      recovery.append(node('h2','Already worked out with a group?'),node('p','Recover your existing group profile using its group code, your name and Forge PIN. You do not need to delete solo or disconnect Google or Apple.'),button('Recover my group profile',recoverGroup));
+      el.append(recovery);
+    }
     const status=node('p','','solo-status');status.id='soloStatus';status.setAttribute('role','status');el.append(status);
     return el;
   }
@@ -562,6 +561,57 @@
     try{await startForgeProviderSignIn(provider);if(token===epoch)await open();}
     catch(e){if(token===epoch)message('Sign-in did not finish. You can try again.');}
     finally{window._forgeProviderBusy=false;}
+  }
+  function recoverGroup(){
+    if(saving||!uid())return;
+    const token=++epoch,actor=uid(),el=shell(),form=node('form');
+    el.append(node('h2','Bring your group history with you'),node('p','Use the details you used before Google or Apple sign-in. If you do not know your group code or profile name, ask someone in that group. Nothing changes until you confirm.'));
+    function field(title,options){const label=node('label',title),input=node('input');Object.assign(input,options);label.append(input);form.append(label);return input;}
+    const code=field('Group code',{required:true,maxLength:10,autocomplete:'off'});
+    const name=field('Your name in that group',{required:true,maxLength:24,autocomplete:'off'});
+    const pin=field('Your existing Forge PIN',{required:true,type:'password',inputMode:'numeric',maxLength:4,autocomplete:'off',pattern:'[0-9]{4}'});
+    const review=button('Review recovery',()=>{});review.type='submit';form.append(review);
+    const back=button('Back to my solo calendar',()=>{if(saving)return;pin.value='';open(scope);});form.append(back);el.append(form);
+    form.onsubmit=e=>{
+      e.preventDefault();if(saving||!alive(token,actor))return;
+      const group=code.value.trim().toUpperCase(),person=name.value.trim();
+      if(!/^[A-Z0-9]{4,10}$/.test(group)||!person||!/^\d{4}$/.test(pin.value)){message('Enter your group code, profile name and four-digit Forge PIN.');return;}
+      review.disabled=true;code.disabled=true;name.disabled=true;pin.disabled=true;
+      const confirm=node('section','','today-card');
+      confirm.append(node('h3','Recover '+person+' in '+group+'?'),node('p','After checking your PIN, Forge will bring this group profile and its recorded history into your current signed-in account. Your solo calendar stays. This can include other groups linked to that profile. A profile already linked to another sign-in cannot be recovered this way.'));
+      const change=button('Change details',()=>{if(saving)return;confirm.remove();review.disabled=false;code.disabled=false;name.disabled=false;pin.disabled=false;code.focus();});
+      const submit=button('Verify sign-in and recover profile',async()=>{
+        if(saving||window._forgeProviderBusy||!alive(token,actor))return;
+        saving=true;window._forgeProviderBusy=true;submit.disabled=true;change.disabled=true;back.disabled=true;message('Confirm your sign-in to continue…');
+        let linked=false;
+        try{
+          const provider=auth.currentUser.providerData?.some(p=>p.providerId==='apple.com')?'apple.com':'google.com';
+          const signed=await startForgeProviderSignIn(provider);
+          if(!alive(token,actor)||signed.uid!==actor){pin.value='';return;}
+          message('Checking your group profile…');
+          const result=await callFunction('linkLegacyGroup',{groupCode:group,name:person,pin:pin.value});
+          linked=result?.ok===true;
+          if(!linked)throw Error('Recovery was not confirmed.');
+          pin.value='';if(!alive(token,actor))return;
+          message('Profile linked. Opening your group…');
+          await restoreIdentityFromGoogle({uid:actor,preferredCode:group});
+          if(alive(token,actor))message('Your profile is linked. Use Group mode to open your group, or retry sign-in. Do not repeat recovery.');
+        }catch(error){
+          if(alive(token,actor)){
+            pin.value='';
+            message(linked?'Your profile is linked, but the group could not open. Use Group mode to continue.':String(error.code||'').endsWith('resource-exhausted')?'Too many PIN attempts. Wait an hour before trying again.':'Recovery did not finish. Check your group details and PIN. If this profile already has a linked sign-in, use that account.');
+            if(!linked){confirm.remove();review.disabled=false;code.disabled=false;name.disabled=false;pin.disabled=false;pin.focus();}
+          }
+        }finally{
+          pin.value='';
+          saving=false;window._forgeProviderBusy=false;
+          if(back.isConnected)back.disabled=false;
+          if(!alive(token,actor)&&uid()!==actor)await open(scope);
+        }
+      });
+      confirm.append(change,submit);el.append(confirm);submit.focus();
+    };
+    code.focus();
   }
   function enrollment(el,token,actor){
     el.append(node('h2','Make a little room for yourself.'),node('p','4 base points for a workout day, plus a consecutive-day bonus of 1, 2, then 3. A missed day resets the bonus; a new month starts a new score.'));
