@@ -442,11 +442,39 @@ window.confirmForgeAccountDeletion = async function(expectedUid){
    so callers surface a real error instead of a silent no-op. Returns the
    function's `data` payload directly.
    ═══════════════════════════════════════════════════════════════════════════ */
+//
+// Callables never fetch an FCM token. The Functions SDK (9.23.0) waits for any
+// messaging instance on this app and, once notification permission is granted,
+// calls its getToken() with no options before EVERY callable. It returns that
+// promise without awaiting it inside its try/catch, so a token failure rejects
+// the call before any request is sent. With no options, getToken registers the
+// default worker at the DOMAIN root — a 404 on niragsanghavi.github.io/
+// forge-staging/ — so every save failed for anyone who had turned notifications
+// on. Keeping messaging on another app does not help: the SDK attaches its own
+// default-app instance as soon as the messaging script registers. The token only
+// fills the Firebase-Instance-ID-Token header, which no Forge function reads.
+let _forgeFunctions = null;
+function _functionsService(){
+  if(_forgeFunctions) return _forgeFunctions;
+  const service = firebase.app().functions('asia-south1');
+  const context = service._delegate && service._delegate.contextProvider;
+  if(context && typeof context.getMessagingToken === 'function'){
+    context.getMessagingToken = async () => undefined;
+  }else{
+    // SDK internals moved: every save becomes exposed to messaging failures again.
+    console.error('[Forge] callable messaging guard inactive: Functions context not found');
+    try{ window.ForgeErr && window.ForgeErr.report('error', 'callable messaging guard inactive', { context:'callFunction' }); }catch(e){}
+  }
+  return (_forgeFunctions = service);
+}
+// Guard the shared asia-south1 instance at load, so direct httpsCallable users
+// (the recap percentile) are covered whatever order calls happen in.
+if(typeof firebase !== 'undefined' && firebase.functions) _functionsService();
 window.callFunction = function(name, data){
   if(typeof firebase === 'undefined' || !firebase.functions){
     return Promise.reject(new Error('FUNCTIONS_SDK_MISSING'));
   }
-  return firebase.app().functions('asia-south1').httpsCallable(name)(data || {}).then(r => r.data);
+  return _functionsService().httpsCallable(name)(data || {}).then(r => r.data);
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════

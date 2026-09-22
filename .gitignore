@@ -157,3 +157,4 @@ android/keystore.properties
 !qa/release-ui.test.mjs
 !qa/group-import.test.mjs
 !qa/account-extras.test.mjs
+!qa/callable-messaging-guard.test.mjs
