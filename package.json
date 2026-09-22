@@ -2,7 +2,9 @@
   "name": "forge-staging",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "node qa/check.mjs && node --test qa/*.test.mjs",
     "test:live": "node qa/check.mjs --live",
@@ -21,5 +23,8 @@
     "@capacitor/local-notifications": "8.2.1",
     "@capacitor/share": "8.0.1",
     "@capgo/capacitor-health": "8.10.2"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0"
   }
 }

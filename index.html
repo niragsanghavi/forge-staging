@@ -36,6 +36,7 @@
 <link rel="stylesheet" href="src/style/main.css">
 <link rel="stylesheet" href="src/style/sports-icons.css">
 <link rel="stylesheet" href="src/style/today.css?v=f026-1">
+<link rel="stylesheet" href="src/style/solo.css?v=unified-20260923">
 <meta name="theme-color" content="#0a0a0d">
 <link rel="manifest" href="manifest.json">
 <meta name="mobile-web-app-capable" content="yes">
@@ -59,7 +60,6 @@
   document.querySelector('meta[name="apple-mobile-web-app-title"]').setAttribute('content','Forge STG');
 })();
 </script>
-<link rel="stylesheet" href="src/style/solo.css">
 </head>
 <body>
 <!-- ══ ICON LIBRARY ══ Document-level so every surface can <use> it.
@@ -196,10 +196,10 @@
 </defs></svg>
 
 <!-- ══ ONBOARDING ══ -->
-<div class="screen" id="screen-solo"><main id="soloRoot" class="solo-shell" aria-live="polite"></main></div>
+<div class="screen" id="screen-solo"><main id="soloRoot" class="solo-shell"></main></div>
 <div class="screen active" id="screen-onboard">
   <div class="ob-logo">FORGE</div>
-  <div class="ob-tag">Forged by the group.</div>
+  <div class="ob-tag">Build a habit. Keep your people.</div>
   <div class="ob-card">
     <div class="ob-step active" id="ob-s1">
       <section class="forge-welcome" aria-label="Choose how to use Forge">
@@ -667,6 +667,7 @@
     <div class="page-title" style="padding-bottom:4px">Profile</div>
     <div class="tmuted" style="margin-bottom:16px;font-size:12px">Your stats across every group</div>
     <button type="button" class="today-link" onclick="promptSwitch()">Switch person or leave this group</button>
+    <button type="button" class="today-link" onclick="signOutForgeDevice()">Sign out of Forge</button>
 
     <!-- ── ZONE 1: YOU. The reason anyone opens this tab. Always expanded. ── -->
     <div class="card" id="profileStatsCard"><div class="tmuted">Loading&hellip;</div></div>
@@ -682,7 +683,6 @@
       <div id="forgePersonalRecap"><p class="today-muted">Choose a recap. See your training days, activity mix and earlier periods across your linked groups.</p></div>
     </section>
     <div class="shdr">Your Workouts</div>
-    <button type="button" class="today-button today-button-secondary" onclick="ForgeExperience.openSolo()">Explore solo · your own lane →</button>
     <div class="card" id="profileInsightsCard"><div class="tmuted">Loading&hellip;</div></div>
     <div class="shdr">Past Seasons</div>
     <div class="card" id="profileSeasonsCard"><div class="tmuted">Loading&hellip;</div></div>
@@ -697,6 +697,7 @@
       <div class="pfold-body">
 
         <!-- PUSH NOTIFICATIONS. Renders nothing unless FEATURE_PUSH is on. -->
+        <section id="forgeDeviceSettings" aria-label="Notifications and health connections">
         <div id="pushShdr" class="shdr" style="display:none">Notifications</div>
         <div class="card" id="pushCard" style="display:none"></div>
 
@@ -713,6 +714,7 @@
         <div id="recapNotifShdr" class="shdr" style="display:none">Weekly recap</div>
         <div class="card" id="recapNotifCard" style="display:none"></div>
 
+        </section>
         <div class="shdr">Groups</div>
         <div class="card">
           <!-- Populated by renderProfile. The commonest reason this form appears
@@ -1743,6 +1745,7 @@ async function bootApp(){
 function showScreen(name){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(`screen-${name}`).classList.add('active');
+  if(name==='onboard')window.ForgeWelcome?.syncGroupChoices();
 }
 
 // ── ONBOARDING ────────────────────────────────────────────────────────────
@@ -1817,6 +1820,7 @@ async function verifyCode(){
     const snap = await Promise.race([db.collection('groups').doc(code).get(), timeout]);
     if(_to(snap)){ showCodeTimeout(err); return; }
     if(!snap.exists){ err.textContent='Group not found. Check your code.'; err.classList.remove('hidden'); return; }
+    if(snap.data().archived===true){err.textContent='This group is archived. Its history is preserved; ask Forge support about restoring it.';err.classList.remove('hidden');return;}
     groupData = snap.data();
     groupCode = code;
 
@@ -2317,6 +2321,26 @@ async function skipPinForNow(){
   }
 }
 
+// Sign out from both layers: clearing only group sessions left Google/Apple
+// signed in and could silently reopen the previous person's account.
+async function signOutForgeDevice(){
+  if(window._forgeSignOutBusy)return;
+  if(['checking','pending'].includes(window._forgeLogReceipt?.state)){toast('Wait for your workout save to finish before signing out.','default');return;}
+  if(window._forgeProviderBusy){toast('Finish or close the sign-in window first.','default');return;}
+  window._forgeSignOutBusy=true;
+  try{
+    await auth.signOut();
+    _invalidateGroupContext();
+    window.ForgeSolo?.close();
+    unsub.forEach(fn=>{try{fn();}catch(e){}});unsub=[];
+    groupCode=null;groupData=null;season=null;seasonId=null;me=null;
+    window._claimPending=null;window._joinMode=false;window.currentUid=null;
+    for(const key of ['forge_sessions','forge_active','forge_session'])localStorage.removeItem(key);
+    location.reload();
+  }catch(e){toast('Sign-out did not finish. Please try again before choosing another account.','error');}
+  finally{window._forgeSignOutBusy=false;}
+}
+
 function promptSwitch(){
   const sessions = getSessions();
   if(sessions.length > 1){
@@ -2333,12 +2357,7 @@ function promptSwitch(){
     loadGroup(groupCode, true);
   } else {
     if(!confirm('Log out on this device? You can sign back in with your group code.')) return;
-    _invalidateGroupContext();
-    unsub.forEach(fn=>fn()); unsub = [];
-    groupData = null; season = null; seasonId = null;
-    localStorage.removeItem('forge_sessions');
-    localStorage.removeItem('forge_active');
-    location.reload();
+    return signOutForgeDevice();
   }
 }
 
@@ -2365,6 +2384,13 @@ function _isGroupSubscriptionCurrent(context){
     context.subscription===_groupSubscriptionGeneration && seasonId===context.seasonId;
 }
 
+function showArchivedGroup(code){
+  _invalidateGroupContext();
+  for(const stop of unsub){try{stop();}catch(e){}}
+  unsub=[];
+  showScreen('onboard');showObStep(1);
+  toast('This group has been archived. Your history is preserved. Contact Forge support to restore it.','error');
+}
 async function loadGroup(code, fromCache, options={}){
   const context=options.manual?Object.freeze({generation:_groupLoadGeneration,code}):_newGroupLoadContext(code);
   const playerAtStart=me;
@@ -2412,6 +2438,7 @@ async function loadGroup(code, fromCache, options={}){
       handleDeadGroup(code, 'That group no longer exists.'); return;
     }
     const loadedGroup = gSnap.data();
+    if(loadedGroup.archived===true){showArchivedGroup(code);return;}
 
     const sid = loadedGroup.currentSeasonId;
     if(!sid){ handleDeadGroup(code, 'That group has no active season.'); return; }
@@ -2738,6 +2765,7 @@ function subscribe(){
       handleDeadGroup(context.code,'That group no longer exists.');
       return;
     }
+    if(s.data().archived===true){seasonSwitchHandled=true;showArchivedGroup(context.code);return;}
     const sid=s.data().currentSeasonId;
     if(sid && sid!==context.seasonId){
       seasonSwitchHandled=true;
@@ -4811,26 +4839,31 @@ function renderPushCard(){
       + 'We only interrupt you when it is worth it.</div>'
       + '<button class="btn btn-surface" style="margin:10px 0 0" onclick="disablePushHere()">Turn off on this device</button>'
     : '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
-      + 'Forge can only reach you when you remember to open it — which is the wrong way round. '
-      + 'Turn this on and Forge can tell you when it matters: '
-      + '<b>your team\'s streak is about to break tonight</b>, <b>last week\'s recap is ready</b> — '
-      + 'that kind of thing.</div>'
+      + 'Allow this device to receive Forge updates when they are available. Permission is your choice; registration must finish before notifications are on. Scheduled reminders are not active in every build.</div>'
       + '<button class="btn btn-gold" id="pushBtn" style="margin:0" onclick="turnOnPush()">Turn on notifications</button>'
-      + '<div id="pushResult" style="margin-top:10px;font-size:13px"></div>';
+      + '<div id="pushResult" role="status" aria-live="polite" style="margin-top:10px;font-size:13px"></div>';
+  if(window._forgePushFeedback?.userId===me.userId){
+    const result=document.getElementById('pushResult');if(result)result.textContent=window._forgePushFeedback.text;
+  }
+  const button=document.getElementById('pushBtn');if(button&&window._forgePushBusy){button.disabled=true;button.textContent='Setting up…';}
+  if(typeof _tour!=='undefined'&&_tour?.target?.id==='forgeDeviceSettings')_tourAlign();
 }
 
 async function turnOnPush(){
-  const out=document.getElementById('pushResult');
-  const say=(m,bad)=>{ if(out){ out.style.color=bad?'var(--red)':'var(--muted)'; out.textContent=m; } };
-  const btn=document.getElementById('pushBtn');
-  if(btn){ btn.disabled=true; btn.textContent='Asking…'; }
+  if(window._forgePushBusy||!me?.userId)return;
+  const context={userId:me.userId,authUid:auth.currentUser?.uid};
+  const current=()=>me?.userId===context.userId&&auth.currentUser?.uid===context.authUid;
+  const say=(text)=>{if(current()){window._forgePushFeedback={userId:context.userId,text};renderPushCard();}};
+  window._forgePushBusy=true;say('Waiting for your notification permission…');
   try{
-    const token=await enablePush();
-    if(!token){ say('You said no — that is fine. You can turn this on any time.');
-                if(btn){ btn.disabled=false; btn.textContent='Turn on notifications'; }
-                renderPushCard(); return; }
-    await savePushToken(token);
+    const token=await enablePush(say);
+    if(!current())throw new Error('PUSH_CONTEXT_CHANGED');
+    if(!token){say('Permission was not granted. Notifications are off; you can change this in your device or browser settings.');return;}
+    say('Device registered. Saving your notification preference…');
+    await forgePushDeadline(savePushToken(token,context));
+    if(!current())throw new Error('PUSH_CONTEXT_CHANGED');
     window._myPushToken=token;
+    window._forgePushFeedback=null;
     try{ localStorage.setItem('forgePushEnabled','1'); }catch(e){}
     // Adoption stamp — the only server-visible signal that this PERSON (not
     // just a token) said yes; the superadmin count reads it. Merge write,
@@ -4846,18 +4879,15 @@ async function turnOnPush(){
     toast('Notifications on.','success');
     renderPushCard();
   }catch(e){
-    if(e && e.message==='FEATURE_OFF'){ say('Notifications are not switched on yet.',true); }
-    else if(e && e.message==='UNSUPPORTED'){ say('This browser cannot do notifications. Try the installed app.',true); }
-    else { logErr('turnOnPush', e); say('Could not turn notifications on. Check your connection and try again.',true); }
-    if(btn){ btn.disabled=false; btn.textContent='Turn on notifications'; }
-  }
+    say(ForgeFeedback.notification(e));
+  }finally{window._forgePushBusy=false;if(current())renderPushCard();}
 }
 
-async function savePushToken(token){
-  if(!me || !me.userId || !token) return;
+async function savePushToken(token,context={userId:me?.userId,authUid:auth.currentUser?.uid}){
+  if(!context.userId||!token||me?.userId!==context.userId||auth.currentUser?.uid!==context.authUid)throw new Error('PUSH_CONTEXT_CHANGED');
   // Dotted path so two devices adding tokens at once cannot clobber each other,
   // which a whole-map write would.
-  await db.collection('users').doc(me.userId).set({
+  await db.collection('users').doc(context.userId).set({
     pushTokens: { [token]: { addedAt: firebase.firestore.FieldValue.serverTimestamp(),
                              // The sender needs this: web tokens get DATA-ONLY
                              // messages (our SW displays them), native tokens
@@ -4881,6 +4911,8 @@ async function disablePushHere(){
     try{ if(firebase.messaging) await firebase.messaging().deleteToken(); }
   catch(e){ logErr('disablePushHere:deleteToken', e); }   // token survives; user still sees push off
     window._myPushToken=null;
+    window._forgePushFeedback=null;
+    try{localStorage.removeItem('forgePushEnabled');}catch(e){}
     toast('Notifications off for this device.','success');
     renderPushCard();
   }catch(e){ logErr('disablePushHere', e); toast('Could not turn them off — try again.','error'); }
@@ -4893,8 +4925,9 @@ async function refreshPushTokenQuietly(){
     if(!window.FEATURE_PUSH || !window.pushSupported()) return;
     if(window.pushPermission()!=='granted') return;
     if(!me || !me.userId) return;
+    const context={userId:me.userId,authUid:auth.currentUser?.uid};
     const token=await enablePush();          // already granted, so this won't prompt
-    if(token){ window._myPushToken=token; await savePushToken(token); }
+    if(token){await forgePushDeadline(savePushToken(token,context));if(me?.userId===context.userId&&auth.currentUser?.uid===context.authUid)window._myPushToken=token;}
     startForegroundPush(function(d){
       // In-app arrival becomes a toast, never a system notification over the app.
       if(d && d.body) toast(d.body);
@@ -4974,7 +5007,7 @@ async function linkForgeProvider(provider){
     window._claimPending={...r,userId:actorId,groupCode:code};
     renderGoogleAuthCard();
   }catch(e){
-    if(me&&me.userId===actorId)toast(e.message==='APPLE_NOT_CONFIGURED'?'Apple sign-in is not available yet.':e.message==='NATIVE_AUTH_NOT_CONFIGURED'?'Sign-in is not ready in this test build.':'Sign-in did not finish. Your Forge profile has not been linked.','error');
+    if(me&&me.userId===actorId)toast(ForgeFeedback.claim(e).text,'error');
   }finally{window._forgeProviderBusy=false;}
 }
 
@@ -7508,8 +7541,7 @@ function renderPromptDock(){
       '<div class="card" style="margin-bottom:14px;padding:16px">'
       +'<div class="forge-reminder-title"><img src="assets/forgeling.webp?v=f026-1" alt="Forgeling">A nudge, if you want one.</div>'
       +'<div style="font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.6">'
-      +'One nudge if your team\'s streak is about to break tonight, one when the week\'s recap lands. '
-      +'We will never tell you to go exercise.</div>'
+      +'Allow this device to receive Forge updates when available. Scheduled reminders are not active in every build. You can turn notifications off in Profile.</div>'
       +'<button class="btn btn-gold" style="margin:12px 0 0;width:100%" onclick="promptEnablePush()">Turn on notifications</button>'
       +'<div style="margin-top:8px;text-align:center"><span onclick="snoozePrompt(\'Push\')" '
       +'style="font-size:12px;color:var(--muted);cursor:pointer">Later</span></div></div>';
@@ -8667,6 +8699,8 @@ async function openVerifiedSuperAdmin(){
 // No attempt throttling here, on purpose. This gate is client-side UI over a
 // hash that ships in a public repo, so a lockout would buy exactly no security
 // while handing the one person who needs this page a way to lock himself out.
+
+
 async function submitSuperPin(){
   if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH){await openVerifiedSuperAdmin();return;}
   const el  = document.getElementById('superPinEntry');
@@ -8707,7 +8741,7 @@ function lockSuper(){
 async function loadSuperAdmin(){
   if(typeof FEATURE_GOOGLE_AUTH!=='undefined'&&FEATURE_GOOGLE_AUTH){
     try{const access=await callFunction('getAdminAccess',{});if(access?.superadmin!==true)throw new Error('ADMIN_REQUIRED');}
-    catch(e){showScreen('code');toast('Sign in with the account approved for Superadmin.','error');return;}
+    catch(e){showScreen('superpin');toast('Sign in with the account approved for Superadmin.','error');return;}
   }
   // Create-group no longer asks for month/year/days — say plainly what it will
   // make, so "current month" is visible rather than assumed.
@@ -8739,6 +8773,7 @@ async function loadSuperAdmin(){
     return;
   }
   const allGroups=snap.docs.map(d=>({code:d.id,...d.data()}));
+  globalDataCache=null;globalDataCacheTime=0;
   const groups=allGroups.filter(g=>g.archived!==true);
   // Stashed for the notification composer's team picker, which reads one
   // season doc on demand rather than making this page load every roster.
@@ -10930,7 +10965,7 @@ async function loadGlobal(){
   actEl.innerHTML=skRows(3); grpEl.innerHTML=skRows(4); ptsEl.innerHTML=skRows(5);
   try{
     const gSnap=await db.collection('groups').get();                       // G reads
-    const groups=gSnap.docs.map(d=>({code:d.id,...d.data()}));
+    const groups=gSnap.docs.map(d=>({code:d.id,...d.data()})).filter(g=>g.archived!==true);
     let todayByGroup={},todayUnavailable=false;
     try{
       const dSnap=await db.collection('analytics').doc('global').collection('daily').doc(ymdToday()).get();  // 1 read
@@ -11672,7 +11707,7 @@ function startTour(force){
     {t:'#lbViewControls',fallback:'#lbPeoplePanel',page:'lb',title:'Your group. Two perspectives.',txt:'Compare teams or people where both views are available. Tap a person to understand their points. Your group’s season rules decide the score.'},
     {t:'#feedList',page:'feed',title:'The group is showing up.',txt:'This is your group’s workout history. Read what people did and when. No likes to collect; the effort is the point.'},
     {t:'#globalViews',page:'global',title:'A wider view of Forge.',txt:'Groups, opted-in people and today’s activity have different measures. Read the metric before comparing. This is not a ranking of fitness.'},
-    {t:'.pfold',page:'profile',settings:true,title:'Make Forge work for you.',txt:'Notifications are your choice. In the phone app, connect Apple Health on iOS or Health Connect on Android. Nothing is enabled by taking this tour.'},
+    {t:'#forgeDeviceSettings',fallback:'.pfold-body',page:'profile',settings:true,title:'Make Forge work for you.',txt:'Notifications are your choice. Approving permission is the first step; wait for “Notifications on” to confirm this device is registered. In the phone app, connect Apple Health on iOS or Health Connect on Android.'},
     ...(window.FEATURE_GOOGLE_AUTH?[{t:'#googleAuthCard',fallback:'#forgeFAQ',page:'profile',title:'Keep your effort with you.',txt:'Link Google'+(window.FEATURE_APPLE_AUTH?' or Apple':'')+' in Profile to help protect your workout history and recover it on another phone. Confirm your existing Forge PIN once. Your groups and history stay in place. Taking this tour does not link anything.'}]:[]),
     {t:'#forgeSupportCard',page:'profile',title:'There’s a human here, too.',txt:'Tap Message Nirag to text him privately. Your group will not see it. Follow the status from Sent to Acknowledged, Working and Resolved, and reply if you still need help.'},
     {t:'#forgeFAQ',page:'profile',title:'I’m leaving the answers here.',txt:'This field guide lives in Profile. Come back for points, gym logs, previous months or Health. Still stuck? Talk to Forge is right here too. Your turn.'}
@@ -13825,11 +13860,11 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
 <script src="src/ui/release-features.js"></script>
 <script src="src/ui/account-extras.js"></script>
 <script src="src/ui/sports-icons.js"></script>
-<script src="src/ui/today.js?v=f026-1"></script>
 <script src="src/ui/account-feedback.js"></script>
 <script src="src/ui/account-recovery.js"></script>
 <script src="src/ui/group-cleanup.js"></script>
-<script src="src/ui/welcome.js"></script>
-<script src="src/ui/solo.js"></script>
+<script src="src/ui/today.js?v=unified-20260923"></script>
+<script src="src/ui/welcome.js?v=unified-20260923"></script>
+<script src="src/ui/solo.js?v=unified-20260923"></script>
 </body>
 </html>

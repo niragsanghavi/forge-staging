@@ -2,20 +2,21 @@
 // You deploy often and have been bitten by stale caches before, so this always
 // tries the network first and only falls back to cache when offline.
 // To force every device to refresh, bump CACHE_VERSION (e.g. 'forge-v1' -> 'forge-v2').
-const CACHE_VERSION = 'forge-staging-v92-auth-journey';
+const CACHE_VERSION = 'forge-staging-v97-unified';
 const CACHE_PREFIX = 'forge-shell:' + self.registration.scope + ':';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
 const READY_KEY = new URL('__forge_shell_ready__',self.registration.scope).href;
 const APP_SHELL = [
-  './', './index.html',
+  './',
+  './index.html',
   './branding.html',
   './src/style/branding.css',
-  './src/style/solo.css',
+  './src/style/solo.css?v=unified-20260923',
   './src/ui/dialogs.js',
   './src/ui/release-features.js',
   './src/ui/account-extras.js',
-  './src/ui/welcome.js',
-  './src/ui/solo.js',
+  './src/ui/welcome.js?v=unified-20260923',
+  './src/ui/solo.js?v=unified-20260923',
   './src/ui/account-feedback.js',
   './src/ui/account-recovery.js',
   './src/ui/group-cleanup.js',
@@ -24,15 +25,12 @@ const APP_SHELL = [
   './assets/auth/google-signin.svg',
   './assets/auth/apple-signin.png',
   './src/style/main.css',
-  './src/style/today.css',
   './src/style/today.css?v=f026-1',
   './src/style/sports-icons.css',
-  './src/ui/today.js',
-  './src/ui/today.js?v=f026-1',
+  './src/ui/today.js?v=unified-20260923',
   './src/ui/sports-icons.js',
   './assets/sports/soft-sculpt.webp',
   './assets/sports/fire.webp',
-  './assets/forgeling.webp',
   './assets/forgeling.webp?v=f026-1',
   './assets/fonts/archivo-800.woff2',
   './assets/icons/forge-f.svg',
@@ -40,7 +38,7 @@ const APP_SHELL = [
   './src/config/build-target.js',
   './src/services/nativeAuth.js',
   './src/state/appState.js',
-  './src/services/scoringEngine.js'
+  './src/services/scoringEngine.js',
 ];
 
 self.addEventListener('install', e=>{

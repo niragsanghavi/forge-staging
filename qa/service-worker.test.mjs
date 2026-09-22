@@ -15,8 +15,8 @@ function setup({offline=false,status=200,cached=null,precacheFails=false,ready=t
 test('every precached shell asset exists',async()=>{const r=setup();r.handlers.install(r.event);await Promise.all(r.waits);});
 test('versioned experience assets use matching offline cache keys',()=>{
   const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
-  for(const asset of ['src/style/today.css','src/ui/today.js','assets/forgeling.webp']){
-    const versioned=asset+'?v=f026-1';assert.ok(html.includes(versioned));assert.ok(source.includes('./'+versioned));
+  for(const asset of ['src/style/today.css','src/ui/today.js','src/ui/solo.js','src/ui/welcome.js','src/style/solo.css','assets/forgeling.webp']){
+    const match=html.match(new RegExp(asset.replaceAll('.','\\.')+'\\?v=[^"\\s]+'));assert.ok(match,asset);assert.ok(source.includes('./'+match[0]),match[0]);
   }
 });
 test('activation deletes only previous caches from this exact app scope',async()=>{const r=setup();r.handlers.activate(r.event);await Promise.all(r.waits);assert.deepEqual(r.deleted,['forge-shell:https://example.test/forge-staging/:old']);});

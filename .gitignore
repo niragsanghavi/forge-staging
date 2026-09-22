@@ -149,5 +149,11 @@ android/keystore.properties
 !qa/auth-session.test.mjs
 !qa/provider-redirect.test.mjs
 !qa/release-features.test.mjs
+!qa/solo-recovery-ui.test.mjs
+!qa/solo-interface.test.mjs
+!qa/solo-dom.mjs
+!qa/solo-entry.test.mjs
+!qa/polish-feedback.test.mjs
+!qa/release-ui.test.mjs
 !qa/group-import.test.mjs
 !qa/account-extras.test.mjs
