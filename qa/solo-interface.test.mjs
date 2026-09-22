@@ -84,8 +84,9 @@ test('an unconfirmed privacy response cannot report public success',async()=>{
  const h=runtime({call:async name=>name==='setSoloVisibility'?{ok:false}:undefined});await h.w.ForgeSolo.open();h.w.ForgeSolo.selectTab('profile');
  const c=h.d.querySelector('#soloContent input');c.checked=true;await c.onchange();assert.equal(c.checked,false);assert.match(h.d.querySelector('#soloStatus').textContent,/not confirmed/);h.close();
 });
-test('already-linked group users can enter solo without being told to recover again',async()=>{
+test('a linked account choosing Solo from a signed-out device does not need recovery again',async()=>{
  const h=runtime({call:async name=>name==='getSolo'?{enrolled:false,hasProfile:true,hasGroups:true,name:'Already Linked'}:undefined});
+ h.w.getSessions=()=>[];
  await h.w.ForgeSolo.open();assert.match(h.d.querySelector('#soloContent').textContent,/already linked/);assert.equal(h.d.querySelector('#soloContent input').value,'Already Linked');
  h.button('SoloChange mode ›').onclick();h.button('My groups').onclick();assert.equal(h.calls.at(-1).name,'restore');h.close();
 });

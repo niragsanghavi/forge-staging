@@ -36,7 +36,7 @@
 <link rel="stylesheet" href="src/style/main.css">
 <link rel="stylesheet" href="src/style/sports-icons.css">
 <link rel="stylesheet" href="src/style/today.css?v=f026-1">
-<link rel="stylesheet" href="src/style/solo.css?v=solo-full-20260922">
+<link rel="stylesheet" href="src/style/solo.css?v=solo-entry-fix-20260922">
 <meta name="theme-color" content="#0a0a0d">
 <link rel="manifest" href="manifest.json">
 <meta name="mobile-web-app-capable" content="yes">
@@ -225,7 +225,7 @@
         <h3>Keep your history with you.</h3>
         <p class="today-muted">This sign-in is not linked to a Forge profile yet. Choose what you want to do.</p>
         <button type="button" class="today-button" onclick="ForgeWelcome.recover()">Bring back my existing profile</button>
-        <button type="button" class="today-button" onclick="ForgeSolo.open()">Start a fresh solo space</button>
+        <button type="button" class="today-button" data-solo-entry onclick="ForgeSolo.open()">Start a fresh solo space</button>
       </section>
       <section id="forgeGroupEntry">
       <div class="ob-title">Enter your group code</div>
@@ -666,6 +666,7 @@
     <div class="page-title" style="padding-bottom:4px">Profile</div>
     <div class="tmuted" style="margin-bottom:16px;font-size:12px">Your stats across every group</div>
     <button type="button" class="today-link" onclick="promptSwitch()">Switch person or leave this group</button>
+    <button type="button" class="today-link" onclick="signOutForgeDevice()">Sign out of Forge</button>
 
     <!-- ── ZONE 1: YOU. The reason anyone opens this tab. Always expanded. ── -->
     <div class="card" id="profileStatsCard"><div class="tmuted">Loading&hellip;</div></div>
@@ -681,7 +682,6 @@
       <div id="forgePersonalRecap"><p class="today-muted">Choose a recap. See your training days, activity mix and earlier periods across your linked groups.</p></div>
     </section>
     <div class="shdr">Your Workouts</div>
-    <button type="button" class="today-button today-button-secondary" onclick="ForgeSolo.open()">Open solo · your own lane →</button>
     <div class="card" id="profileInsightsCard"><div class="tmuted">Loading&hellip;</div></div>
     <div class="shdr">Past Seasons</div>
     <div class="card" id="profileSeasonsCard"><div class="tmuted">Loading&hellip;</div></div>
@@ -1715,6 +1715,7 @@ async function bootApp(){
 function showScreen(name){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(`screen-${name}`).classList.add('active');
+  if(name==='onboard')window.ForgeWelcome?.syncGroupChoices();
 }
 
 // ── ONBOARDING ────────────────────────────────────────────────────────────
@@ -2239,6 +2240,26 @@ async function skipPinForNow(){
   }
 }
 
+// Sign out from both layers: clearing only group sessions left Google/Apple
+// signed in and could silently reopen the previous person's account.
+async function signOutForgeDevice(){
+  if(window._forgeSignOutBusy)return;
+  if(['checking','pending'].includes(window._forgeLogReceipt?.state)){toast('Wait for your workout save to finish before signing out.','default');return;}
+  if(window._forgeProviderBusy){toast('Finish or close the sign-in window first.','default');return;}
+  window._forgeSignOutBusy=true;
+  try{
+    await auth.signOut();
+    _invalidateGroupContext();
+    window.ForgeSolo?.close();
+    unsub.forEach(fn=>{try{fn();}catch(e){}});unsub=[];
+    groupCode=null;groupData=null;season=null;seasonId=null;me=null;
+    window._claimPending=null;window._joinMode=false;window.currentUid=null;
+    for(const key of ['forge_sessions','forge_active','forge_session'])localStorage.removeItem(key);
+    location.reload();
+  }catch(e){toast('Sign-out did not finish. Please try again before choosing another account.','error');}
+  finally{window._forgeSignOutBusy=false;}
+}
+
 function promptSwitch(){
   const sessions = getSessions();
   if(sessions.length > 1){
@@ -2255,12 +2276,7 @@ function promptSwitch(){
     loadGroup(groupCode, true);
   } else {
     if(!confirm('Log out on this device? You can sign back in with your group code.')) return;
-    _invalidateGroupContext();
-    unsub.forEach(fn=>fn()); unsub = [];
-    groupData = null; season = null; seasonId = null;
-    localStorage.removeItem('forge_sessions');
-    localStorage.removeItem('forge_active');
-    location.reload();
+    return signOutForgeDevice();
   }
 }
 
@@ -13548,8 +13564,8 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
 })();
 </script>
 <script src="src/ui/sports-icons.js"></script>
-<script src="src/ui/today.js?v=solo-full-20260922"></script>
-<script src="src/ui/welcome.js?v=solo-full-20260922"></script>
-<script src="src/ui/solo.js?v=solo-full-20260922"></script>
+<script src="src/ui/today.js?v=solo-entry-fix-20260922"></script>
+<script src="src/ui/welcome.js?v=solo-entry-fix-20260922"></script>
+<script src="src/ui/solo.js?v=solo-entry-fix-20260922"></script>
 </body>
 </html>

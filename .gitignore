@@ -100,3 +100,4 @@ scripts/
 !qa/solo-recovery-ui.test.mjs
 !qa/solo-interface.test.mjs
 !qa/solo-dom.mjs
+!qa/solo-entry.test.mjs

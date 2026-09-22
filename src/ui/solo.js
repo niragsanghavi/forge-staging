@@ -51,6 +51,7 @@
   }
   async function open(nextScope={},nextTab='today'){
     if(saving)return;
+    if(!window.ForgeWelcome.allowSolo())return;
     closeDialog();scope={...nextScope};tab=['today','history','board','profile'].includes(nextTab)?nextTab:'today';filter='';
     const id=actor();if(owner!==id){owner=id;historyCache.clear();recommendations=[];allTime=null;receipt=null;model=null;}
     model=null;const ticket=++epoch;showScreen('solo');shell();window.scrollTo(0,0);
@@ -74,10 +75,11 @@
     el.append(button('Bring back my existing profile',()=>window.ForgeWelcome.recover(),'today-button today-button-quiet'));
   }
   async function signIn(provider){
-    if(window._forgeProviderBusy)return;window._forgeProviderBusy=true;const ticket=epoch;
-    try{const result=await startForgeProviderSignIn(provider);if(ticket===epoch&&result.uid===actor())await open();}
-    catch(e){if(ticket===epoch)status('Sign-in did not finish. Your profile has not changed. Try again.',true);}
-    finally{window._forgeProviderBusy=false;}
+    const ticket=epoch;
+    const result=await ForgeWelcome.authenticate(provider,text=>{if(ticket===epoch)status(text);});
+    if(!result||ticket!==epoch)return;
+    if(result.uid!==actor()){status('Your sign-in changed. Please try again.',true);return;}
+    await open();
   }
   function enrollment(){
     const el=content();el.append(node('h1','Make room for your own pace.'));
@@ -286,8 +288,10 @@
     if(actor())body.append(button('Sign out',signOut,'today-button today-button-quiet'));
   }
   async function signOut(){
-    if(saving)return;epoch++;closeDialog();
-    try{await auth.signOut();owner=null;model=null;historyCache.clear();receipt=null;recommendations=[];showScreen('onboard');showObStep(1);}
+    if(saving)return;
+    if(typeof window.signOutForgeDevice==='function'){await window.signOutForgeDevice();return;}
+    epoch++;closeDialog();
+    try{await auth.signOut();owner=null;model=null;historyCache.clear();receipt=null;recommendations=[];showScreen('onboard');showObStep(1);ForgeWelcome.syncGroupChoices();}
     catch(e){status('Sign-out did not finish. Please try again.',true);}
   }
   async function remove(){

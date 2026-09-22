@@ -43,7 +43,6 @@
     const actions=node('div','today-group-actions');
     if(selected){const share=button(`Share ${selected.name||selected.code}`,()=>{closeDialog();shareInvite(selected.code);},'today-button today-button-quiet today-share-group');share.dataset.shareGroup=selected.code;actions.append(share);}
     actions.append(button('Join another group',()=>{closeDialog();joinAnotherGroup();},'today-button today-button-secondary'));
-    if(window.FEATURE_GOOGLE_AUTH)actions.append(button('Open solo · your own lane',()=>{closeDialog();ForgeSolo.open();},'today-button today-button-secondary'));
     body.append(list,actions);
     openDialog('Your groups',body);
   }
@@ -449,6 +448,7 @@
   }
   let soloRequest=0;
   async function openSolo(offset=0,body){
+    if(window.ForgeWelcome&&!ForgeWelcome.allowSolo())return;
     if(window.FEATURE_GOOGLE_AUTH&&window.ForgeSolo)return window.ForgeSolo.open();
     if(!body){body=document.createElement('div');body.className='today-dialog-body';ForgeToday.openDialog('Solo · your own lane',body);}
     const request=++soloRequest,version=personalVersion,context=personalContext(),range=recapRange('month',offset);
