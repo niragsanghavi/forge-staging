@@ -74,6 +74,7 @@ exports.getSolo=onCall(r=>solo.get(r));
 exports.saveSolo=onCall(r=>solo.save(r));
 exports.soloBoard=onCall(r=>solo.board(r));
 exports.hideSoloRanking=onCall(r=>solo.hide(r));
+exports.setSoloVisibility=onCall(r=>solo.visibility(r));
 exports.deleteSoloAccount=onCall({timeoutSeconds:300},r=>solo.remove(r));
 exports.retryIdentityDeletions=onSchedule({schedule:'every 60 minutes',timeZone:'Asia/Kolkata',timeoutSeconds:300},()=>identity.retryDeletions());
 exports.settleSweep=require('./steps-service')({db,FieldValue,onSchedule,pledges,logger:require('firebase-functions').logger});

@@ -38,10 +38,12 @@ module.exports=({db,FieldValue,HttpsError,identity,now=Date.now})=>{
   }
   async function get(request){
     const a=await owner(request),p=period(request.data);
-    if(!a.userId||!a.user.soloEnabled)return {enrolled:false};
+    if(!a.userId)return {enrolled:false,hasProfile:false};
+    if(!a.user.soloEnabled)return {enrolled:false,hasProfile:true,hasGroups:Object.keys(a.user.memberships||{}).length>0,name:a.user.name||''};
     const records=await db.collection('users').doc(a.userId).collection('soloLogs').where('seasonId','==',p.sid).get();
     const logs=records.docs.map(d=>d.data());
-    return {enrolled:true,name:a.user.soloDisplayName,hasGroups:Object.keys(a.user.memberships||{}).length>0,publicRanking:!!a.user.soloPublicRanking,period:p,logs,score:scoreSoloDays(logs,p.year,p.month,p.throughDay)};
+    const months=[...new Set(a.user.soloMonths||[])].filter(s=>/^\d{4}-(0[1-9]|1[0-2])$/.test(s)).sort();
+    return {enrolled:true,hasProfile:true,name:a.user.soloDisplayName,months,hasGroups:Object.keys(a.user.memberships||{}).length>0,publicRanking:!!a.user.soloPublicRanking,period:p,logs,score:scoreSoloDays(logs,p.year,p.month,p.throughDay)};
   }
   async function save(request){
     const a=await owner(request),p=period(request.data),day=Number(request.data?.day),workouts=request.data?.workouts;
@@ -64,10 +66,36 @@ module.exports=({db,FieldValue,HttpsError,identity,now=Date.now})=>{
     });
   }
   async function board(request){
-    identity.actor(request,false);const p=period(request.data);
+    const a=await owner(request),p=period(request.data);
     const rows=await db.collection('soloBoards').doc(p.sid).collection('entries').orderBy('total','desc').limit(100).get();
     let previous=null,rank=0;
-    return {period:p,entries:rows.docs.map((d,i)=>{const value=d.data();if(value.total!==previous)rank=i+1;previous=value.total;return {name:value.name,total:value.total,days:value.days,rank};}),limit:100};
+    return {period:p,entries:rows.docs.map((d,i)=>{const value=d.data();if(value.total!==previous)rank=i+1;previous=value.total;return {name:value.name,total:value.total,days:value.days,rank,isYou:d.id===a.userId};}),limit:100};
+  }
+  async function visibility(request){
+    const a=await owner(request),enabled=request.data?.publicRanking;
+    if(typeof enabled!=='boolean')fail('invalid-argument','Choose whether your solo record is public.');
+    if(!a.userId||!a.user.soloEnabled)fail('failed-precondition','Choose solo mode first.');
+    const ref=db.collection('users').doc(a.userId);
+    await db.runTransaction(async tx=>{
+      const snap=await tx.get(ref),u=snap.data();
+      if(!snap.exists||u.authUid!==a.uid||u.deleted||u.deletionRequestedAt)fail('permission-denied','Profile unavailable.');
+      const months=[...new Set(u.soloMonths||[])].filter(s=>/^\d{4}-(0[1-9]|1[0-2])$/.test(s));
+      if(months.length>120)fail('failed-precondition','Contact support to update this long-running record.');
+      const entries=[];
+      // Read every month before any write; retries recompute rather than
+      // publishing stale totals. No public visibility changes on partial failure.
+      for(const sid of months){
+        const boardRef=db.collection('soloBoards').doc(sid).collection('entries').doc(a.userId);
+        if(!enabled){entries.push({ref:boardRef});continue;}
+        const [year,month]=sid.split('-').map(Number),p=period({year,month});
+        const records=await tx.get(ref.collection('soloLogs').where('seasonId','==',sid));
+        const score=scoreSoloDays(records.docs.map(d=>d.data()),year,month,p.throughDay);
+        entries.push({ref:boardRef,value:score.days?{name:u.soloDisplayName,total:score.total,days:score.days,updatedAt:FieldValue.serverTimestamp()}:null});
+      }
+      tx.update(ref,{soloPublicRanking:enabled});
+      for(const entry of entries){if(entry.value)tx.set(entry.ref,entry.value);else tx.delete(entry.ref);}
+    });
+    return {ok:true,publicRanking:enabled};
   }
   async function hide(request){
     const a=await owner(request);if(!a.userId)fail('failed-precondition','No solo profile.');
@@ -89,5 +117,5 @@ module.exports=({db,FieldValue,HttpsError,identity,now=Date.now})=>{
     await db.collection('users').doc(a.userId).update({deletionRequestedAt:FieldValue.serverTimestamp()});
     return identity.finalizeDeletion({...request,data:{userId:a.userId}});
   }
-  return {enroll,get,save,board,hide,remove};
+  return {enroll,get,save,board,hide,remove,visibility};
 };
