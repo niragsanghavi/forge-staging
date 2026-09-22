@@ -2,13 +2,14 @@
 // You deploy often and have been bitten by stale caches before, so this always
 // tries the network first and only falls back to cache when offline.
 // To force every device to refresh, bump CACHE_VERSION (e.g. 'forge-v1' -> 'forge-v2').
-const CACHE_VERSION = 'forge-staging-v94-solo-log-window';
+const CACHE_VERSION = 'forge-staging-v95-release-features';
 const CACHE_PREFIX = 'forge-shell:' + self.registration.scope + ':';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
 const READY_KEY = new URL('__forge_shell_ready__',self.registration.scope).href;
 const APP_SHELL = [
   './', './index.html',
   './src/ui/dialogs.js',
+  './src/ui/release-features.js',
   './src/style/main.css',
   './src/style/today.css',
   './src/style/today.css?v=f026-1',

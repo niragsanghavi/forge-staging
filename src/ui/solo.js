@@ -122,6 +122,7 @@
   function companion(text){const el=node('div','','solo-companion');el.append(image('assets/forgeling.webp?v=f026-1'),node('p',text));return el;}
   function today(){
     const el=content(),p=model.period,s=model.score;
+    const announcement=node('div');announcement.dataset.soloAnnouncement='';el.append(announcement);window.ForgeAnnouncements?.render(announcement);
     const hero=node('div','','today-hero');const words=node('div');words.append(node('p',model.name+' · YOUR OWN LANE','today-kicker'),node('h1','Your month. Your pace.'));hero.append(words,image('assets/forgeling.webp?v=f026-1','today-forgeling'));el.append(hero);
     const stats=node('div','','solo-metrics');stats.append(stat(s.days,'workout days'),stat(s.total,'solo points'),stat(s.currentStreak,p.current?'day streak':'end-of-month streak'));el.append(stats);
     if(receipt&&receipt.sid===p.sid)renderReceipt(el);

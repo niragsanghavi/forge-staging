@@ -917,7 +917,7 @@
     <div id="superGroupList"></div>
     <details class="forge-ops-section" id="forgeOpsCommunications"><summary>Communications &amp; weekly recaps</summary><p class="forge-ops-note">Build a recap, preview an audience, or review the queue. Nothing sends until you explicitly use the existing send controls.</p>
       <button type="button" class="today-button" onclick="ForgeSupport.inbox()">Private support inbox</button><p class="today-muted">Requires your authorised Google or Apple sign-in. The dashboard PIN does not unlock private messages.</p>
-    <section class="card"><h2>In-app updates</h2><p>Write a popup and let Forgeling guide the next step.</p><button type="button" class="today-button" onclick="ForgeExperience.announcementComposer()">Draft &amp; preview popup</button><p class="today-muted">Local preview only. Publishing is not enabled.</p></section>
+    <section class="card"><h2>In-app updates</h2><p>Write a popup and let Forgeling guide the next step.</p><button type="button" class="today-button" onclick="ForgeExperience.announcementComposer()">Manage in-app announcements</button><p class="today-muted">Preview, publish or unpublish · requires your approved Superadmin account.</p></section>
     <!-- ══ WEEKLY RECAP IMAGES ══
          One shareable PNG per group, built in the browser from live data.
          Not auto-rendered on page load: it costs a logs query per group, and
@@ -3426,10 +3426,7 @@ function mirOpenDayDetail(d){
   document.getElementById('mirSheetBody').innerHTML=`<div class="mir-daydetail">${rows}<button class="btn btn-surface mir-daddbtn" onclick="mirOpenLogSheet(${d})">+ Add another</button></div>`;
   mirOpenSheet();
 }
-async function mirVoidLog(id){
-  try{ await voidLogDoc(id, me.name); toast('Removed'); mirCloseSheet(); }
-  catch(e){ logErr('mirVoidLog', e); toast('Remove failed — check connection.','error'); }
-}
+async function mirVoidLog(id){ return window.ForgeRemoval.open(id); }
 function mirOpenSheet(){ document.getElementById('mirScrim').classList.add('on'); document.getElementById('mirSheet').classList.add('on'); }
 function mirCloseSheet(){ document.getElementById('mirScrim').classList.remove('on'); document.getElementById('mirSheet').classList.remove('on'); }
 function mirLogQuick(w){
@@ -7445,37 +7442,17 @@ function renderLB(viewOnly=false){
    Native 1.1 ships a FROZEN copy of this file without any of this — these
    cards reach web/PWA now and the App Store at 1.2. The native notifications
    card in 1.1 is lit per-user via users/{id}.pushPilot instead. */
-const ANNOUNCE_KEY='forgeAnnounce:steps-2026-10';
+// Published announcements use per-announcement dismissal keys in release-features.js.
 function _openCount(){ try{ return +(localStorage.getItem('forgeOpens')||0); }catch(e){ return 0; } }
 function _lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
 function _lsSet(k,v){ try{ localStorage.setItem(k,String(v)); }catch(e){} }
 
-function renderAnnounceCard(){
-  const el=document.getElementById('announceCard'); if(!el) return;
-  el.innerHTML='';
-  if(_lsGet(ANNOUNCE_KEY)==='seen') return;
-  const native=(typeof isNative==='function' && isNative());
-  const beforeOctober=Date.now()<Date.UTC(2026,8,30,18,30);
-  el.innerHTML=
-    '<div class="card" style="margin-bottom:14px;padding:16px;border:1px solid var(--gold-line,rgba(212,175,55,.35))">'
-    +'<div style="font-size:11px;font-weight:800;letter-spacing:.16em;color:var(--accent);margin-bottom:14px">'+(beforeOctober?'OCTOBER, ONE STEP AT A TIME':'MAKE EVERY STEP COUNT')+'</div>'
-    +'<div style="font-size:13px;line-height:1.75">'
-      +'<div>👟 <b>The Step Challenge</b> — a little extra reason to take the long way home. Available in groups with the challenge enabled.</div>'
-      +'<div>❤️ <b>Connect your health app</b> — use a compatible Forge phone app and allow step access to take part.</div>'
-      +'<div>🔔 <b>Updates, on your terms</b> — notifications are optional. Check Profile for this device’s connection status.</div>'
-    +'</div>'
-    +(native
-      ? '<div style="margin-top:12px;font-size:12px;color:var(--muted)">Open Steps Challenge to check your group’s availability and health connection.</div>'
-      : '<a class="btn btn-gold" style="display:block;text-align:center;margin:14px 0 0" '
-        +'href="https://apps.apple.com/app/id6802334800" target="_blank" rel="noopener">Get the app — it does the counting</a>')
-    +'<button class="btn btn-surface" style="margin-top:12px" onclick="dismissAnnounce()">Got it</button>'
-    +'</div>';
-}
-function dismissAnnounce(){ _lsSet(ANNOUNCE_KEY,'seen'); renderAnnounceCard(); renderPromptDock(); }
+function renderAnnounceCard(){ return window.ForgeAnnouncements?.render(); }
+function dismissAnnounce(){ renderAnnounceCard(); renderPromptDock(); }
 
 // One ask at a time. Returns which prompt is due, or null.
 function _duePrompt(){
-  if(_lsGet(ANNOUNCE_KEY)!=='seen') return null;            // announcement first
+  if(window.ForgeAnnouncements?.hasVisible()) return null; // one ask at a time
   if(_openCount()<2) return null;                           // never on a first open
   // 1) NOTIFICATIONS — anywhere push is supported and not yet decided.
   if(window.FEATURE_PUSH && typeof pushSupported==='function' && pushSupported()
@@ -7810,11 +7787,7 @@ function voidLogDoc(id, actorName){
     return res;
   });
 }
-async function deleteLog(id){
-  if(!confirm('Remove this workout entry? It disappears from your feed and score right away.')) return;
-  try { await voidLogDoc(id, me.name); }
-  catch(e){ logErr('deleteLog', e); toast('Remove failed — check connection.','error'); }
-}
+async function deleteLog(id){ return window.ForgeRemoval.open(id); }
 // Native share sheet where there is one. Falls back to Web Share, then the
 // clipboard, so the button always does something rather than silently failing
 // on a browser without navigator.share.
@@ -13663,6 +13636,7 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
 })();
 </script>
 <script src="src/ui/dialogs.js"></script>
+<script src="src/ui/release-features.js"></script>
 <script src="src/ui/sports-icons.js"></script>
 <script src="src/ui/account-feedback.js"></script>
 <script src="src/ui/account-recovery.js"></script>

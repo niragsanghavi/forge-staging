@@ -467,16 +467,8 @@
     body.innerHTML='<img src="assets/forgeling.webp?v=f026-1" alt="Happy Forgeling"><h2>One workout. Less paperwork.</h2><ol><li>Pick the day you actually moved.</li><li>Choose your activities. For Gym, add optional muscle tags—the body fills in as you choose.</li><li>Review the destination groups, then save once.</li><li>Wait for the confirmed receipt. Pending means still sending; it is not a second workout.</li></ol><p>Health suggestions follow the same review-and-confirm rule. A connection alone does not prove a workout was logged.</p><button type="button" class="today-button" data-log-guide-close>Got it · back to logging</button>';
     ForgeToday.openDialog('Forgeling’s logging guide',body);body.querySelector('[data-log-guide-close]').onclick=()=>ForgeToday.closeDialog();
   }
-  function announcementPreview(title,message,action='none'){
-    const body=document.createElement('div');body.className='today-dialog-body forge-companion';
-    body.innerHTML=`<img src="assets/forgeling.webp?v=f026-1" alt="Happy Forgeling"><p class="today-kicker">LOCAL PREVIEW · NOT SENT</p><h2>${esc(String(title||'A small Forge update').trim().slice(0,60))}</h2><p class="forge-announcement-copy">${esc(String(message||'See what’s new this week.').trim().slice(0,500))}</p><button type="button" class="today-button" data-announcement-action>${action==='guide'?'Show me around':action==='log'?'Help me log':'Got it'}</button><p class="today-muted">Publishing is disabled until a server-authorized announcement channel is ready. This preview reaches only this screen.</p>`;
-    ForgeToday.openDialog('A note from Forge',body);body.querySelector('[data-announcement-action]').onclick=()=>{ForgeToday.closeDialog();if(action==='guide')window.startTour?.(true);else if(action==='log')loggingHelp();};
-  }
-  function announcementComposer(){
-    const body=document.createElement('div');body.className='today-dialog-body';
-    body.innerHTML='<p class="today-kicker">IN-APP ANNOUNCEMENTS · LOCAL DRAFT</p><label for="forgeDraftTitle">Title</label><input id="forgeDraftTitle" maxlength="60" value="A little more Forge"><label for="forgeDraftBody">Message</label><textarea id="forgeDraftBody" maxlength="500" rows="4">Your calendar, gym diary and points report have a new home. Forgeling can show you around.</textarea><label for="forgeDraftAction">Forgeling action</label><select id="forgeDraftAction"><option value="guide">App tour</option><option value="log">Logging help</option><option value="none">Dismiss only</option></select><button class="today-button" data-announcement-preview>Preview popup</button><p class="forge-history-warning">Not saved or sent. Publishing requires server authorization, audience rules, expiry and per-person dismissal. A founder PIN alone must not grant publishing rights.</p>';
-    ForgeToday.openDialog('Draft an in-app update',body);body.querySelector('[data-announcement-preview]').onclick=()=>announcementPreview(body.querySelector('#forgeDraftTitle').value,body.querySelector('#forgeDraftBody').value,body.querySelector('#forgeDraftAction').value);
-  }
+  function announcementPreview(){ return announcementComposer(); }
+  function announcementComposer(){ return window.ForgeAnnouncements?.composer(); }
   function healthName(){
     const c=window.Capacitor,platform=c&&(typeof c.getPlatform==='function'?c.getPlatform():c.platform);
     return platform==='android'?'Health Connect':platform==='ios'?'Apple Health':'Apple Health / Health Connect';

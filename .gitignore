@@ -104,3 +104,6 @@ scripts/
 !qa/polish-feedback.test.mjs
 !qa/auth-session.test.mjs
 !qa/provider-redirect.test.mjs
+!qa/release-features.test.mjs
+!qa/memory-firestore.mjs
+!qa/release-ui.test.mjs

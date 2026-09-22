@@ -87,8 +87,7 @@ test('branding, full-size guide button and focused device-settings tour target a
  assert.ok(h.d.querySelector('#forgeDeviceSettings #pushCard'));assert.ok(h.d.querySelector('#forgeDeviceSettings #healthCard'));
  assert.match(html,/t:'#forgeDeviceSettings'.*Make Forge work for you/);assert.ok(fs.existsSync(new URL('../branding.html',import.meta.url)));h.close();
 });
-test('October campaign has no fake progress and expires at the IST month boundary',()=>{
- const h=runtime();h.w._lsGet=()=>null;h.w.ANNOUNCE_KEY='fixture';h.w.eval(slice('function renderAnnounceCard(){','function dismissAnnounce()'));
- h.w.Date.now=()=>Date.parse('2026-09-22T10:00:00Z');h.w.renderAnnounceCard();assert.match(h.d.querySelector('#announceCard').textContent,/OCTOBER/);
- h.w.Date.now=()=>Date.parse('2026-09-30T18:30:00Z');h.w.renderAnnounceCard();assert.doesNotMatch(h.d.querySelector('#announceCard').textContent,/LOADING|OCTOBER/);assert.match(h.d.querySelector('#announceCard').textContent,/MAKE EVERY STEP COUNT/);h.close();
+test('hardcoded campaign is replaced with the published announcement channel',()=>{
+ const h=runtime();let renders=0;h.w.ForgeAnnouncements={render:()=>renders++};h.w.eval(slice('function renderAnnounceCard(){','function dismissAnnounce()'));
+ h.w.renderAnnounceCard();assert.equal(renders,1);assert.doesNotMatch(html,/const ANNOUNCE_KEY=/);h.close();
 });
