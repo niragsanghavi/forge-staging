@@ -18,6 +18,7 @@ const files={
   'functions-identity/pledge-service.js':'pledge-service.js',
   'functions-identity/rollover-service.js':'rollover-service.js',
   'functions-identity/group-create-service.js':'group-create-service.js',
+  'functions-identity/group-archive-service.js':'group-archive-service.js',
   'functions-identity/group-write-service.js':'group-write-service.js',
   'functions-identity/legacy-link-service.js':'legacy-link-service.js',
   'functions-identity/solo-service.js':'solo-service.js',

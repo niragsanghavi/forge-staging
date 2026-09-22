@@ -124,6 +124,7 @@ scripts/
 !qa/group-create-service.test.mjs
 !qa/identity-deletion.test.mjs
 !qa/memory-firestore.mjs
+!qa/group-archive.test.mjs
 !build/prepare-production-backend.mjs
 /build/production-backend-*/
 !ios/build-www.mjs

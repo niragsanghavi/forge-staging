@@ -72,7 +72,7 @@ test('all configured codebases have disjoint actual export names',()=>{
   for(const name of ['claimIdentity','refreshIdentity','settleSweep','saveGroupWorkout','voidGroupWorkout','saveGroupSteps','setGroupVisibility','refreshGroupStats','aggregateLogChanges','aggregateSeasonChanges','aggregateAwardChanges','aggregateBonusChanges']) assert.equal(owners.get(name),'identity');
   for(const name of ['streakAtRisk','mondayRecap','testPush','awardSeasonBadges','adminResetPin','sendNotice','noticeQueue','drainScheduledNotices']) assert.equal(owners.get(name),'default');
   for(const name of ['getAdminAccess','changeGroupAdmin','createGroupWithIdentity','checkJackAward','reconcileStatistics','lockPledge','settlePledges','rolloverGroup','rolloverSweep','getGroupFlags','flagGroupWorkout'])assert.equal(owners.get(name),'identity');
-  for(const name of ['getRecapPercentile','submitGroupSurvey','repairDerivedStats','trackGroupTab','linkLegacyGroup','setSoloVisibility'])assert.equal(owners.get(name),'identity');
+  for(const name of ['getRecapPercentile','submitGroupSurvey','repairDerivedStats','trackGroupTab','linkLegacyGroup','setSoloVisibility','previewGroupArchive','setGroupArchived'])assert.equal(owners.get(name),'identity');
 });
 test('ownership guard rejects duplicate names, not just known collisions',()=>{
   assert.throws(()=>uniqueOwners([['default',['newName']],['identity',['newName']]]),/Duplicate function/);

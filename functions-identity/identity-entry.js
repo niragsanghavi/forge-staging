@@ -23,6 +23,9 @@ exports.rolloverGroup=onCall({timeoutSeconds:300},r=>rollover.run(r.data?.groupC
 exports.rolloverSweep=onSchedule({schedule:'0 6 * * *',timeZone:'Asia/Kolkata',timeoutSeconds:300},()=>rollover.sweep());
 const aggregates=require('./aggregate-service')({db,FieldValue,HttpsError,identity});
 const admins=require('./admin-service')({db,FieldValue,HttpsError,identity});
+const groupArchive=require('./group-archive-service')({db,FieldValue,HttpsError,identity});
+exports.previewGroupArchive=onCall(r=>groupArchive.preview(r));
+exports.setGroupArchived=onCall(r=>groupArchive.setArchived(r));
 exports.createGroupWithIdentity=onCall(require('./group-create-service')({db,FieldValue,HttpsError,identity}));
 exports.getAdminAccess=onCall(r=>admins.access(r));
 exports.changeGroupAdmin=onCall(r=>admins.change(r));
