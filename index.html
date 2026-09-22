@@ -36,6 +36,7 @@
 <link rel="stylesheet" href="src/style/main.css">
 <link rel="stylesheet" href="src/style/sports-icons.css">
 <link rel="stylesheet" href="src/style/today.css?v=f026-1">
+<link rel="stylesheet" href="src/style/solo.css?v=solo-full-20260922">
 <meta name="theme-color" content="#0a0a0d">
 <link rel="manifest" href="manifest.json">
 <meta name="mobile-web-app-capable" content="yes">
@@ -195,18 +196,18 @@
 </defs></svg>
 
 <!-- ══ ONBOARDING ══ -->
-<div class="screen" id="screen-solo"><main id="soloRoot" class="solo-shell" aria-live="polite"></main></div>
+<div class="screen" id="screen-solo"><main id="soloRoot" class="solo-shell"></main></div>
 <div class="screen active" id="screen-onboard">
   <div class="ob-logo">FORGE</div>
-  <div class="ob-tag">Forged by the group.</div>
+  <div class="ob-tag">Build a habit. Keep your people.</div>
   <div class="ob-card">
     <div class="ob-step active" id="ob-s1">
-      <section class="solo-choice" aria-label="Choose how to use Forge">
-        <h2>Your effort. Your kind of company.</h2>
-        <p>Train with your people, or make Forge your workout buddy.</p>
-        <div class="solo-doors">
-          <button class="today-button" onclick="document.getElementById('codeInput').focus()">Join my group <span>Team points, shared momentum</span></button>
-          <button class="today-button" onclick="ForgeSolo.open()">Go solo <span>Your calendar, your own leaderboard</span></button>
+      <section class="forge-welcome" aria-label="Choose how to use Forge">
+        <h2>Train your way.</h2>
+        <p>With your people. Or at your own pace.</p>
+        <div class="forge-mode-choices">
+          <button type="button" class="forge-mode-card" data-forge-mode="group" aria-pressed="false" onclick="ForgeWelcome.choose('group')"><img src="assets/modes/group.webp" width="66" height="66" alt=""><strong>With my group</strong><span>Team challenges.<br>Shared momentum.</span></button>
+          <button type="button" class="forge-mode-card" data-forge-mode="solo" aria-pressed="false" onclick="ForgeWelcome.choose('solo')"><img src="assets/modes/solo.webp" width="66" height="66" alt=""><strong>Go solo</strong><span>Your workouts.<br>Your own leaderboard.</span></button>
         </div>
       </section>
       <!-- Returning-user door. Hidden unless FEATURE_GOOGLE_AUTH is on (see
@@ -215,10 +216,18 @@
            someone who already has an account should never have to hunt for
            their group code on a new phone (AUTH_DESIGN_FINAL Phase 1). -->
       <div id="googleLoginDoor" style="display:none">
-        <button class="btn btn-surface" style="margin:0 0 10px;width:100%" onclick="loginWithGoogle()">Continue with Google</button>
-        <button id="appleLoginDoor" class="btn btn-surface" style="display:none;margin:0 0 10px;width:100%" onclick="loginWithForgeProvider('apple.com')">Continue with Apple</button>
-        <div style="display:flex;align-items:center;gap:10px;margin:0 0 14px"><div style="flex:1;height:1px;background:var(--border)"></div><span style="font-size:11px;color:var(--muted)">or</span><div style="flex:1;height:1px;background:var(--border)"></div></div>
+        <p class="today-kicker" style="text-align:center">Sign in to Forge</p>
+        <div id="forgeWelcomeProviders"></div>
+        <button type="button" class="forge-welcome-return" onclick="ForgeWelcome.recover()">Already used Forge? Bring back my profile</button>
       </div>
+      <p id="forgeWelcomeStatus" role="status"></p>
+      <section id="forgeUnlinkedChoice" class="forge-unlinked-choice" tabindex="-1" hidden>
+        <h3>Keep your history with you.</h3>
+        <p class="today-muted">This sign-in is not linked to a Forge profile yet. Choose what you want to do.</p>
+        <button type="button" class="today-button" onclick="ForgeWelcome.recover()">Bring back my existing profile</button>
+        <button type="button" class="today-button" onclick="ForgeSolo.open()">Start a fresh solo space</button>
+      </section>
+      <section id="forgeGroupEntry">
       <div class="ob-title">Enter your group code</div>
       <div class="ob-sub">Whoever invited you shared a short code</div>
       <input class="code-input" id="codeInput" maxlength="10" placeholder="······" autocomplete="off" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')verifyCode()">
@@ -237,6 +246,7 @@
         <div style="margin-top:6px;font-size:11px;color:var(--muted);text-align:center">Bring your people. Group scoring stays separate from solo.</div>
       </div>
       <div id="joinCancel" class="hidden" style="margin-top:12px;text-align:center"><span onclick="cancelJoin()" style="font-size:12px;color:var(--gold);cursor:pointer">← Back to my group</span></div>
+      </section>
       <!-- The pitch, for the person hesitating between the two doors. This
            screen previously assumed you already knew what Forge was — the one
            person guaranteed NOT to know is the stranger standing here. Relative
@@ -671,7 +681,7 @@
       <div id="forgePersonalRecap"><p class="today-muted">Choose a recap. See your training days, activity mix and earlier periods across your linked groups.</p></div>
     </section>
     <div class="shdr">Your Workouts</div>
-    <button type="button" class="today-button today-button-secondary" onclick="ForgeExperience.openSolo()">Explore solo · your own lane →</button>
+    <button type="button" class="today-button today-button-secondary" onclick="ForgeSolo.open()">Open solo · your own lane →</button>
     <div class="card" id="profileInsightsCard"><div class="tmuted">Loading&hellip;</div></div>
     <div class="shdr">Past Seasons</div>
     <div class="card" id="profileSeasonsCard"><div class="tmuted">Loading&hellip;</div></div>
@@ -4948,6 +4958,7 @@ async function restoreIdentityFromGoogle(r){
     const q = await db.collection('users').where('authUid','==',r.uid).limit(1).get();
     if(!stillSignedIn())return;
     if(q.empty){
+      if(r.welcome&&window.ForgeWelcome){ForgeWelcome.unlinked();return;}
       toast('Signed in. New here? Enter your group code to join. Already a member? Open your existing profile and link it in Profile.','default');
       return;
     }
@@ -13537,6 +13548,8 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
 })();
 </script>
 <script src="src/ui/sports-icons.js"></script>
-<script src="src/ui/today.js?v=solo-recovery-20260921"></script>
+<script src="src/ui/today.js?v=solo-full-20260922"></script>
+<script src="src/ui/welcome.js?v=solo-full-20260922"></script>
+<script src="src/ui/solo.js?v=solo-full-20260922"></script>
 </body>
 </html>

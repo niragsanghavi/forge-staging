@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Forge offline QA — local files and synthetic data only. No network or auth.
+// Run all static and unit checks from the repository root with: npm test
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
