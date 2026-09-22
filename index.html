@@ -2376,6 +2376,8 @@ function _newGroupLoadContext(code){
   if(typeof _mirLoading!=='undefined')_mirLoading=false;
   return Object.freeze({generation:++_groupLoadGeneration, code});
 }
+// The step the latest loadGroup reached, so a stall can say where it stopped.
+let _groupLoadStage=null;
 function _isGroupLoadCurrent(context){
   return context.generation===_groupLoadGeneration && groupCode===context.code;
 }
@@ -2394,6 +2396,7 @@ function showArchivedGroup(code){
 async function loadGroup(code, fromCache, options={}){
   const context=options.manual?Object.freeze({generation:_groupLoadGeneration,code}):_newGroupLoadContext(code);
   const playerAtStart=me;
+  _groupLoadStage='start';
   // On a genuine "this group is gone/broken" error we drop ONLY that group's
   // session (handleDeadGroup) and fall back to another joined group — never nuke
   // everything (that caused the mass-lockout). Transient errors just alert.
@@ -2403,12 +2406,14 @@ async function loadGroup(code, fromCache, options={}){
         showScreen('onboard');showObStep(1);renderGoogleLoginDoor();
         toast('Continue with Google or Apple to protect and restore your Forge history.','default');return;
       }
+      _groupLoadStage='identity';
       const identity=await callFunction('refreshIdentity',{});
       if(!_isGroupLoadCurrent(context))return;
       if(!identity?.linked||identity.userId!==playerAtStart.userId){
         showScreen('onboard');showObStep(1);renderGoogleLoginDoor();
         toast('Enter your group code and choose your existing name to link your history.','default');return;
       }
+      _groupLoadStage='profile';
       const profile=await db.collection('users').doc(playerAtStart.userId).get({source:'server'});
       if(!_isGroupLoadCurrent(context))return;
       const owner=profile.exists&&profile.data().authUid;
@@ -2418,6 +2423,7 @@ async function loadGroup(code, fromCache, options={}){
         toast('Sign in with the Google or Apple account linked to this profile.','default');return;
       }
     }
+    _groupLoadStage='group';
     const gSnap = await db.collection('groups').doc(code).get();
     if(!_isGroupLoadCurrent(context)) return;
     // NEVER destroy a session on evidence that came from the local cache.
@@ -2442,6 +2448,7 @@ async function loadGroup(code, fromCache, options={}){
 
     const sid = loadedGroup.currentSeasonId;
     if(!sid){ handleDeadGroup(code, 'That group has no active season.'); return; }
+    _groupLoadStage='season';
     const sSnap = await db.collection('groups').doc(code).collection('seasons').doc(sid).get();
     if(!_isGroupLoadCurrent(context)) return;
     if(!sSnap.exists){
@@ -2514,12 +2521,14 @@ async function loadGroup(code, fromCache, options={}){
     checkAutoRollover(code).catch(e=>logErr('checkAutoRollover',e));
     }
 
+    _groupLoadStage='grace';
     if(await gracePinCheckOnResume()) return;
     if(!_isGroupLoadCurrent(context)) return;
+    _groupLoadStage='launched';
     launchApp(options);
   } catch(e){
     if(!_isGroupLoadCurrent(context)) return;
-    console.error('loadGroup failed:', e);
+    logErr('loadGroup failed at '+_groupLoadStage, e);
     toast('Could not load your group — check your connection and try again.','error');
     if(!getSessions().length){ showScreen('onboard'); showObStep(1); }
   }
@@ -5113,11 +5122,35 @@ async function restoreIdentityFromGoogle(r){
     groupCode = firstCode;
     me = getSessions().find(s=>s.code===firstCode).player;
     toast('Welcome back, '+me.name+'.','success');
-    loadGroup(groupCode, true);
+    await openRestoredGroup(groupCode);
   }catch(e){
     logErr('restoreIdentityFromGoogle', e);
     toast('Could not restore your account — check your connection.','error');
   }
+}
+
+// Found live 23 Sep 2026: after a Google sign-in the "Welcome back" toast
+// showed, loadGroup's identity check reached the server, and then nothing. The
+// welcome screen sat there until the app was force-quit, a cold start opened
+// the group fine, and the stall left no trace anywhere. Until the cause is
+// pinned down, a stalled open reports the step it stopped at and offers the
+// reload that fixed it by hand. The session is already saved, so a reload
+// lands straight in the group.
+async function openRestoredGroup(code, ms=15000){
+  let timer;
+  const stalled=new Promise(resolve=>{timer=setTimeout(()=>resolve('stalled'),ms);});
+  const outcome=await Promise.race([loadGroup(code,true).then(()=>'done'),stalled]);
+  clearTimeout(timer);
+  if(outcome==='done'||_groupLoadStage==='launched'||groupCode!==code)return;
+  logErr('restoreIdentityFromGoogle:stalled', new Error('GROUP_OPEN_STALLED at '+_groupLoadStage));
+  document.getElementById('forgeOpenStalled')?.remove();
+  const host=document.querySelector('.screen.active')||document.body;
+  const box=document.createElement('section');box.id='forgeOpenStalled';box.className='card';
+  const message=document.createElement('p');message.setAttribute('role','status');
+  message.textContent='Forge is taking too long to open your group. You are signed in, so reloading will take you straight there.';
+  const button=document.createElement('button');button.className='btn btn-gold';button.textContent='Reload Forge';
+  button.onclick=()=>location.reload();
+  box.append(message,button);host.prepend(box);box.scrollIntoView({block:'nearest'});
 }
 
 // Show the first-screen Google door only when the feature is on. Called at

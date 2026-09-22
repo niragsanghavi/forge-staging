@@ -752,9 +752,17 @@ window.FEATURE_PUSH = true || (function(){ try{
   if(location.search.indexOf('pushpilot')>=0) localStorage.setItem('forgePushPilot','1');
   return localStorage.getItem('forgePushPilot')==='1';
 }catch(e){ return false; } })();
-window.FCM_VAPID_KEY = 'BP2E5C9t--QJBU2hX9qYNPn2NX7p5V_i_e8U34fvP3SpZgPd9FAFsFw9oBpaYLEGQmPDmR4y345daVedGL88Ad4';   // Web Push certificate (PUBLIC key
-// by design — it ships in every client; the private half never leaves Google).
-// Generated 26 Aug 2026, forge-25c8c -> Cloud Messaging -> Web configuration.
+// Web Push certificate (PUBLIC key by design — it ships in every client; the
+// private half never leaves Google). Generated 26 Aug 2026, forge-25c8c ->
+// Cloud Messaging -> Web configuration.
+// A certificate belongs to ONE Firebase project. Staging sent production's to
+// forge-staging-865ff and FCM refused every registration (401 UNAUTHENTICATED,
+// surfacing as messaging/token-subscribe-failed — reproduced live 23 Sep 2026),
+// so no staging device could ever register. Staging has no certificate of its
+// own and uses FCM's built-in public key, which every project accepts.
+window.FCM_VAPID_KEY = window.IS_STAGING===true
+  ? 'BDOU99-h67HcA6JeFXHbSNMu7e2yNNu3RzoMj8TM4W88jITfq7ZmPvIM1Iv-4_l2LxQcYwhqby2xGpWwzjfAnG4'
+  : 'BP2E5C9t--QJBU2hX9qYNPn2NX7p5V_i_e8U34fvP3SpZgPd9FAFsFw9oBpaYLEGQmPDmR4y345daVedGL88Ad4';
 
 // ── THE HALL OF THE DEPARTED ──────────────────────────────────────────────
 // Locked decision, 25 Jul 2026 (AUTH_DESIGN_FINAL Q4). A deleted player is not

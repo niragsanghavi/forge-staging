@@ -158,3 +158,4 @@ android/keystore.properties
 !qa/group-import.test.mjs
 !qa/account-extras.test.mjs
 !qa/callable-messaging-guard.test.mjs
+!qa/staging-push-and-restore.test.mjs

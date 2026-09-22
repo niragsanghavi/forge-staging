@@ -567,6 +567,22 @@ async function _messagingSW(){
   return _msgSwReg;
 }
 
+// The SDK reuses whatever push subscription the worker already holds, whatever
+// key it was made with. One made with a different key — every staging attempt
+// before 23 Sep 2026 subscribed with production's — would then register
+// "successfully" and never deliver, because FCM signs each push with the key it
+// was told about. Drop it so the SDK subscribes fresh with the key it registers.
+async function _dropForeignPushSubscription(reg, vapidKey){
+  try{
+    const sub = await reg.pushManager.getSubscription();
+    const key = sub && sub.options && sub.options.applicationServerKey;
+    if(!key) return;
+    const have = btoa(String.fromCharCode(...new Uint8Array(key)))
+      .replace(/=+$/,'').replace(/\+/g,'-').replace(/\//g,'_');
+    if(have !== vapidKey) await sub.unsubscribe();
+  }catch(e){ console.warn('[Forge] could not check the existing push subscription', e); }
+}
+
 // Permission and device registration are separate. Only refusal returns null;
 // registration failures throw, so the UI never calls an SDK failure a refusal.
 window.enablePush = async function(onProgress=()=>{}){
@@ -590,6 +606,7 @@ window.enablePush = async function(onProgress=()=>{}){
   onProgress('Permission allowed. Registering this device…');
   const messaging = await _loadMessaging();      // injects the SDK on first use
   const reg = await window.forgePushDeadline(_messagingSW());
+  await window.forgePushDeadline(_dropForeignPushSubscription(reg, window.FCM_VAPID_KEY));
   const token = await window.forgePushDeadline(messaging.getToken({
     vapidKey: window.FCM_VAPID_KEY,
     serviceWorkerRegistration: reg

@@ -65,7 +65,7 @@ test('profile changes during permission do not save a token to the new profile',
 test('SDK permission granted plus missing token is a registration error, not a refusal',async()=>{
  const h=runtime();h.w.FEATURE_PUSH=true;h.w.pushSupported=()=>true;h.w.Notification={requestPermission:async()=> 'granted'};
  const src=config.slice(config.indexOf('window.enablePush ='),config.indexOf('// Foreground messages'));
- h.w.forgePushDeadline=p=>p;h.w._loadMessaging=async()=>({getToken:async()=>null});h.w._messagingSW=async()=>({});h.w.eval(src);
+ h.w.forgePushDeadline=p=>p;h.w._loadMessaging=async()=>({getToken:async()=>null});h.w._messagingSW=async()=>({});h.w._dropForeignPushSubscription=async()=>{};h.w.eval(src);
  let progress='';await assert.rejects(h.w.enablePush(text=>progress=text),/PUSH_NO_TOKEN/);assert.match(progress,/Permission allowed/);h.close();
 });
 test('notification deadline settles stalled registration instead of hanging',async()=>{
