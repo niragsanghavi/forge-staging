@@ -438,9 +438,16 @@ window.pushSupported = function(){
 // feature most of them will never switch on — and one that is currently off for
 // everybody. Injected once, cached by the browser thereafter.
 let _msgSdk = null;
+window.forgePushDeadline = function(promise, milliseconds=20000){
+  return new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(new Error('PUSH_TIMEOUT')),milliseconds);
+    Promise.resolve(promise).then(value=>{clearTimeout(timer);resolve(value);},error=>{clearTimeout(timer);reject(error);});
+  });
+};
+let _nativePushPermission='default';
 function _loadMessaging(){
   if(_msgSdk) return _msgSdk;
-  _msgSdk = new Promise((resolve, reject) => {
+  const load = new Promise((resolve, reject) => {
     if(typeof firebase!=='undefined' && firebase.messaging){ resolve(firebase.messaging()); return; }
     const s=document.createElement('script');
     s.src='https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js';
@@ -455,6 +462,7 @@ function _loadMessaging(){
     s.onerror=()=>reject(new Error('SDK_LOAD_FAILED'));
     document.head.appendChild(s);
   });
+  _msgSdk = window.forgePushDeadline(load).catch(error=>{_msgSdk=null;throw error;});
   return _msgSdk;
 }
 
@@ -462,7 +470,7 @@ window.pushPermission = function(){
   // Native: the plugin's checkPermissions is async, which this sync helper
   // cannot await. 'default' makes every caller treat it as not-yet-asked and
   // route through enablePush, whose native branch asks properly.
-  if(typeof isNative==='function' && isNative()) return 'default';
+  if(typeof isNative==='function' && isNative()) return _nativePushPermission;
   try{ return Notification.permission; }catch(e){ return 'unsupported'; }
 };
 
@@ -478,9 +486,9 @@ async function _messagingSW(){
   return _msgSwReg;
 }
 
-// Ask, then return the device token. Resolves to null on every refusal path so
-// the caller only has to distinguish "have a token" from "don't".
-window.enablePush = async function(){
+// Permission and device registration are separate. Only refusal returns null;
+// registration failures throw, so the UI never calls an SDK failure a refusal.
+window.enablePush = async function(onProgress=()=>{}){
   if(!window.FEATURE_PUSH) throw new Error('FEATURE_OFF');
   if(!window.pushSupported()) throw new Error('UNSUPPORTED');
   // NATIVE (App Store / Play builds): APNs-or-FCM via the plugin. The web
@@ -489,19 +497,24 @@ window.enablePush = async function(){
   if(typeof isNative==='function' && isNative()){
     const M = _nativeMsg(); if(!M) throw new Error('UNSUPPORTED');
     const p = await M.requestPermissions();
+    _nativePushPermission=p?.receive||'default';
     if(!p || p.receive !== 'granted') return null;
-    const r = await M.getToken();                    // FCM token on both OSes
-    return (r && r.token) || null;
+    onProgress('Permission allowed. Registering this device…');
+    const r = await window.forgePushDeadline(M.getToken());
+    if(!r?.token)throw new Error('PUSH_NO_TOKEN');
+    return r.token;
   }
   const perm = await Notification.requestPermission();
   if(perm !== 'granted') return null;                     // includes 'denied'
+  onProgress('Permission allowed. Registering this device…');
   const messaging = await _loadMessaging();      // injects the SDK on first use
-  const reg = await _messagingSW();
-  const token = await messaging.getToken({
+  const reg = await window.forgePushDeadline(_messagingSW());
+  const token = await window.forgePushDeadline(messaging.getToken({
     vapidKey: window.FCM_VAPID_KEY,
     serviceWorkerRegistration: reg
-  });
-  return token || null;
+  }));
+  if(!token)throw new Error('PUSH_NO_TOKEN');
+  return token;
 };
 
 // Foreground messages arrive here instead of the system tray. Showing an OS
@@ -548,7 +561,7 @@ window.startForegroundPush = async function(onMessage){
       const d=(payload&&payload.data)||{};
       if(typeof onMessage==='function') onMessage(d);
     });
-  }catch(e){ console.warn('[Forge] foreground push unavailable', e); }
+  }catch(e){ window._fgPushWired=false; console.warn('[Forge] foreground push unavailable', e?.code||'unavailable'); }
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════

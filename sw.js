@@ -2,7 +2,7 @@
 // You deploy often and have been bitten by stale caches before, so this always
 // tries the network first and only falls back to cache when offline.
 // To force every device to refresh, bump CACHE_VERSION (e.g. 'forge-v1' -> 'forge-v2').
-const CACHE_VERSION = 'forge-staging-v90-solo-entry-fix';
+const CACHE_VERSION = 'forge-staging-v91-polish';
 const CACHE_PREFIX = 'forge-shell:' + self.registration.scope + ':';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
 const READY_KEY = new URL('__forge_shell_ready__',self.registration.scope).href;
@@ -13,10 +13,15 @@ const APP_SHELL = [
   './src/style/today.css?v=f026-1',
   './src/style/sports-icons.css',
   './src/ui/today.js',
-  './src/ui/today.js?v=solo-entry-fix-20260922',
-  './src/ui/welcome.js?v=solo-entry-fix-20260922',
-  './src/ui/solo.js?v=solo-entry-fix-20260922',
-  './src/style/solo.css?v=solo-entry-fix-20260922',
+  './src/ui/today.js?v=polish-20260922',
+  './src/ui/welcome.js?v=polish-20260922',
+  './src/ui/solo.js?v=polish-20260922',
+  './src/style/solo.css?v=polish-20260922',
+  './src/ui/account-feedback.js',
+  './src/ui/account-recovery.js',
+  './src/ui/group-cleanup.js',
+  './branding.html',
+  './src/style/branding.css',
   './assets/modes/group.webp',
   './assets/modes/solo.webp',
   './assets/auth/google-signin.svg',
@@ -29,6 +34,7 @@ const APP_SHELL = [
   './assets/fonts/archivo-800.woff2',
   './assets/icons/forge-f.svg',
   './src/config/firebase.js',
+  './src/config/firebase.js?v=polish-20260922',
   './src/state/appState.js',
   './src/services/scoringEngine.js'
 ];

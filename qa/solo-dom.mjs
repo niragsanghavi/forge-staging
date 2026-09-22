@@ -32,7 +32,7 @@ export function runtime({enrolled=true,hasProfile=true,call,signIn,logs,months=[
  w.startForgeProviderSignIn=async provider=>{calls.push({name:'signIn',provider});return signIn?signIn(w):{uid:w.auth.currentUser.uid};};
  w.restoreIdentityFromGoogle=async r=>{calls.push({name:'restore',...r});};
  w.db={collection:()=>({doc:()=>({get:async()=>({exists:true,data:()=>({currentSeasonId:'2026-09'})}),collection:()=>({doc:()=>({get:async()=>({exists:true,data:()=>({credentialSchema:2,roster:[{name:'Legacy',userId:'legacy-profile'}]})})})})})})};
- for(const file of ['sports-icons.js','today.js','welcome.js','solo.js'])w.eval(fs.readFileSync(new URL('../src/ui/'+file,import.meta.url),'utf8'));
+ for(const file of ['sports-icons.js','today.js','welcome.js','solo.js','account-feedback.js','account-recovery.js','group-cleanup.js'])w.eval(fs.readFileSync(new URL('../src/ui/'+file,import.meta.url),'utf8'));
  w.ForgeWelcome.mount();
  const button=(text,root=d)=>{const b=[...root.querySelectorAll('button')].find(b=>b.textContent.trim()===text||b.getAttribute('aria-label')===text);assert.ok(b,'Missing button: '+text);return b;};
  return {w,d,calls,records,data,button,close:()=>{w.ForgeSolo.close();w.close();}};

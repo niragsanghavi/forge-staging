@@ -60,7 +60,7 @@
     if(intent==='group'){$('codeInput')?.focus();message('Have a group code? Enter it below. Your existing profile stays yours.');}
     if(intent==='solo'){
       message('Sign in to continue. Already used Forge? Bring back your profile before starting fresh.');
-      if(window.auth?.currentUser&&!auth.currentUser.isAnonymous)ForgeSolo.open();
+      return ForgeSolo.open();
     }
   }
   async function enter(provider){

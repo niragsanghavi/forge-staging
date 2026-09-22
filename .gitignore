@@ -101,3 +101,4 @@ scripts/
 !qa/solo-interface.test.mjs
 !qa/solo-dom.mjs
 !qa/solo-entry.test.mjs
+!qa/polish-feedback.test.mjs
