@@ -43,6 +43,7 @@
     const actions=node('div','today-group-actions');
     if(selected){const share=button(`Share ${selected.name||selected.code}`,()=>{closeDialog();shareInvite(selected.code);},'today-button today-button-quiet today-share-group');share.dataset.shareGroup=selected.code;actions.append(share);}
     actions.append(button('Join another group',()=>{closeDialog();joinAnotherGroup();},'today-button today-button-secondary'));
+    if(selected&&window.FEATURE_GOOGLE_AUTH)actions.append(button('Bring this month’s workouts',()=>{closeDialog();window.ForgeAccountExtras?.copyMonth(selected.code);},'today-button today-button-quiet'));
     body.append(list,actions);
     openDialog('Your groups',body);
   }
@@ -487,6 +488,7 @@
       ['Where is my gym breakdown?','Gym','Open Gym & strength journal below the calendar. Optional muscle-group notes are recorded when you log. Forge cannot reconstruct sets, reps or unrecorded body parts. Notes on shared workouts are visible to your groups.'],
       ['How do points and ranks work?','Trophy','The group board uses your season’s scoring rules. Tap a person for the points breakdown. Teams and People are different views. A log only gets a rank animation when a confirmed save actually changes your rank.'],
       ['One workout, several groups?','Team sport','Forge checks each linked group when you save. Groups in another season or that cannot be reached are identified in the receipt. Group-specific bonuses mean the same workout can lead to different point totals.'],
+      ['How do I add another group?','Team sport','On Today, tap Change beside your group name, then Join another group. Enter the group code and use the same linked Google or Apple account. After joining, review and copy your saved group workouts from this month. Existing copies are skipped. Previous months, Solo workouts and other people’s records stay unchanged. You can reopen the review from Change → Bring this month’s workouts.'],
       ['Connect your phone health app','Walk',`${healthName()} is optional in the phone app. Forge suggests recorded workouts for you to confirm. Confirmed logs are shared to your groups; enabled step challenges also upload daily step totals. Browser staging cannot read phone health data.`],
       ['Notifications, on your terms','Other','Open Settings & devices in Profile to choose reminders. You can say “not now” and return later. The tour never grants a permission or turns notifications on for you.'],
       ['Who can see me on All Forge?','Team sport','The People board uses explicit visibility consent. Your best group score is used rather than adding all your memberships. Group averages are labelled; different group rules mean this is not a universal fitness ranking.'],

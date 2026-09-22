@@ -1652,6 +1652,7 @@ async function resumeForgeRedirect(){
     if(r.action==='join'){
       await callFunction('joinWithIdentity',{groupCode:r.groupCode,seasonId:r.seasonId,name:r.name});
       await restoreIdentityFromGoogle(r);
+      await window.ForgeAccountExtras?.copyMonth(r.groupCode);
     }else if(r.action==='link'){
       const saved=getSessions().find(s=>s.code===r.groupCode&&s.player?.userId===r.userId);
       if(!saved){await restoreIdentityFromGoogle(r);toast('Choose your existing profile to finish linking. Nothing was linked automatically.','default');return;}
@@ -2116,6 +2117,7 @@ async function registerAndJoin(){
       await callFunction('joinWithIdentity',captured);
       if(!auth.currentUser||auth.currentUser.uid!==uid||groupCode!==captured.groupCode||seasonId!==captured.seasonId)return;
       await restoreIdentityFromGoogle({uid});
+      await window.ForgeAccountExtras?.copyMonth(captured.groupCode);
     }catch(e){toast(e.message||'Could not join. Try again.','error');}
     finally{window._forgeRegistrationBusy=false;}
     return;
@@ -11506,6 +11508,7 @@ function startTour(force){
   ];
   _tour={i:0,steps,token:0,opener:document.activeElement,context:`${groupCode}|${me.userId||me.name}|${seasonId}`};
   document.body.classList.add('forge-touring');
+  steps.splice(1,0,{t:'#forgeToday',page:'home',title:'Another group? Start with Change.',txt:'Tap Change beside your group name, then Join another group. Enter its code and use the same linked account. After joining, review this month’s group workouts before copying them. Existing copies are skipped; no previous month is moved.'});
   try{renderPromptDock();}catch(e){}
   const spot=document.createElement('div'); spot.className='tour-spot'; spot.id='tourSpot';
   const bub=document.createElement('div'); bub.className='tour-bubble'; bub.id='tourBubble';
@@ -13637,6 +13640,7 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
 </script>
 <script src="src/ui/dialogs.js"></script>
 <script src="src/ui/release-features.js"></script>
+<script src="src/ui/account-extras.js"></script>
 <script src="src/ui/sports-icons.js"></script>
 <script src="src/ui/account-feedback.js"></script>
 <script src="src/ui/account-recovery.js"></script>

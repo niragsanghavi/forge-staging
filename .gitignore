@@ -107,3 +107,5 @@ scripts/
 !qa/release-features.test.mjs
 !qa/memory-firestore.mjs
 !qa/release-ui.test.mjs
+!qa/group-import.test.mjs
+!qa/account-extras.test.mjs

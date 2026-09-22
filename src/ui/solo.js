@@ -208,6 +208,7 @@
     const recaps=node('div','','solo-two-actions');recaps.append(button('Weekly recap',()=>recap('week')),button('Monthly recap',()=>recap('month')));el.append(recaps,button('All-time solo record',allTimeRecord,'today-button today-button-quiet'));
     el.append(companion('Need a hand? Talk to Forge below. Your message goes privately to Nirag—not into a group feed.'));
     el.append(action('Talk to Forge · private support','feed',()=>window.ForgeSupport.open()),action('Solo field guide','home',guide),action(window.isNative?.()?ForgeExperience.healthName():'Health connections','health',health));
+    el.append(action('Notifications for this device','home',()=>window.ForgeAccountExtras?.notifications()));
     const settings=node('details','','solo-details');settings.append(node('summary','Account & privacy'));
     const provider=auth.currentUser.providerData?.map(x=>x.providerId==='apple.com'?'Apple':x.providerId==='google.com'?'Google':null).filter(Boolean).join(' + ')||'provider';
     settings.append(node('p','Signed in with '+provider+'. Your group history stays with this account.','today-muted'),button('Recover my group profile',recoverGroup),button(model.hasGroups?'Open my groups':'Join a group',goGroup));
@@ -313,6 +314,7 @@
     const {body}=openDialog('Your solo field guide');body.append(companion('Same Forge. Your own rhythm. Here’s where everything lives.'));
     const items=[['Your calendar','Walk','Tap a current-month day to log or edit. The arrows take you to previous months, which are read-only.'],['Your points','Trophy','4 base points per workout day, plus a +1, +2, then +3 streak bonus. It caps at 3. Missing a day or starting a new month resets the run.'],['Your gym diary','Gym','Tag the muscle groups you trained. Your body map fills in and the gym calendar keeps the detail. Tags never add points.'],['Your history','Run','History is your private workout timeline—not a social feed. Filter by activity and browse previous months.'],['Your leaderboard','Team sport','Only solo points compete here. Publishing your name and monthly totals is optional; you can browse privately.'],['Your groups','Other','Use Change mode to switch. Solo logs do not automatically post to groups. Use recovery to bring an old group profile into this account.'],['Need help?','Other','Talk to Forge in Profile sends a private message to Nirag. You can see acknowledgement, progress and resolution in the same conversation.']];
     for(const [title,sport,text]of items){const d=node('details','','forge-faq-item'),s=node('summary');s.append(art(sport),node('span',title));d.append(s,node('p',text));body.append(d);}
+    const notificationsHelp=node('details','','forge-faq-item');notificationsHelp.append(node('summary','Can Solo receive notifications?'),node('p','Yes. Open Profile → Notifications for this device. Wait for confirmed registration. Scheduled reminders are not active yet; announcements inside Forge do not need notification permission.'));body.append(notificationsHelp);
     body.append(button('Talk to Forge',()=>{closeDialog();ForgeSupport.open();}));
   }
   function health(){
