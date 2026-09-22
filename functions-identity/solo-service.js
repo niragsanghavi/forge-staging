@@ -1,10 +1,11 @@
 'use strict';
 const crypto=require('node:crypto');
 const {scoreSoloDays}=require('./scoring-engine');
+const {wall}=require('./season-dates');
 module.exports=({db,FieldValue,HttpsError,identity,now=Date.now})=>{
   const fail=(code,message)=>{throw new HttpsError(code,message);};
   function period(data={}){
-    const today=new Date(now()+19800000),year=Number(data.year??today.getUTCFullYear()),month=Number(data.month??today.getUTCMonth()+1);
+    const today=wall(now()),year=Number(data.year??today.getUTCFullYear()),month=Number(data.month??today.getUTCMonth()+1);
     if(!Number.isInteger(year)||year<2020||!Number.isInteger(month)||month<1||month>12||year*12+month>today.getUTCFullYear()*12+today.getUTCMonth()+1)fail('invalid-argument','Choose a current or previous month.');
     const sid=year+'-'+String(month).padStart(2,'0'),current=year===today.getUTCFullYear()&&month===today.getUTCMonth()+1;
     return {year,month,sid,current,throughDay:current?today.getUTCDate():new Date(Date.UTC(year,month,0)).getUTCDate()};

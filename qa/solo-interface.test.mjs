@@ -20,6 +20,10 @@ test('Solo server enforces inclusive seven-day lookback using IST, including mid
   ['2026-09-22T06:00:00Z',{year:2026,month:9,day:23},false],
   ['2026-09-21T18:29:59Z',{year:2026,month:9,day:14},true],
   ['2026-09-21T18:30:00Z',{year:2026,month:9,day:14},false],
+  // 23 September, 01:00 IST is still 22 September UTC: allow 16–23.
+  ['2026-09-22T19:30:00Z',{year:2026,month:9,day:23},true],
+  ['2026-09-22T19:30:00Z',{year:2026,month:9,day:16},true],
+  ['2026-09-22T19:30:00Z',{year:2026,month:9,day:15},false],
   ['2026-09-30T18:30:00Z',{year:2026,month:10,day:1},true],
   ['2026-09-30T18:30:00Z',{year:2026,month:9,day:30},false]
  ]){
