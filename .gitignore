@@ -159,3 +159,4 @@ android/keystore.properties
 !qa/account-extras.test.mjs
 !qa/callable-messaging-guard.test.mjs
 !qa/staging-push-and-restore.test.mjs
+!qa/native-recap-channel.test.mjs

@@ -664,11 +664,22 @@ window.scheduleMondayRecap = async function(){
     if(perm.display !== 'granted') perm = await LN.requestPermissions();
     if(perm.display !== 'granted') return 'denied';
 
+    // Android: the shell creates a "Forge" channel (MainActivity) that pushes
+    // use too. Post there only if it exists — Android silently drops a
+    // notification aimed at a missing channel, so an older shell keeps the
+    // plugin's default. iOS has no channels; listChannels rejects there.
+    let channelId;
+    try{
+      const { channels } = await LN.listChannels();
+      if((channels||[]).some(c => c && c.id === 'forge_updates')) channelId = 'forge_updates';
+    }catch(e){}
+
     await LN.cancel({ notifications: [{ id: window.NOTIF_RECAP_ID }] });
     await LN.schedule({ notifications: [{
       id: window.NOTIF_RECAP_ID,
       title: 'Last week is in',
       body: 'Your recap is ready. See how the group did, and start the new one.',
+      ...(channelId ? { channelId } : {}),
       schedule: {
         // Repeating weekly on Monday 08:00 LOCAL time. `allowWhileIdle` so a
         // dozing phone still fires it rather than silently dropping the week.
