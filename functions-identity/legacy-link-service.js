@@ -1,6 +1,7 @@
 'use strict';
 const crypto=require('node:crypto');
 const {profileSummary,workoutSummary}=require('./aggregate-service');
+const {seasonMigrated}=require('./migration-state');
 // User-initiated legacy linking only. Never replace a provider owner, infer
 // ownership from a name, split a merge across commits, or expose PIN verifiers.
 module.exports=({db,FieldValue,HttpsError,identity,groupWrites,now=Date.now})=>async request=>{
@@ -13,7 +14,7 @@ module.exports=({db,FieldValue,HttpsError,identity,groupWrites,now=Date.now})=>a
   const group=await tx.get(db.collection('groups').doc(code)),sid=group.exists&&group.data().currentSeasonId;
   if(!sid)fail('permission-denied','Could not confirm this profile.');
   const season=await tx.get(group.ref.collection('seasons').doc(sid));
-  if(!season.exists||season.data().credentialSchema!==2)fail('failed-precondition','This group needs its reviewed account migration first.');
+  if(!season.exists||!(await seasonMigrated(tx,group.ref,sid,season.data())))fail('failed-precondition','This group needs its reviewed account migration first.');
   const matches=(season.data().roster||[]).filter(p=>p&&!p.departed&&String(p.name).toLowerCase()===d.name.trim().toLowerCase());
   if(matches.length!==1||!matches[0].userId)fail('permission-denied','Could not confirm this profile.');
   const targetId=matches[0].userId;

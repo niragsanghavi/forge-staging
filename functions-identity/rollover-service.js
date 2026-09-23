@@ -1,6 +1,7 @@
 'use strict';
 const {score}=require('./scoring-engine');
 const {wall,sidOf}=require('./season-dates');
+const {seasonMigrated}=require('./migration-state');
 module.exports=function({db,FieldValue,HttpsError,groupWrites,pledges,identity,now=Date.now,logger=console}){
  const fail=(code,message)=>{throw new HttpsError(code,message);};
  async function run(code,request=null){
@@ -25,7 +26,7 @@ module.exports=function({db,FieldValue,HttpsError,groupWrites,pledges,identity,n
    const today=wall(now());if(sid>=sidOf(today))return {ok:false,reason:'NOT_YET_DUE'};
    const start=s.startedAt?.toMillis?s.startedAt.toMillis():(s.startedAt?.seconds||0)*1000;
    if(start>now()+86400000)return {ok:false,reason:'FUTURE_START'};
-   if(s.credentialSchema!==2)fail('failed-precondition','Complete the reviewed account migration before rollover.');
+   if(!(await seasonMigrated(tx,gRef,sid,s)))fail('failed-precondition','Complete the reviewed account migration before rollover.');
    const next=new Date(Date.UTC(s.year,s.month,1)),newSid=sidOf(next),newRef=gRef.collection('seasons').doc(newSid);
    if((await tx.get(newRef)).exists)return {ok:false,reason:'TARGET_SEASON_EXISTS'};
    const roster=s.roster.filter(Boolean),stepsPending=s.stepRounds?.enabled===true&&!s.stepsFinalizedAt;

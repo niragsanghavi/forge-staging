@@ -25,6 +25,7 @@ const files={
   'functions-identity/group-archive-service.js':'group-archive-service.js',
   'functions-identity/group-write-service.js':'group-write-service.js',
   'functions-identity/legacy-link-service.js':'legacy-link-service.js',
+  'functions-identity/migration-state.js':'migration-state.js',
   'functions-identity/solo-service.js':'solo-service.js',
   'functions-identity/support-service.js':'support-service.js',
   'functions-identity/steps-service.js':'steps-service.js',
