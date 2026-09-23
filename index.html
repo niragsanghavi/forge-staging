@@ -6478,6 +6478,14 @@ async function submitLog(){
       // not per-active-group — a broadcast can mix demo and real groups).
       const delivery=_receiptGroup(receipt,sess.code);
       if(sess.code === submission.groupCode){ targets.push({...sess, _demo:submission.groupDemo}); delivery.status='pending'; return; }
+      // Server-authorised saves are one all-or-nothing call for the signed-in
+      // profile. A group this device remembers under a DIFFERENT profile (the
+      // old app made a separate one per group joined; found live 23 Sep 2026)
+      // made the server refuse the whole save, so every group failed. Leave it
+      // out and say why; linking it is a separate, deliberate step.
+      if(window.FEATURE_GOOGLE_AUTH && submission.actor.userId && sess.player?.userId !== submission.actor.userId){
+        delivery.status='skipped'; delivery.reason='not linked to this account'; return;
+      }
       try {
         // TIMEOUT. There is a watchdog on the commit but there was none here,
         // and this read runs BEFORE the toast, before the error log and before

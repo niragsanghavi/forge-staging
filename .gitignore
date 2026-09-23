@@ -161,3 +161,4 @@ android/keystore.properties
 !qa/staging-push-and-restore.test.mjs
 !qa/native-recap-channel.test.mjs
 !qa/migration-state.test.mjs
+!qa/unlinked-group-save.test.mjs
