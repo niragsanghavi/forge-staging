@@ -2,7 +2,7 @@
 // You deploy often and have been bitten by stale caches before, so this always
 // tries the network first and only falls back to cache when offline.
 // To force every device to refresh, bump CACHE_VERSION (e.g. 'forge-v1' -> 'forge-v2').
-const CACHE_VERSION = 'forge-staging-v99-push-key';
+const CACHE_VERSION = 'forge-staging-v100-fresh-updates';
 const CACHE_PREFIX = 'forge-shell:' + self.registration.scope + ':';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
 const READY_KEY = new URL('__forge_shell_ready__',self.registration.scope).href;
@@ -46,7 +46,10 @@ self.addEventListener('install', e=>{
     const cache=await caches.open(CACHE_NAME);
     // Failed downloads must reject installation, leaving the previous worker
     // and complete cache in charge. Never swallow a precache failure.
-    await cache.addAll(APP_SHELL);
+    // cache:'reload' skips the browser's HTTP cache: GitHub Pages marks every
+    // file fresh for 10 minutes, so a plain download could fill the NEW
+    // version's cache with the OLD version's files.
+    await cache.addAll(APP_SHELL.map(path=>new Request(path,{cache:'reload'})));
     await cache.put(READY_KEY,new Response(CACHE_VERSION));
     await self.skipWaiting();
   })());
@@ -70,8 +73,15 @@ self.addEventListener('fetch', e=>{
   const req=e.request;
   if(req.method!=='GET') return;                        // never touch writes / auth
   if(new URL(req.url).origin!==location.origin) return; // let Firebase + CDNs go straight to network
+  // "Network first" was not reaching the network: GitHub Pages sends
+  // max-age=600, so for 10 minutes after any open the browser answered from
+  // its HTTP cache. A deploy was invisible to anyone who had opened Forge in
+  // the last 10 minutes — found 23 Sep 2026, when a phone reopened 24 seconds
+  // after a fix went live and kept running the old notification code.
+  // no-cache revalidates every time (a 304 when nothing changed). The plain
+  // retry only runs if a browser refuses the option on this request.
   e.respondWith(
-    fetch(req)
+    fetch(req,{cache:'no-cache'}).catch(()=>fetch(req))
       .then(res=>{
         if(res.ok && res.type!=='opaque'){
           const copy=res.clone();

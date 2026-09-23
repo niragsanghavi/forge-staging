@@ -4888,6 +4888,9 @@ async function turnOnPush(){
     toast('Notifications on.','success');
     renderPushCard();
   }catch(e){
+    // Reported, not just shown: until 23 Sep 2026 a failed registration left
+    // no trace, and the key prefix tells an old cached build from the fix.
+    logErr('turnOnPush key='+String(window.FCM_VAPID_KEY||'').slice(0,6), e);
     say(ForgeFeedback.notification(e));
   }finally{window._forgePushBusy=false;if(current())renderPushCard();}
 }

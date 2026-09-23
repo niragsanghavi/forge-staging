@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 const source=fs.readFileSync(new URL('../sw.js',import.meta.url),'utf8');
-function setup({offline=false,status=200,cached=null,precacheFails=false,ready=true}={}){
-  const handlers={},puts=[],deleted=[],matches=[],waits=[];
+function setup({offline=false,status=200,cached=null,precacheFails=false,ready=true,refuseNoCache=false}={}){
+  const handlers={},puts=[],deleted=[],matches=[],waits=[],fetches=[];
   let skipped=false,claimed=false;
-  const cache={addAll:async paths=>{if(precacheFails)throw Error('download failed');for(const p of paths)assert.ok(fs.existsSync(new URL('../'+p,import.meta.url)));},put:async(...args)=>{puts.push(args);if(String(args[0]).endsWith('__forge_shell_ready__'))ready=true;},match:async key=>{matches.push(key);if(String(key).endsWith('__forge_shell_ready__'))return ready?new Response('ready'):undefined;return typeof key==='string'?new Response('page'):cached;}};
-  const context={self:{registration:{scope:'https://example.test/forge-staging/'},addEventListener:(name,fn)=>handlers[name]=fn,skipWaiting(){skipped=true;},clients:{claim:async()=>{claimed=true;}}},location:{origin:'https://example.test'},caches:{open:async()=>cache,keys:async()=>['forge-shell:https://example.test/forge-staging/:old','forge-shell:https://example.test/other/:old','forge-staging-v86-f025','unrelated-app'],delete:async key=>deleted.push(key)},fetch:async()=>{if(offline)throw Error('offline');return new Response('network',{status});},URL,Response};
+  const cache={addAll:async requests=>{if(precacheFails)throw Error('download failed');for(const r of requests){assert.equal(r.cache,'reload',r.url);assert.ok(fs.existsSync(new URL('../'+r.url,import.meta.url)));}},put:async(...args)=>{puts.push(args);if(String(args[0]).endsWith('__forge_shell_ready__'))ready=true;},match:async key=>{matches.push(key);if(String(key).endsWith('__forge_shell_ready__'))return ready?new Response('ready'):undefined;return typeof key==='string'?new Response('page'):cached;}};
+  const context={self:{registration:{scope:'https://example.test/forge-staging/'},addEventListener:(name,fn)=>handlers[name]=fn,skipWaiting(){skipped=true;},clients:{claim:async()=>{claimed=true;}}},location:{origin:'https://example.test'},caches:{open:async()=>cache,keys:async()=>['forge-shell:https://example.test/forge-staging/:old','forge-shell:https://example.test/other/:old','forge-staging-v86-f025','unrelated-app'],delete:async key=>deleted.push(key)},fetch:async(req,init)=>{fetches.push(init);if(offline)throw Error('offline');if(refuseNoCache&&init)throw TypeError('unsupported');return new Response('network',{status});},URL,Response,Request:class{constructor(url,init={}){this.url=url;this.cache=init.cache;}}};
   vm.runInNewContext(source,context);
   const event={request:{method:'GET',url:'https://example.test/icon.webp',mode:'cors'},waitUntil:p=>waits.push(p),respondWith:p=>event.response=p};
-  return {handlers,event,puts,deleted,matches,waits,state:()=>({skipped,claimed})};
+  return {handlers,event,puts,deleted,matches,waits,fetches,state:()=>({skipped,claimed})};
 }
 test('every precached shell asset exists',async()=>{const r=setup();r.handlers.install(r.event);await Promise.all(r.waits);});
 test('versioned experience assets use matching offline cache keys',()=>{
@@ -29,3 +29,7 @@ test('missing offline assets do not receive HTML',async()=>{const r=setup({offli
 test('offline navigation can fall back to the cached page',async()=>{const r=setup({offline:true});r.event.request.mode='navigate';r.handlers.fetch(r.event);assert.equal(await (await r.event.response).text(),'page');});
 test('cached offline assets retain their own response',async()=>{const r=setup({offline:true,cached:new Response('image')});r.handlers.fetch(r.event);assert.equal(await (await r.event.response).text(),'image');});
 test('external requests and writes bypass the worker',()=>{for(const request of [{method:'POST',url:'https://example.test/'},{method:'GET',url:'https://external.test/'}]){const r=setup();r.event.request=request;r.handlers.fetch(r.event);assert.equal(r.event.response,undefined);}});
+// GitHub Pages marks files fresh for 10 minutes; without these a deploy stayed
+// invisible to anyone who had opened Forge recently (23 Sep 2026).
+test('network-first requests revalidate past the browser HTTP cache',async()=>{const r=setup();r.handlers.fetch(r.event);await r.event.response;assert.deepEqual(r.fetches.map(init=>init&&init.cache),['no-cache']);});
+test('a browser that refuses the revalidation option still reaches the network',async()=>{const r=setup({refuseNoCache:true});r.handlers.fetch(r.event);assert.equal(await (await r.event.response).text(),'network');assert.equal(r.fetches.length,2);});

@@ -59,7 +59,7 @@
       tokens.set(id,token);status.textContent='Notifications on for this device. Daily reminders have not been activated.';
       window.startForegroundPush?.(d=>{if(d?.body)toast(d.body);});render(true);
      }
-    }catch(e){if(current()){status.textContent=window.ForgeFeedback?.notification(e)||'Could not confirm registration. Try again.';render(registered);}}
+    }catch(e){window.logErr?.('notifications dialog key='+String(window.FCM_VAPID_KEY||'').slice(0,6),e);if(current()){status.textContent=window.ForgeFeedback?.notification(e)||'Could not confirm registration. Try again.';render(registered);}}
     finally{busy=false;}
    }));
   }
